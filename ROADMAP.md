@@ -125,7 +125,7 @@ Track A: Performance Foundation    Track B: Engine Core           Track C: High-
 - Angular response
 - Multi-body collision resolution
 
-###### 1.2.4.5 Optimization Structures [✓]
+###### 1.2.4.5 Optimization Structures [ ]
 - Broad-phase collision culling
 - Temporal bounding volume hierarchy
 - Motion-aware spatial partitioning
