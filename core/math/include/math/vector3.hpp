@@ -162,6 +162,19 @@ public:
         return Vector3(0.0f, 0.0f, -1.0f);
     }
 
+    // Standard basis vectors
+    static Vector3 unitX() {
+        return Vector3(1.0f, 0.0f, 0.0f);
+    }
+
+    static Vector3 unitY() {
+        return Vector3(0.0f, 1.0f, 0.0f);
+    }
+
+    static Vector3 unitZ() {
+        return Vector3(0.0f, 0.0f, 1.0f);
+    }
+
     // Component access
     float x;
     float y;
@@ -174,6 +187,15 @@ private:
 // Global operators
 inline Vector3 operator*(float scalar, const Vector3& vec) {
     return vec * scalar;
+}
+
+// Comparison operators
+inline bool operator==(const Vector3& lhs, const Vector3& rhs) {
+    return lhs.x == rhs.x && lhs.y == rhs.y && lhs.z == rhs.z;
+}
+
+inline bool operator!=(const Vector3& lhs, const Vector3& rhs) {
+    return !(lhs == rhs);
 }
 
 } // namespace math
