@@ -12,8 +12,8 @@ namespace geometry {
  * @brief Stores information about an intersection
  */
 struct IntersectionResult {
-    bool intersects = false;        // Whether intersection occurred
-    float distance = 0.0f;         // Distance to intersection
+    bool intersects = false;    // Whether intersection occurred
+    float distance = 0.0f;     // Distance to intersection
     Vector3 point;                 // Point of intersection
     Vector3 normal;                // Surface normal at intersection
 };
