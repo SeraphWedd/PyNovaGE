@@ -80,7 +80,6 @@ std::optional<IntersectionResult> raySphereIntersection(const Ray3D& ray, const 
     else if (t1 >= 0.0f) t = t1;
     else return std::nullopt;
     
-    
     IntersectionResult result;
     result.intersects = true;
     result.distance = t;
