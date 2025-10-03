@@ -3,6 +3,7 @@
 #include "math/vector2.hpp"
 #include <vector>
 #include <random>
+#include <array>
 
 using namespace pynovage::math;
 
