@@ -1,0 +1,68 @@
+# Build directories
+build/
+Debug/
+Release/
+x64/
+Win32/
+*.exe
+*.dll
+*.lib
+*.pdb
+
+# CMake
+CMakeCache.txt
+CMakeFiles/
+CMakeScripts/
+Testing/
+Makefile
+cmake_install.cmake
+install_manifest.txt
+compile_commands.json
+CTestTestfile.cmake
+
+# IDE specific files
+.vs/
+.vscode/
+*.swp
+*.swo
+.idea/
+*.user
+*.vcxproj
+*.vcxproj.filters
+*.sln
+
+# Compiled Object files
+*.slo
+*.lo
+*.o
+*.obj
+
+# Precompiled Headers
+*.gch
+*.pch
+
+# Compiled Dynamic libraries
+*.so
+*.dylib
+
+# Fortran module files
+*.mod
+*.smod
+
+# Compiled Static libraries
+*.lai
+*.la
+*.a
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+ENV/
+
+# OS specific
+.DS_Store
+Thumbs.db
