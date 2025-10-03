@@ -228,5 +228,65 @@ bool SimdUtils::InvertMatrix2x2(const float* m, float* result) {
     return true;
 }
 
+// ------- Matrix 3x3 operations -------
+void SimdUtils::MultiplyMatrix3x3(const float* a, const float* b, float* result) {
+    // a and b are 9-length arrays in row-major order
+    result[0] = a[0]*b[0] + a[1]*b[3] + a[2]*b[6];
+    result[1] = a[0]*b[1] + a[1]*b[4] + a[2]*b[7];
+    result[2] = a[0]*b[2] + a[1]*b[5] + a[2]*b[8];
+
+    result[3] = a[3]*b[0] + a[4]*b[3] + a[5]*b[6];
+    result[4] = a[3]*b[1] + a[4]*b[4] + a[5]*b[7];
+    result[5] = a[3]*b[2] + a[4]*b[5] + a[5]*b[8];
+
+    result[6] = a[6]*b[0] + a[7]*b[3] + a[8]*b[6];
+    result[7] = a[6]*b[1] + a[7]*b[4] + a[8]*b[7];
+    result[8] = a[6]*b[2] + a[7]*b[5] + a[8]*b[8];
+}
+
+void SimdUtils::MultiplyMatrix3x3Vec3(const float* m, const float* v, float* result) {
+    result[0] = m[0]*v[0] + m[1]*v[1] + m[2]*v[2];
+    result[1] = m[3]*v[0] + m[4]*v[1] + m[5]*v[2];
+    result[2] = m[6]*v[0] + m[7]*v[1] + m[8]*v[2];
+}
+
+void SimdUtils::TransposeMatrix3x3(float* m) {
+    // swap m[1] <-> m[3], m[2] <-> m[6], m[5] <-> m[7]
+    float tmp;
+    tmp = m[1]; m[1] = m[3]; m[3] = tmp;
+    tmp = m[2]; m[2] = m[6]; m[6] = tmp;
+    tmp = m[5]; m[5] = m[7]; m[7] = tmp;
+}
+
+float SimdUtils::DeterminantMatrix3x3(const float* m) {
+    // Using rule of Sarrus
+    float det =
+        m[0]*(m[4]*m[8] - m[5]*m[7]) -
+        m[1]*(m[3]*m[8] - m[5]*m[6]) +
+        m[2]*(m[3]*m[7] - m[4]*m[6]);
+    return det;
+}
+
+bool SimdUtils::InvertMatrix3x3(const float* m, float* result) {
+    float det = DeterminantMatrix3x3(m);
+    if (std::fabs(det) < 1e-12f) return false;
+    float invDet = 1.0f / det;
+
+    // Compute adjugate (transpose of cofactor matrix)
+    result[0] =  (m[4]*m[8] - m[5]*m[7]) * invDet;
+    result[1] = -(m[1]*m[8] - m[2]*m[7]) * invDet;
+    result[2] =  (m[1]*m[5] - m[2]*m[4]) * invDet;
+
+    result[3] = -(m[3]*m[8] - m[5]*m[6]) * invDet;
+    result[4] =  (m[0]*m[8] - m[2]*m[6]) * invDet;
+    result[5] = -(m[0]*m[5] - m[2]*m[3]) * invDet;
+
+    result[6] =  (m[3]*m[7] - m[4]*m[6]) * invDet;
+    result[7] = -(m[0]*m[7] - m[1]*m[6]) * invDet;
+    result[8] =  (m[0]*m[4] - m[1]*m[3]) * invDet;
+
+    return true;
+}
+
 } // namespace math
 } // namespace pynovage
