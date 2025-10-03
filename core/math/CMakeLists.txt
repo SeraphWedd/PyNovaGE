@@ -71,6 +71,7 @@ add_executable(math_benchmarks
     tests/math_perf_tests.cpp
     tests/vector2_perf_tests.cpp
     tests/vector3_perf_tests.cpp
+    tests/matrix_perf_tests.cpp
 )
 
 target_link_libraries(math_benchmarks
