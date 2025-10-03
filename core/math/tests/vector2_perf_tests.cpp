@@ -176,5 +176,3 @@ static void BM_Vector2ArrayOperations(benchmark::State& state) {
     }
 }
 BENCHMARK(BM_Vector2ArrayOperations);
-
-BENCHMARK_MAIN();
