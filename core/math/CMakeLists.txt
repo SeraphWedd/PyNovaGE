@@ -50,6 +50,7 @@ add_executable(math_tests
     tests/simd_utils_vec3_tests.cpp
     tests/vector3_tests.cpp
     tests/matrix2_tests.cpp
+    tests/matrix3_tests.cpp
     tests/quaternion_tests.cpp
 )
 
