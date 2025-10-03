@@ -5,6 +5,7 @@ cmake_minimum_required(VERSION 3.15)
 add_library(pynovage_math
     src/simd_utils.cpp
     src/geometry/continuous_collision.cpp
+    src/geometry/high_speed_collision.cpp
 )
 
 # Add include directories
@@ -56,6 +57,7 @@ add_executable(math_tests
     tests/primitives_tests.cpp
     tests/geometry/intersection_tests.cpp
     tests/geometry/continuous_collision_tests.cpp
+    tests/geometry/high_speed_collision_tests.cpp
 )
 
 target_link_libraries(math_tests

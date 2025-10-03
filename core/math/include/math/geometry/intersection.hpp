@@ -96,52 +96,74 @@ inline std::optional<IntersectionResult> raySphereIntersection(const Ray3D& ray,
  * @return Optional intersection result, empty if no intersection
  */
 inline std::optional<IntersectionResult> rayAABBIntersection(const Ray3D& ray, const AABB& aabb) {
-    Vector3 invDir(
-        1.0f / ray.direction.x,
-        1.0f / ray.direction.y,
-        1.0f / ray.direction.z
-    );
-    
-    Vector3 t1(
-        (aabb.min.x - ray.origin.x) * invDir.x,
-        (aabb.min.y - ray.origin.y) * invDir.y,
-        (aabb.min.z - ray.origin.z) * invDir.z
-    );
-    Vector3 t2(
-        (aabb.max.x - ray.origin.x) * invDir.x,
-        (aabb.max.y - ray.origin.y) * invDir.y,
-        (aabb.max.z - ray.origin.z) * invDir.z
-    );
-    
-    Vector3 tmin(
-        std::min(t1.x, t2.x),
-        std::min(t1.y, t2.y),
-        std::min(t1.z, t2.z)
-    );
-    
-    Vector3 tmax(
-        std::max(t1.x, t2.x),
-        std::max(t1.y, t2.y),
-        std::max(t1.z, t2.z)
-    );
-    
-    float enterT = std::max(std::max(tmin.x, tmin.y), tmin.z);
-    float exitT = std::min(std::min(tmax.x, tmax.y), tmax.z);
-    
-    if (enterT > exitT || exitT < 0.0f) {
-        return std::nullopt;
+    // Robust slab method with epsilon handling and per-axis logic
+    float t_near = 0.0f;
+    float t_far = std::numeric_limits<float>::infinity();
+    float eps = constants::epsilon;
+
+    // Store entry times per axis for normal computation
+    float t_min_axis[3] = { -std::numeric_limits<float>::infinity(), -std::numeric_limits<float>::infinity(), -std::numeric_limits<float>::infinity() };
+
+    // X axis
+    if (std::abs(ray.direction.x) < eps) {
+        if (ray.origin.x < aabb.min.x - eps || ray.origin.x > aabb.max.x + eps) {
+            return std::nullopt;
+        }
+    } else {
+        float t1 = (aabb.min.x - ray.origin.x) / ray.direction.x;
+        float t2 = (aabb.max.x - ray.origin.x) / ray.direction.x;
+        if (t1 > t2) std::swap(t1, t2);
+        t_min_axis[0] = t1;
+        t_near = std::max(t_near, t1);
+        t_far = std::min(t_far, t2);
+        if (t_near > t_far || t_far < 0.0f) return std::nullopt;
     }
-    
+
+    // Y axis
+    if (std::abs(ray.direction.y) < eps) {
+        if (ray.origin.y < aabb.min.y - eps || ray.origin.y > aabb.max.y + eps) {
+            return std::nullopt;
+        }
+    } else {
+        float t1 = (aabb.min.y - ray.origin.y) / ray.direction.y;
+        float t2 = (aabb.max.y - ray.origin.y) / ray.direction.y;
+        if (t1 > t2) std::swap(t1, t2);
+        t_min_axis[1] = t1;
+        t_near = std::max(t_near, t1);
+        t_far = std::min(t_far, t2);
+        if (t_near > t_far || t_far < 0.0f) return std::nullopt;
+    }
+
+    // Z axis
+    if (std::abs(ray.direction.z) < eps) {
+        if (ray.origin.z < aabb.min.z - eps || ray.origin.z > aabb.max.z + eps) {
+            return std::nullopt;
+        }
+    } else {
+        float t1 = (aabb.min.z - ray.origin.z) / ray.direction.z;
+        float t2 = (aabb.max.z - ray.origin.z) / ray.direction.z;
+        if (t1 > t2) std::swap(t1, t2);
+        t_min_axis[2] = t1;
+        t_near = std::max(t_near, t1);
+        t_far = std::min(t_far, t2);
+        if (t_near > t_far || t_far < 0.0f) return std::nullopt;
+    }
+
+    // If we reach here, we have an intersection
     IntersectionResult result;
     result.intersects = true;
-    result.distance = enterT;
-    result.point = ray.getPoint(enterT);
-    
-    // Calculate normal based on which face was hit
-    if (enterT == tmin.x) result.normal = Vector3(invDir.x < 0.0f ? 1.0f : -1.0f, 0.0f, 0.0f);
-    else if (enterT == tmin.y) result.normal = Vector3(0.0f, invDir.y < 0.0f ? 1.0f : -1.0f, 0.0f);
-    else result.normal = Vector3(0.0f, 0.0f, invDir.z < 0.0f ? 1.0f : -1.0f);
-    
+    result.distance = t_near;
+    result.point = ray.getPoint(t_near);
+
+    // Determine normal by matching the axis whose entry time equals t_near (within epsilon)
+    if (std::abs(ray.direction.x) > eps && std::abs(t_near - t_min_axis[0]) < eps) {
+        result.normal = Vector3(ray.direction.x > 0.0f ? -1.0f : 1.0f, 0.0f, 0.0f);
+    } else if (std::abs(ray.direction.y) > eps && std::abs(t_near - t_min_axis[1]) < eps) {
+        result.normal = Vector3(0.0f, ray.direction.y > 0.0f ? -1.0f : 1.0f, 0.0f);
+    } else {
+        result.normal = Vector3(0.0f, 0.0f, ray.direction.z > 0.0f ? -1.0f : 1.0f);
+    }
+
     return result;
 }
 
