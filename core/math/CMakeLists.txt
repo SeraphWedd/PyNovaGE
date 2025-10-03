@@ -4,6 +4,7 @@ cmake_minimum_required(VERSION 3.15)
 # Create the math library target
 add_library(pynovage_math
     src/simd_utils.cpp
+    src/geometry/continuous_collision.cpp
 )
 
 # Add include directories
@@ -54,6 +55,7 @@ add_executable(math_tests
     tests/quaternion_tests.cpp
     tests/primitives_tests.cpp
     tests/geometry/intersection_tests.cpp
+    tests/geometry/continuous_collision_tests.cpp
 )
 
 target_link_libraries(math_tests
@@ -76,6 +78,7 @@ add_executable(math_benchmarks
     tests/vector3_perf_tests.cpp
     tests/primitives_perf_tests.cpp
     tests/geometry/intersection_perf_tests.cpp
+    tests/geometry/continuous_collision_perf_tests.cpp
 )
 
 target_link_libraries(math_benchmarks

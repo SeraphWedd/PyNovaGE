@@ -24,7 +24,7 @@ struct IntersectionResult {
  * @param plane The plane to test against
  * @return Optional intersection result, empty if no intersection
  */
-std::optional<IntersectionResult> rayPlaneIntersection(const Ray3D& ray, const Plane& plane) {
+inline std::optional<IntersectionResult> rayPlaneIntersection(const Ray3D& ray, const Plane& plane) {
     float denom = ray.direction.dot(plane.normal);
     
     // Ray is parallel to plane
@@ -54,7 +54,7 @@ std::optional<IntersectionResult> rayPlaneIntersection(const Ray3D& ray, const P
  * @param sphere The sphere to test against
  * @return Optional intersection result, empty if no intersection
  */
-std::optional<IntersectionResult> raySphereIntersection(const Ray3D& ray, const Sphere& sphere) {
+inline std::optional<IntersectionResult> raySphereIntersection(const Ray3D& ray, const Sphere& sphere) {
     // Solve |O + tD - C|^2 = r^2 -> (D·D) t^2 + 2 D·(O-C) t + |O-C|^2 - r^2 = 0
     Vector3 oc = ray.origin - sphere.center;
     float a = ray.direction.dot(ray.direction); // Should be 1 since direction is normalized
@@ -95,7 +95,7 @@ std::optional<IntersectionResult> raySphereIntersection(const Ray3D& ray, const 
  * @param aabb The AABB to test against
  * @return Optional intersection result, empty if no intersection
  */
-std::optional<IntersectionResult> rayAABBIntersection(const Ray3D& ray, const AABB& aabb) {
+inline std::optional<IntersectionResult> rayAABBIntersection(const Ray3D& ray, const AABB& aabb) {
     Vector3 invDir(
         1.0f / ray.direction.x,
         1.0f / ray.direction.y,
@@ -151,7 +151,7 @@ std::optional<IntersectionResult> rayAABBIntersection(const Ray3D& ray, const AA
  * @param sphere2 Second sphere
  * @return Optional intersection result, empty if no intersection
  */
-std::optional<IntersectionResult> sphereSphereIntersection(const Sphere& sphere1, const Sphere& sphere2) {
+inline std::optional<IntersectionResult> sphereSphereIntersection(const Sphere& sphere1, const Sphere& sphere2) {
     Vector3 toSphere = sphere2.center - sphere1.center;
     float distSq = toSphere.lengthSquared();
     float radiusSum = sphere1.radius + sphere2.radius;
@@ -175,7 +175,7 @@ std::optional<IntersectionResult> sphereSphereIntersection(const Sphere& sphere1
  * @param aabb2 Second AABB
  * @return Optional intersection result, empty if no intersection
  */
-std::optional<IntersectionResult> aabbAABBIntersection(const AABB& aabb1, const AABB& aabb2) {
+inline std::optional<IntersectionResult> aabbAABBIntersection(const AABB& aabb1, const AABB& aabb2) {
     // Check for no intersection
     if (aabb1.max.x < aabb2.min.x || aabb1.min.x > aabb2.max.x ||
         aabb1.max.y < aabb2.min.y || aabb1.min.y > aabb2.max.y ||
