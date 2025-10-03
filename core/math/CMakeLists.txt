@@ -52,6 +52,7 @@ add_executable(math_tests
     tests/matrix2_tests.cpp
     tests/matrix3_tests.cpp
     tests/quaternion_tests.cpp
+    tests/primitives_tests.cpp
 )
 
 target_link_libraries(math_tests
