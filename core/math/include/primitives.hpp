@@ -124,6 +124,31 @@ public:
         return (v0 + v1 + v2) * (1.0f / 3.0f);
     }
 
+    struct Properties {
+        Vector3 normal;
+        float area;
+        Vector3 center;
+    };
+
+    // Compute normal, area, and center in one pass
+    Properties computePropertiesFast() const {
+        Properties p{};
+        Vector3 edge1 = v1 - v0;
+        Vector3 edge2 = v2 - v0;
+        Vector3 c = edge1.cross(edge2);
+        float len2 = c.lengthSquared();
+        if (len2 > 1e-12f) {
+            float invLen = 1.0f / std::sqrt(len2);
+            p.normal = c * invLen;
+            p.area = 0.5f * (len2 * invLen); // 0.5 * |c|, where |c| = len2 * invLen
+        } else {
+            p.normal = Vector3(0.0f, 0.0f, 1.0f);
+            p.area = 0.0f;
+        }
+        p.center = (v0 + v1 + v2) * (1.0f / 3.0f);
+        return p;
+    }
+
     Vector3 v0, v1, v2;
 };
 
