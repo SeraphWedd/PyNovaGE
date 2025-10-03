@@ -142,6 +142,119 @@ public:
      * @param result Cross product result
      */
     static void CrossProduct3f(const float* a, const float* b, float* result);
+
+    // Matrix operations
+
+    /**
+     * @brief Multiplies two 2x2 matrices using SIMD if available
+     * @param a First matrix (row-major)
+     * @param b Second matrix (row-major)
+     * @param result Result matrix
+     */
+    static void MultiplyMatrix2x2(const float* a, const float* b, float* result);
+
+    /**
+     * @brief Multiplies two 3x3 matrices using SIMD if available
+     * @param a First matrix (row-major)
+     * @param b Second matrix (row-major)
+     * @param result Result matrix
+     */
+    static void MultiplyMatrix3x3(const float* a, const float* b, float* result);
+
+    /**
+     * @brief Multiplies two 4x4 matrices using SIMD if available
+     * @param a First matrix (row-major)
+     * @param b Second matrix (row-major)
+     * @param result Result matrix
+     */
+    static void MultiplyMatrix4x4(const float* a, const float* b, float* result);
+
+    /**
+     * @brief Multiplies a 2x2 matrix by a 2D vector using SIMD if available
+     * @param m Matrix (row-major)
+     * @param v Vector
+     * @param result Result vector
+     */
+    static void MultiplyMatrix2x2Vec2(const float* m, const float* v, float* result);
+
+    /**
+     * @brief Multiplies a 3x3 matrix by a 3D vector using SIMD if available
+     * @param m Matrix (row-major)
+     * @param v Vector
+     * @param result Result vector
+     */
+    static void MultiplyMatrix3x3Vec3(const float* m, const float* v, float* result);
+
+    /**
+     * @brief Multiplies a 4x4 matrix by a 4D vector using SIMD if available
+     * @param m Matrix (row-major)
+     * @param v Vector
+     * @param result Result vector
+     */
+    static void MultiplyMatrix4x4Vec4(const float* m, const float* v, float* result);
+
+    /**
+     * @brief Transposes a 2x2 matrix in-place using SIMD if available
+     * @param m Matrix to transpose (row-major)
+     */
+    static void TransposeMatrix2x2(float* m);
+
+    /**
+     * @brief Transposes a 3x3 matrix in-place using SIMD if available
+     * @param m Matrix to transpose (row-major)
+     */
+    static void TransposeMatrix3x3(float* m);
+
+    /**
+     * @brief Transposes a 4x4 matrix in-place using SIMD if available
+     * @param m Matrix to transpose (row-major)
+     */
+    static void TransposeMatrix4x4(float* m);
+
+    /**
+     * @brief Calculates determinant of a 2x2 matrix using SIMD if available
+     * @param m Matrix (row-major)
+     * @return Determinant value
+     */
+    static float DeterminantMatrix2x2(const float* m);
+
+    /**
+     * @brief Calculates determinant of a 3x3 matrix using SIMD if available
+     * @param m Matrix (row-major)
+     * @return Determinant value
+     */
+    static float DeterminantMatrix3x3(const float* m);
+
+    /**
+     * @brief Calculates determinant of a 4x4 matrix using SIMD if available
+     * @param m Matrix (row-major)
+     * @return Determinant value
+     */
+    static float DeterminantMatrix4x4(const float* m);
+
+    /**
+     * @brief Inverts a 2x2 matrix using SIMD if available
+     * @param m Matrix to invert (row-major)
+     * @param result Inverted matrix
+     * @return true if matrix was invertible, false otherwise
+     */
+    static bool InvertMatrix2x2(const float* m, float* result);
+
+    /**
+     * @brief Inverts a 3x3 matrix using SIMD if available
+     * @param m Matrix to invert (row-major)
+     * @param result Inverted matrix
+     * @return true if matrix was invertible, false otherwise
+     */
+    static bool InvertMatrix3x3(const float* m, float* result);
+
+    /**
+     * @brief Inverts a 4x4 matrix using SIMD if available
+     * @param m Matrix to invert (row-major)
+     * @param result Inverted matrix
+     * @return true if matrix was invertible, false otherwise
+     */
+    static bool InvertMatrix4x4(const float* m, float* result);
 };
 
 } // namespace math

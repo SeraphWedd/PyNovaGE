@@ -49,6 +49,7 @@ add_executable(math_tests
     tests/vector2_tests.cpp
     tests/simd_utils_vec3_tests.cpp
     tests/vector3_tests.cpp
+    tests/matrix2_tests.cpp
 )
 
 target_link_libraries(math_tests

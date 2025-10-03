@@ -1,4 +1,5 @@
 #include "math/simd_utils.hpp"
+#include <cmath>
 
 namespace pynovage {
 namespace math {
@@ -178,6 +179,53 @@ void SimdUtils::CrossProduct3f(const float* a, const float* b, float* result) {
     result[1] = a[2] * b[0] - a[0] * b[2];
     result[2] = a[0] * b[1] - a[1] * b[0];
 #endif
+}
+
+// ------- Matrix 2x2 operations -------
+void SimdUtils::MultiplyMatrix2x2(const float* a, const float* b, float* result) {
+    // Row-major: a = [a00 a01; a10 a11], b = [b00 b01; b10 b11]
+    result[0] = a[0]*b[0] + a[1]*b[2];
+    result[1] = a[0]*b[1] + a[1]*b[3];
+    result[2] = a[2]*b[0] + a[3]*b[2];
+    result[3] = a[2]*b[1] + a[3]*b[3];
+}
+
+void SimdUtils::MultiplyMatrix2x2Vec2(const float* m, const float* v, float* result) {
+#if PYNOVAGE_MATH_HAS_SSE
+    __m128 row0 = _mm_set_ps(0.0f, 0.0f, m[1], m[0]);
+    __m128 row1 = _mm_set_ps(0.0f, 0.0f, m[3], m[2]);
+    __m128 vv   = _mm_set_ps(0.0f, 0.0f, v[1], v[0]);
+    __m128 mul0 = _mm_mul_ps(row0, vv);
+    __m128 mul1 = _mm_mul_ps(row1, vv);
+    __m128 sum0 = _mm_hadd_ps(mul0, mul0);
+    __m128 sum1 = _mm_hadd_ps(mul1, mul1);
+    result[0] = _mm_cvtss_f32(sum0);
+    result[1] = _mm_cvtss_f32(sum1);
+#else
+    result[0] = m[0]*v[0] + m[1]*v[1];
+    result[1] = m[2]*v[0] + m[3]*v[1];
+#endif
+}
+
+void SimdUtils::TransposeMatrix2x2(float* m) {
+    float tmp = m[1];
+    m[1] = m[2];
+    m[2] = tmp;
+}
+
+float SimdUtils::DeterminantMatrix2x2(const float* m) {
+    return m[0]*m[3] - m[1]*m[2];
+}
+
+bool SimdUtils::InvertMatrix2x2(const float* m, float* result) {
+    float det = DeterminantMatrix2x2(m);
+    if (std::fabs(det) < 1e-12f) return false;
+    float invDet = 1.0f / det;
+    result[0] =  m[3] * invDet;
+    result[1] = -m[1] * invDet;
+    result[2] = -m[2] * invDet;
+    result[3] =  m[0] * invDet;
+    return true;
 }
 
 } // namespace math
