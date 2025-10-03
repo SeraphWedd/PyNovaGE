@@ -57,7 +57,7 @@ static void BM_PlaneDistanceCalculation(benchmark::State& state) {
 BENCHMARK(BM_PlaneDistanceCalculation);
 
 // Triangle Performance Tests
-static void BM_TriangleProperties(benchmark::State& state) {
+static void BM_TrianglePropertiesSeparate(benchmark::State& state) {
     Triangle tri(Vector3(0.0f, 0.0f, 0.0f), 
                 Vector3(1.0f, 0.0f, 0.0f), 
                 Vector3(0.0f, 1.0f, 0.0f));
@@ -68,8 +68,18 @@ static void BM_TriangleProperties(benchmark::State& state) {
         benchmark::DoNotOptimize(tri.getCenter());
     }
 }
-BENCHMARK(BM_TriangleProperties);
+BENCHMARK(BM_TrianglePropertiesSeparate);
 
+static void BM_TrianglePropertiesFast(benchmark::State& state) {
+    Triangle tri(Vector3(0.0f, 0.0f, 0.0f), 
+                Vector3(1.0f, 0.0f, 0.0f), 
+                Vector3(0.0f, 1.0f, 0.0f));
+    
+    for (auto _ : state) {
+        benchmark::DoNotOptimize(tri.computePropertiesFast());
+    }
+}
+BENCHMARK(BM_TrianglePropertiesFast);
 // OBB Performance Tests
 static void BM_OBBConstruction(benchmark::State& state) {
     Vector3 center(1.0f, 1.0f, 1.0f);
