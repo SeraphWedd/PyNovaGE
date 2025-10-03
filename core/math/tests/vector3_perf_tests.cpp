@@ -23,7 +23,7 @@ static std::vector<float> GenerateRandomFloats(size_t count) {
 
 // Basic vector operations benchmark
 static void BM_Vector3Addition(benchmark::State& state) {
-    const size_t VectorCount = 1000000;
+    const size_t VectorCount = 100000;  // Reduced to prevent memory pressure
     auto random_floats = GenerateRandomFloats(VectorCount * 3);
     std::vector<Vector3> vectors;
     vectors.reserve(VectorCount);
@@ -34,7 +34,7 @@ static void BM_Vector3Addition(benchmark::State& state) {
     
     size_t index = 0;
     for (auto _ : state) {
-        Vector3 result = vectors[index % (VectorCount-1)] + vectors[(index + 1) % (VectorCount-1)];
+        Vector3 result = vectors[index % VectorCount] + vectors[(index + 1) % VectorCount];
         benchmark::DoNotOptimize(result);
         index++;
     }
@@ -54,7 +54,7 @@ static void BM_Vector3Normalization(benchmark::State& state) {
     
     size_t index = 0;
     for (auto _ : state) {
-        Vector3 result = vectors[index % (VectorCount-1)].normalized();
+        Vector3 result = vectors[index % VectorCount].normalized();
         benchmark::DoNotOptimize(result);
         index++;
     }
@@ -118,7 +118,7 @@ static void BM_Vector3RandomAccess(benchmark::State& state) {
     size_t index = 0;
     float sum = 0.0f;
     for (auto _ : state) {
-        sum += vectors[indices[index % (VectorCount-1)]].length();
+        sum += vectors[indices[index % VectorCount]].length();
         index++;
     }
     benchmark::DoNotOptimize(sum);
@@ -139,7 +139,7 @@ static void BM_Vector3DotProduct(benchmark::State& state) {
     size_t index = 0;
     float sum = 0.0f;
     for (auto _ : state) {
-        sum += vectors[index % (VectorCount-1)].dot(vectors[(index + 1) % (VectorCount-1)]);
+        sum += vectors[index % VectorCount].dot(vectors[(index + 1) % VectorCount]);
         index++;
     }
     benchmark::DoNotOptimize(sum);
@@ -158,7 +158,7 @@ static void BM_Vector3CrossProduct(benchmark::State& state) {
     
     size_t index = 0;
     for (auto _ : state) {
-        Vector3 result = vectors[index % (VectorCount-1)].cross(vectors[(index + 1) % (VectorCount-1)]);
+        Vector3 result = vectors[index % VectorCount].cross(vectors[(index + 1) % VectorCount]);
         benchmark::DoNotOptimize(result);
         index++;
     }
@@ -186,7 +186,7 @@ static void BM_Vector3Reflection(benchmark::State& state) {
     
     size_t index = 0;
     for (auto _ : state) {
-        Vector3 result = vectors[index % (VectorCount-1)].reflect(normals[index % (VectorCount-1)]);
+        Vector3 result = vectors[index % VectorCount].reflect(normals[index % VectorCount]);
         benchmark::DoNotOptimize(result);
         index++;
     }
@@ -209,7 +209,7 @@ static void BM_Vector2vs3_Addition(benchmark::State& state) {
         
         size_t index = 0;
         for (auto _ : state) {
-            Vector3 result = vectors[index % (VectorCount-1)] + vectors[(index + 1) % (VectorCount-1)];
+            Vector3 result = vectors[index % VectorCount] + vectors[(index + 1) % VectorCount];
             benchmark::DoNotOptimize(result);
             index++;
         }
@@ -224,7 +224,7 @@ static void BM_Vector2vs3_Addition(benchmark::State& state) {
         
         size_t index = 0;
         for (auto _ : state) {
-            Vector2 result = vectors[index % (VectorCount-1)] + vectors[(index + 1) % (VectorCount-1)];
+            Vector2 result = vectors[index % VectorCount] + vectors[(index + 1) % VectorCount];
             benchmark::DoNotOptimize(result);
             index++;
         }
@@ -237,12 +237,14 @@ static void BM_Vector3ArrayOperations(benchmark::State& state) {
     const size_t ArraySize = 1024; // Cache-friendly size
     std::array<Vector3, ArraySize> arr1, arr2, result;
     
-    auto random_floats = GenerateRandomFloats(ArraySize * 3);
+    auto random_floats = GenerateRandomFloats(ArraySize * 6);  // Need double for arr1 and arr2
     for (size_t i = 0; i < ArraySize; ++i) {
         arr1[i] = Vector3(random_floats[i*3], random_floats[i*3+1], random_floats[i*3+2]);
-        arr2[i] = Vector3(random_floats[ArraySize*3 + i*3], 
-                         random_floats[ArraySize*3 + i*3+1],
-                         random_floats[ArraySize*3 + i*3+2]);
+        // Use second half of random_floats for arr2
+        const size_t offset = ArraySize * 3;
+        arr2[i] = Vector3(random_floats[offset + i*3], 
+                         random_floats[offset + i*3+1],
+                         random_floats[offset + i*3+2]);
     }
     
     for (auto _ : state) {

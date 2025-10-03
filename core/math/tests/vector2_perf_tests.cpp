@@ -34,7 +34,7 @@ static void BM_Vector2Addition(benchmark::State& state) {
     
     size_t index = 0;
     for (auto _ : state) {
-        Vector2 result = vectors[index % (VectorCount-1)] + vectors[(index + 1) % (VectorCount-1)];
+        Vector2 result = vectors[index % VectorCount] + vectors[(index + 1) % VectorCount];
         benchmark::DoNotOptimize(result);
         index++;
     }
@@ -54,7 +54,7 @@ static void BM_Vector2Normalization(benchmark::State& state) {
     
     size_t index = 0;
     for (auto _ : state) {
-        Vector2 result = vectors[index % (VectorCount-1)].normalized();
+        Vector2 result = vectors[index % VectorCount].normalized();
         benchmark::DoNotOptimize(result);
         index++;
     }
@@ -92,7 +92,7 @@ static void BM_Vector2SequentialAccess(benchmark::State& state) {
     size_t index = 0;
     float sum = 0.0f;
     for (auto _ : state) {
-        sum += vectors[index % (VectorCount-1)].length();
+        sum += vectors[index % VectorCount].length();
         index++;
     }
     benchmark::DoNotOptimize(sum);
@@ -119,7 +119,7 @@ static void BM_Vector2RandomAccess(benchmark::State& state) {
     size_t index = 0;
     float sum = 0.0f;
     for (auto _ : state) {
-        sum += vectors[indices[index % (VectorCount-1)]].length();
+        sum += vectors[indices[index % VectorCount]].length();
         index++;
     }
     benchmark::DoNotOptimize(sum);
@@ -140,7 +140,7 @@ static void BM_Vector2DotProduct(benchmark::State& state) {
     size_t index = 0;
     float sum = 0.0f;
     for (auto _ : state) {
-        sum += vectors[index % (VectorCount-1)].dot(vectors[(index + 1) % (VectorCount-1)]);
+        sum += vectors[index % VectorCount].dot(vectors[(index + 1) % VectorCount]);
         index++;
     }
     benchmark::DoNotOptimize(sum);
@@ -162,10 +162,10 @@ static void BM_Vector2ArrayOperations(benchmark::State& state) {
     const size_t ArraySize = 1024; // Cache-friendly size
     std::array<Vector2, ArraySize> arr1, arr2, result;
     
-    auto random_floats = GenerateRandomFloats(ArraySize * 2);
+    auto random_floats = GenerateRandomFloats(ArraySize * 4);  // Need 4x for both arrays
     for (size_t i = 0; i < ArraySize; ++i) {
         arr1[i] = Vector2(random_floats[i*2], random_floats[i*2+1]);
-        arr2[i] = Vector2(random_floats[ArraySize*2 + i*2], random_floats[ArraySize*2 + i*2+1]);
+        arr2[i] = Vector2(random_floats[(ArraySize*2) + i*2], random_floats[(ArraySize*2) + i*2+1]);
     }
     
     for (auto _ : state) {
