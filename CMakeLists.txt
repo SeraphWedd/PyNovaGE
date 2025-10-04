@@ -8,5 +8,8 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 # Enable testing
 enable_testing()
 
+# Build options
+option(PYNOVAGE_BUILD_BENCHMARKS "Build benchmark executables" ON)
+
 # Add subdirectories
 add_subdirectory(core)

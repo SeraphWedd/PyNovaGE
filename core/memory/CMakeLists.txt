@@ -1,10 +1,44 @@
-add_library(memory INTERFACE)
+# Memory library CMake configuration
+cmake_minimum_required(VERSION 3.15)
 
-target_include_directories(memory
+# Create the memory library target
+add_library(pynovage_memory INTERFACE)
+
+# Add include directories
+target_include_directories(pynovage_memory
     INTERFACE
         ${CMAKE_CURRENT_SOURCE_DIR}/include
 )
 
+# Enable testing
+enable_testing()
+
+# Configure dependency fetching
+include(FetchContent)
+FetchContent_Declare(
+    googletest
+    GIT_REPOSITORY https://github.com/google/googletest.git
+    GIT_TAG release-1.12.1
+)
+
+FetchContent_Declare(
+    googlebenchmark
+    GIT_REPOSITORY https://github.com/google/benchmark.git
+    GIT_TAG v1.8.2
+)
+
+# For Windows: Prevent overriding the parent project's compiler/linker settings
+set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
+
+# Configure benchmark options
+set(BENCHMARK_ENABLE_TESTING OFF CACHE BOOL "" FORCE)
+set(BENCHMARK_ENABLE_GTEST_TESTS OFF CACHE BOOL "" FORCE)
+
+# Set default benchmark runtime configuration
+set(BENCHMARK_MIN_TIME "0.1s" CACHE STRING "Minimum time to run each benchmark")
+set(BENCHMARK_ARGS "--benchmark_min_time=${BENCHMARK_MIN_TIME}" CACHE STRING "Arguments to pass to benchmark executables")
+
+FetchContent_MakeAvailable(googletest googlebenchmark)
 
 # Benchmarks
 if(PYNOVAGE_BUILD_BENCHMARKS)
@@ -13,9 +47,10 @@ if(PYNOVAGE_BUILD_BENCHMARKS)
         tests/allocator_perf_tests.cpp
         tests/memory_benchmarks.cpp
     )
-    target_link_libraries(allocator_benchmarks_linear
+target_link_libraries(allocator_benchmarks_linear
         PRIVATE
-            memory
+            pynovage_memory
+            benchmark::benchmark
             benchmark::benchmark_main
     )
 
@@ -24,9 +59,10 @@ if(PYNOVAGE_BUILD_BENCHMARKS)
         tests/pool_allocator_perf_tests.cpp
         tests/memory_benchmarks.cpp
     )
-    target_link_libraries(allocator_benchmarks_pool
+target_link_libraries(allocator_benchmarks_pool
         PRIVATE
-            memory
+            pynovage_memory
+            benchmark::benchmark
             benchmark::benchmark_main
     )
 
@@ -35,9 +71,10 @@ if(PYNOVAGE_BUILD_BENCHMARKS)
         tests/stack_allocator_perf_tests.cpp
         tests/memory_benchmarks.cpp
     )
-    target_link_libraries(allocator_benchmarks_stack
+target_link_libraries(allocator_benchmarks_stack
         PRIVATE
-            memory
+            pynovage_memory
+            benchmark::benchmark
             benchmark::benchmark_main
     )
 
@@ -45,27 +82,30 @@ if(PYNOVAGE_BUILD_BENCHMARKS)
     add_executable(defrag_basic_benchmarks
         tests/basic_ops_main.cpp
     )
-    target_link_libraries(defrag_basic_benchmarks
+target_link_libraries(defrag_basic_benchmarks
         PRIVATE
-            memory
+            pynovage_memory
+            benchmark::benchmark
             benchmark::benchmark_main
     )
     
     add_executable(defrag_threading_benchmarks
         tests/threading_main.cpp
     )
-    target_link_libraries(defrag_threading_benchmarks
+target_link_libraries(defrag_threading_benchmarks
         PRIVATE
-            memory
+            pynovage_memory
+            benchmark::benchmark
             benchmark::benchmark_main
     )
     
     add_executable(defrag_sizeclass_benchmarks
         tests/sizeclass_main.cpp
     )
-    target_link_libraries(defrag_sizeclass_benchmarks
+target_link_libraries(defrag_sizeclass_benchmarks
         PRIVATE
-            memory
+            pynovage_memory
+            benchmark::benchmark
             benchmark::benchmark_main
     )
 endif()
@@ -76,9 +116,9 @@ add_executable(vector_tests
 )
 target_link_libraries(vector_tests
     PRIVATE
-        memory
-        GTest::gtest_main
-        GTest::gmock
+        pynovage_memory
+        gtest
+        gtest_main
 )
 add_test(NAME vector_tests COMMAND vector_tests)
 
@@ -88,9 +128,9 @@ add_executable(defrag_allocator_tests
 )
 target_link_libraries(defrag_allocator_tests
     PRIVATE
-        memory
-        GTest::gtest_main
-        GTest::gmock
+        pynovage_memory
+        gtest
+        gtest_main
 )
 add_test(NAME defrag_allocator_tests COMMAND defrag_allocator_tests)
 
@@ -100,9 +140,9 @@ add_executable(string_tests
 )
 target_link_libraries(string_tests
     PRIVATE
-        memory
-        GTest::gtest_main
-        GTest::gmock
+        pynovage_memory
+        gtest
+        gtest_main
 )
 add_test(NAME string_tests COMMAND string_tests)
 
@@ -112,9 +152,9 @@ add_executable(string_view_tests
 )
 target_link_libraries(string_view_tests
     PRIVATE
-        memory
-        GTest::gtest_main
-        GTest::gmock
+        pynovage_memory
+        gtest
+        gtest_main
 )
 add_test(NAME string_view_tests COMMAND string_view_tests)
 
@@ -124,9 +164,9 @@ add_executable(utf_tests
 )
 target_link_libraries(utf_tests
     PRIVATE
-        memory
-        GTest::gtest_main
-        GTest::gmock
+        pynovage_memory
+        gtest
+        gtest_main
 )
 add_test(NAME utf_tests COMMAND utf_tests)
 
@@ -135,11 +175,13 @@ if(PYNOVAGE_BUILD_BENCHMARKS)
     add_executable(memory_analysis_benchmarks
         tests/memory_analysis_benchmarks.cpp
     )
-    target_link_libraries(memory_analysis_benchmarks
+target_link_libraries(memory_analysis_benchmarks
         PRIVATE
-            memory
+            pynovage_memory
+            benchmark::benchmark
             benchmark::benchmark_main
     )
 endif()
 
-add_library(nova_memory INTERFACE)
+# Add benchmark test with proper arguments
+add_test(NAME memory_benchmarks COMMAND allocator_benchmarks_linear ${BENCHMARK_ARGS})
