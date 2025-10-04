@@ -1,4 +1,4 @@
-#include "math/geometry/continuous_collision.hpp"
+#include "geometry/continuous_collision.hpp"
 #include <algorithm>
 
 namespace pynovage {

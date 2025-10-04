@@ -1,4 +1,4 @@
-#include "math/geometry/intersection.hpp"
+#include "geometry/intersection.hpp"
 #include <gtest/gtest.h>
 
 using namespace pynovage::math;

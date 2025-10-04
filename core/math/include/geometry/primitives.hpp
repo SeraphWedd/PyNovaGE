@@ -1,10 +1,10 @@
 #ifndef PYNOVAGE_MATH_GEOMETRY_PRIMITIVES_HPP
 #define PYNOVAGE_MATH_GEOMETRY_PRIMITIVES_HPP
 
-#include "math/vector3.hpp"
-#include "math/matrix3.hpp"
-#include "math/simd_utils.hpp"
-#include "math/math_constants.hpp"
+#include "../vector3.hpp"
+#include "../matrix3.hpp"
+#include "../simd_utils.hpp"
+#include "../math_constants.hpp"
 #include <algorithm>
 
 namespace pynovage {

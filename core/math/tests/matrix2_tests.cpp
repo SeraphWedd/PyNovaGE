@@ -1,6 +1,6 @@
 #include <gtest/gtest.h>
-#include "math/matrix2.hpp"
-#include "math/math_constants.hpp"
+#include "matrix2.hpp"
+#include "math_constants.hpp"
 #include <cmath>
 
 using namespace pynovage::math;

@@ -1,4 +1,4 @@
-#include "math/geometry/primitives.hpp"
+#include "geometry/primitives.hpp"
 #include <gtest/gtest.h>
 
 using namespace pynovage::math;

@@ -1,5 +1,5 @@
-#include "math/geometry/high_speed_collision.hpp"
-#include "math/geometry/primitives.hpp"
+#include "geometry/high_speed_collision.hpp"
+#include "geometry/intersection.hpp"
 #include "math/math_constants.hpp"
 #include <gtest/gtest.h>
 

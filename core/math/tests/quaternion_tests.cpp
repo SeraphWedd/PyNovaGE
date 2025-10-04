@@ -1,5 +1,5 @@
-#include "math/quaternion.hpp"
-#include "math/math_constants.hpp"
+#include "quaternion.hpp"
+#include "math_constants.hpp"
 #include <gtest/gtest.h>
 #include <cmath>
 
