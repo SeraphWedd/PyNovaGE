@@ -134,7 +134,9 @@ struct AABBProxy {
     // SAP data (for dynamic objects)
     float min[3];            // Minimum bounds on each axis
     float max[3];            // Maximum bounds on each axis
-    int32_t sortKeys[3];     // Sort keys for each axis
+    float prevMin[3];        // Previous minimum bounds for incremental sorting
+    int32_t sortKeys[3];     // Sort keys for each axis (represents position in sorted list)
+    bool needsResort[3];     // Flags to track which axes need resorting
 };
 
 } // namespace geometry

@@ -61,7 +61,9 @@ AABBProxy* BroadPhase::createProxy(const AABB& aabb, bool is_static) {
     for (int i = 0; i < 3; i++) {
         proxy->min[i] = aabb.min[i];
         proxy->max[i] = aabb.max[i];
-        proxy->sortKeys[i] = 0;
+        proxy->prevMin[i] = aabb.min[i];  // Initialize previous position
+        proxy->sortKeys[i] = static_cast<int32_t>(mDynamicProxies[i].size());  // Will be inserted at end
+        proxy->needsResort[i] = false;
     }
     
     // Compute Morton code for spatial coherence
@@ -103,19 +105,26 @@ void BroadPhase::updateProxy(AABBProxy* proxy, const AABB& aabb) {
     proxy->center = (aabb.min + aabb.max) * 0.5f;
     proxy->mortonCode = computeMortonCode(proxy->center);
     
-    // Update SAP data
+    // Update SAP data and check which axes need resorting
     for (int i = 0; i < 3; i++) {
+        float oldMin = proxy->min[i];
         proxy->min[i] = aabb.min[i];
         proxy->max[i] = aabb.max[i];
+        
+        // Only resort if position changed significantly
+        float movement = std::abs(oldMin - proxy->min[i]);
+        proxy->needsResort[i] = movement > 1e-4f;  // Small epsilon to avoid floating point issues
     }
     
-    // Update grid if static, resort if dynamic
+    // Update grid if static, incrementally resort if dynamic
     if (proxy->isStatic) {
         removeFromGrid(proxy);
         insertIntoGrid(proxy);
     } else {
         for (int axis = 0; axis < 3; axis++) {
-            sortAxisList(axis);
+            if (proxy->needsResort[axis]) {
+                sortAxisList(axis);
+            }
         }
     }
 }
@@ -296,7 +305,38 @@ uint32_t BroadPhase::computeMortonCode(const Vector3& position) const {
 }
 
 void BroadPhase::sortAxisList(int axis) {
-    insertionSort(mDynamicProxies[axis], axis);
+    auto& list = mDynamicProxies[axis];
+    if (list.empty()) return;
+
+    // First pass: update sort keys and find the range that needs sorting
+    int32_t minIdx = static_cast<int32_t>(list.size());
+    int32_t maxIdx = -1;
+    
+    for (size_t i = 0; i < list.size(); ++i) {
+        if (list[i]->needsResort[axis]) {
+            minIdx = std::min(minIdx, static_cast<int32_t>(i));
+            maxIdx = static_cast<int32_t>(i);
+            list[i]->needsResort[axis] = false;  // Reset flag
+        }
+    }
+    
+    // If nothing needs sorting, we're done
+    if (minIdx > maxIdx) return;
+    
+    // Expand range slightly to ensure we catch all necessary moves
+    minIdx = std::max(0, minIdx - 1);
+    maxIdx = std::min(static_cast<int32_t>(list.size()) - 1, maxIdx + 1);
+    
+    // Sort the affected range
+    std::sort(list.begin() + minIdx, list.begin() + maxIdx + 1,
+              [axis](const AABBProxy* a, const AABBProxy* b) {
+                  return a->min[axis] < b->min[axis];
+              });
+    
+    // Update sort keys in the affected range
+    for (int32_t i = minIdx; i <= maxIdx; ++i) {
+        list[i]->sortKeys[axis] = i;
+    }
 }
 
 bool BroadPhase::testOverlap(const AABBProxy* a, const AABBProxy* b) const {
