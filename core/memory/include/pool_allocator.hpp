@@ -1,0 +1,290 @@
+#pragma once
+
+#include "allocators.hpp"
+#include <cstdint>
+#include <cassert>
+#include <vector>
+#include <thread>
+#include <mutex>
+#include <algorithm>
+#include <list>
+
+namespace pynovage {
+namespace memory {
+
+// Forward declarations
+class PoolBlock;
+class PoolChunk;
+
+// Pool allocator that maintains thread-local pools for fixed-size allocations
+class ThreadLocalPoolAllocator : public IAllocator {
+public:
+    // Size class for different allocation sizes
+    struct SizeClass {
+        std::size_t block_size;     // Size of each block in this class
+        std::size_t blocks_per_chunk; // Number of blocks per chunk
+        std::size_t alignment;      // Alignment requirement
+    };
+
+    explicit ThreadLocalPoolAllocator(const std::vector<SizeClass>& size_classes)
+        : size_classes_(size_classes)
+        , thread_local_pools_()
+        , allocation_count_(0)
+        , total_memory_(0)
+        , used_memory_(0) {
+        assert(!size_classes.empty() && "Must provide at least one size class");
+        
+        // Initialize the main thread's pool
+        getOrCreateThreadPool();
+    }
+
+    ~ThreadLocalPoolAllocator() override {
+        // Clean up all thread pools
+        std::lock_guard<std::mutex> lock(pools_mutex_);
+        thread_local_pools_.clear();
+    }
+
+    // Disable copying
+    ThreadLocalPoolAllocator(const ThreadLocalPoolAllocator&) = delete;
+    ThreadLocalPoolAllocator& operator=(const ThreadLocalPoolAllocator&) = delete;
+
+    void* allocate(std::size_t size, std::size_t alignment = alignof(std::max_align_t)) override {
+        // Find the appropriate size class
+        const auto size_class_info = findSizeClass(size, alignment);
+        if (!size_class_info.first) {
+            return nullptr; // Size too large or alignment not supported
+        }
+
+        // Get the thread's pool and allocate from it
+        ThreadPool& pool = getOrCreateThreadPool();
+        void* ptr = pool.allocate(*size_class_info.first, size_class_info.second, *this);
+        
+        if (ptr) {
+            allocation_count_.fetch_add(1, std::memory_order_relaxed);
+            used_memory_.fetch_add(size_class_info.first->block_size, std::memory_order_relaxed);
+        }
+        
+        return ptr;
+    }
+
+    void deallocate(void* ptr) override {
+        if (!ptr) return;
+
+        // Get the thread's pool and deallocate from it
+        ThreadPool& pool = getOrCreateThreadPool();
+        const auto size_class_info = pool.findSizeClassForPointer(ptr);
+        if (!size_class_info.first) {
+            assert(false && "Pointer not allocated by this allocator");
+            return;
+        }
+
+        pool.deallocate(ptr, *size_class_info.first, size_class_info.second, *this);
+        
+        used_memory_.fetch_sub(size_class_info.first->block_size, std::memory_order_relaxed);
+    }
+
+    void reset() override {
+        std::lock_guard<std::mutex> lock(pools_mutex_);
+        thread_local_pools_.clear();
+        
+        allocation_count_.store(0, std::memory_order_relaxed);
+        total_memory_.store(0, std::memory_order_relaxed);
+        used_memory_.store(0, std::memory_order_relaxed);
+    }
+
+    std::size_t getUsedMemory() const override { 
+        return used_memory_.load(std::memory_order_relaxed); 
+    }
+    
+    std::size_t getTotalMemory() const override { 
+        return total_memory_.load(std::memory_order_relaxed); 
+    }
+    
+    std::size_t getAllocationCount() const override { 
+        return allocation_count_.load(std::memory_order_relaxed); 
+    }
+
+private:
+    // Represents a block of memory within a chunk
+    struct FreeBlock {
+        FreeBlock* next;  // Next free block in the list
+    };
+
+    // Represents a chunk of memory containing multiple blocks
+    struct Chunk {
+        std::vector<std::uint8_t> memory;  // Raw memory for blocks (headers + payloads)
+        FreeBlock* free_list;  // List of free blocks
+        std::size_t used_blocks;  // Number of blocks in use
+        std::size_t stride; // bytes per block including header, aligned
+        std::size_t total_bytes; // total bytes in memory buffer
+        
+        explicit Chunk(const SizeClass& sc)
+            : memory()
+            , free_list(nullptr)
+            , used_blocks(0)
+            , stride(alignTo(sc.block_size + sizeof(FreeBlock), sc.alignment))
+            , total_bytes(stride * sc.blocks_per_chunk) {
+            memory.resize(total_bytes);
+            initializeFreeList(sc);
+        }
+
+        void initializeFreeList(const SizeClass& sc) {
+            for (std::size_t i = 0; i < sc.blocks_per_chunk; ++i) {
+                std::uint8_t* block_ptr = memory.data() + (i * stride);
+                auto* block = reinterpret_cast<FreeBlock*>(block_ptr);
+                block->next = (i + 1 < sc.blocks_per_chunk)
+                    ? reinterpret_cast<FreeBlock*>(block_ptr + stride)
+                    : nullptr;
+            }
+            free_list = reinterpret_cast<FreeBlock*>(memory.data());
+        }
+
+        bool containsPointer(void* ptr) const {
+            const std::uint8_t* begin = memory.data();
+            const std::uint8_t* end = begin + total_bytes;
+            return reinterpret_cast<const std::uint8_t*>(ptr) >= begin && 
+                   reinterpret_cast<const std::uint8_t*>(ptr) < end;
+        }
+    };
+
+    // Per-thread pool of chunks for each size class
+    struct ThreadPool {
+        struct ChunkList {
+            std::vector<Chunk> chunks;      // Chunks for this size class
+            std::size_t active_chunk = 0;   // Index of last used chunk
+        };
+
+        std::vector<ChunkList> chunks_by_class;  // Per-size-class chunk lists
+        std::thread::id thread_id;  // Owner thread ID
+        ThreadLocalPoolAllocator* allocator;  // Parent allocator
+
+        explicit ThreadPool(std::size_t num_size_classes, ThreadLocalPoolAllocator* parent)
+            : chunks_by_class(num_size_classes)
+            , thread_id(std::this_thread::get_id())
+            , allocator(parent) {}
+
+        void* allocate(const SizeClass& size_class, std::size_t class_index, ThreadLocalPoolAllocator& allocator) {
+            assert(class_index < chunks_by_class.size());
+            
+            auto& list = chunks_by_class[class_index];
+            auto& chunks = list.chunks;
+
+            // Fast path: try active chunk
+            if (!chunks.empty()) {
+                if (list.active_chunk >= chunks.size()) list.active_chunk = 0;
+                Chunk& c = chunks[list.active_chunk];
+                if (c.free_list) {
+                    FreeBlock* block = c.free_list;
+                    c.free_list = block->next;
+                    ++c.used_blocks;
+                    return reinterpret_cast<void*>(reinterpret_cast<std::uint8_t*>(block) + sizeof(FreeBlock));
+                }
+            }
+
+            // Slow path: find any chunk with space
+            for (std::size_t i = 0; i < chunks.size(); ++i) {
+                if (chunks[i].free_list) {
+                    list.active_chunk = i;
+                    FreeBlock* block = chunks[i].free_list;
+                    chunks[i].free_list = block->next;
+                    ++chunks[i].used_blocks;
+                    return reinterpret_cast<void*>(reinterpret_cast<std::uint8_t*>(block) + sizeof(FreeBlock));
+                }
+            }
+
+            // Need a new chunk
+            chunks.emplace_back(size_class);
+            list.active_chunk = chunks.size() - 1;
+            auto& new_chunk = chunks.back();
+            
+            // Update total memory
+            allocator.total_memory_.fetch_add(new_chunk.total_bytes, std::memory_order_relaxed);
+
+            // Allocate from new chunk
+            FreeBlock* block = new_chunk.free_list;
+            new_chunk.free_list = block->next;
+            ++new_chunk.used_blocks;
+            return reinterpret_cast<void*>(reinterpret_cast<std::uint8_t*>(block) + sizeof(FreeBlock));
+        }
+
+        void deallocate(void* ptr, const SizeClass& size_class, std::size_t class_index, ThreadLocalPoolAllocator& allocator) {
+            assert(class_index < chunks_by_class.size());
+            
+            auto& list = chunks_by_class[class_index];
+            auto& chunks = list.chunks;
+
+            // Find the chunk containing this pointer
+            for (std::size_t i = 0; i < chunks.size(); ++i) {
+                auto& chunk = chunks[i];
+                if (chunk.containsPointer(ptr)) {
+                    // Convert user pointer back to block header
+                    auto* block = reinterpret_cast<FreeBlock*>(
+                        reinterpret_cast<std::uint8_t*>(ptr) - sizeof(FreeBlock)
+                    );
+
+                    // Add to free list (LIFO)
+                    block->next = chunk.free_list;
+                    chunk.free_list = block;
+                    --chunk.used_blocks;
+
+                    // Prefer this chunk for next allocation
+                    list.active_chunk = i;
+                    return;
+                }
+            }
+
+            assert(false && "Pointer not found in any chunk");
+        }
+
+        std::pair<const SizeClass*, std::size_t> findSizeClassForPointer(void* ptr) {
+            for (std::size_t i = 0; i < chunks_by_class.size(); ++i) {
+                for (const auto& chunk : chunks_by_class[i].chunks) {
+                    if (chunk.containsPointer(ptr)) {
+                        return {&allocator->size_classes_[i], i};
+                    }
+                }
+            }
+            return {nullptr, 0};
+        }
+    };
+    // Find the appropriate size class for an allocation
+    std::pair<const SizeClass*, std::size_t> findSizeClass(std::size_t size, std::size_t alignment) const {
+        for (std::size_t i = 0; i < size_classes_.size(); ++i) {
+            const auto& sc = size_classes_[i];
+            if (sc.block_size >= size && sc.alignment >= alignment) {
+                return {&sc, i};
+            }
+        }
+        return {nullptr, 0};
+    }
+
+    // Get or create thread pool for current thread
+    ThreadPool& getOrCreateThreadPool() {
+        auto thread_id = std::this_thread::get_id();
+
+        std::lock_guard<std::mutex> lock(pools_mutex_);
+        
+        // Try to find existing pool
+        auto it = std::find_if(thread_local_pools_.begin(), thread_local_pools_.end(),
+            [thread_id](const ThreadPool& pool) { return pool.thread_id == thread_id; });
+            
+        if (it != thread_local_pools_.end()) {
+            return *it;
+        }
+
+        // Create new pool
+        thread_local_pools_.emplace_back(size_classes_.size(), this);
+        return thread_local_pools_.back();
+    }
+
+    std::vector<SizeClass> size_classes_;  // Available size classes
+    std::list<ThreadPool> thread_local_pools_;  // Pools for each thread (stable addresses)
+    mutable std::mutex pools_mutex_;  // Protects thread_local_pools_
+    mutable std::mutex stats_mutex_;  // Unused after atomics; kept for future detailed stats
+    std::atomic<std::size_t> allocation_count_;  // Total number of active allocations
+    std::atomic<std::size_t> total_memory_;  // Total memory allocated
+    std::atomic<std::size_t> used_memory_;   // Currently used memory
+};
+
+} // namespace memory
+} // namespace pynovage
