@@ -170,3 +170,31 @@ static void BM_PoolAllocator_GameScenario(benchmark::State& state) {
     }
 }
 BENCHMARK(BM_PoolAllocator_GameScenario);
+
+// Test batch allocation performance
+static void BM_PoolAllocator_BatchAllocation(benchmark::State& state) {
+    std::vector<ThreadLocalPoolAllocator::SizeClass> size_classes = {
+        {16, 1024, 16},    // Small objects
+        {64, 512, 16},     // Medium objects
+        {256, 128, 16},    // Large objects
+    };
+    
+    ThreadLocalPoolAllocator allocator(size_classes);
+    
+    for (auto _ : state) {
+        // Batch allocate 100 objects of each size
+        auto small = allocator.allocateBatch(100, 16);
+        auto medium = allocator.allocateBatch(100, 64);
+        auto large = allocator.allocateBatch(100, 256);
+        
+        benchmark::DoNotOptimize(small);
+        benchmark::DoNotOptimize(medium);
+        benchmark::DoNotOptimize(large);
+        
+        // Batch deallocate
+        allocator.deallocateBatch(small);
+        allocator.deallocateBatch(medium);
+        allocator.deallocateBatch(large);
+    }
+}
+BENCHMARK(BM_PoolAllocator_BatchAllocation);

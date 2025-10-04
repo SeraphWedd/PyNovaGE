@@ -88,6 +88,46 @@ public:
         used_memory_.fetch_sub(size_class_info.first->block_size, std::memory_order_relaxed);
     }
 
+    // Optional batch allocation to reduce per-call overhead when many objects of the same size are needed
+    std::vector<void*> allocateBatch(std::size_t count, std::size_t size, std::size_t alignment = alignof(std::max_align_t)) {
+        std::vector<void*> out;
+        out.reserve(count);
+
+        const auto size_class_info = findSizeClass(size, alignment);
+        if (!size_class_info.first || count == 0) return out;
+
+        ThreadPool& pool = getOrCreateThreadPool();
+        for (std::size_t i = 0; i < count; ++i) {
+            void* ptr = pool.allocate(*size_class_info.first, size_class_info.second, *this);
+            if (!ptr) break;
+            out.push_back(ptr);
+        }
+
+        // Update stats once based on number of successfully allocated blocks
+        if (!out.empty()) {
+            allocation_count_.fetch_add(out.size(), std::memory_order_relaxed);
+            used_memory_.fetch_add(out.size() * size_class_info.first->block_size, std::memory_order_relaxed);
+        }
+        return out;
+    }
+
+    // Optional batch deallocation counterpart (same-thread usage recommended)
+    void deallocateBatch(const std::vector<void*>& ptrs) {
+        if (ptrs.empty()) return;
+        ThreadPool& pool = getOrCreateThreadPool();
+        std::size_t released_bytes = 0;
+        for (void* p : ptrs) {
+            if (!p) continue;
+            const auto size_class_info = pool.findSizeClassForPointer(p);
+            if (!size_class_info.first) continue;
+            pool.deallocate(p, *size_class_info.first, size_class_info.second, *this);
+            released_bytes += size_class_info.first->block_size;
+        }
+        if (released_bytes) {
+            used_memory_.fetch_sub(released_bytes, std::memory_order_relaxed);
+        }
+    }
+
     void reset() override {
         // Increment generation to invalidate all thread-local caches
         ++generation_;
