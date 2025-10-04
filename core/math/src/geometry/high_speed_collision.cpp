@@ -94,7 +94,13 @@ PenetrationResult TestAABBPenetration(
     }
 
 
-    // Compute slab intersections against the original box to get entry/exit
+    // Create an expanded AABB to account for projectile radius
+    AABB expanded_box{
+        box.min - Vector3(params.projectile_radius, params.projectile_radius, params.projectile_radius),
+        box.max + Vector3(params.projectile_radius, params.projectile_radius, params.projectile_radius)
+    };
+
+    // Compute slab intersections against the expanded box to get entry/exit
     float t_near = 0.0f;
     float t_far = std::numeric_limits<float>::infinity();
     float eps = constants::epsilon;
@@ -112,9 +118,9 @@ PenetrationResult TestAABBPenetration(
         return (t_near <= t_far && t_far >= 0.0f);
     };
 
-    if (!process_axis(params.ray_origin.x, dir.x, box.min.x, box.max.x)) return result;
-    if (!process_axis(params.ray_origin.y, dir.y, box.min.y, box.max.y)) return result;
-    if (!process_axis(params.ray_origin.z, dir.z, box.min.z, box.max.z)) return result;
+    if (!process_axis(params.ray_origin.x, dir.x, expanded_box.min.x, expanded_box.max.x)) return result;
+    if (!process_axis(params.ray_origin.y, dir.y, expanded_box.min.y, expanded_box.max.y)) return result;
+    if (!process_axis(params.ray_origin.z, dir.z, expanded_box.min.z, expanded_box.max.z)) return result;
 
     // Entry/exit points on original box
     Vector3 entry_point = params.ray_origin + dir * t_near;
@@ -124,20 +130,20 @@ PenetrationResult TestAABBPenetration(
     Vector3 normal(0.0f, 0.0f, 0.0f);
     // Recompute t1 per axis for comparison
     if (std::abs(dir.x) > eps) {
-        float tx1 = (box.min.x - params.ray_origin.x) / dir.x;
-        float tx2 = (box.max.x - params.ray_origin.x) / dir.x;
+        float tx1 = (expanded_box.min.x - params.ray_origin.x) / dir.x;
+        float tx2 = (expanded_box.max.x - params.ray_origin.x) / dir.x;
         if (tx1 > tx2) std::swap(tx1, tx2);
         if (std::abs(t_near - tx1) < eps) normal = Vector3(dir.x > 0.0f ? -1.0f : 1.0f, 0.0f, 0.0f);
     }
     if (normal.isZero() && std::abs(dir.y) > eps) {
-        float ty1 = (box.min.y - params.ray_origin.y) / dir.y;
-        float ty2 = (box.max.y - params.ray_origin.y) / dir.y;
+        float ty1 = (expanded_box.min.y - params.ray_origin.y) / dir.y;
+        float ty2 = (expanded_box.max.y - params.ray_origin.y) / dir.y;
         if (ty1 > ty2) std::swap(ty1, ty2);
         if (std::abs(t_near - ty1) < eps) normal = Vector3(0.0f, dir.y > 0.0f ? -1.0f : 1.0f, 0.0f);
     }
     if (normal.isZero() && std::abs(dir.z) > eps) {
-        float tz1 = (box.min.z - params.ray_origin.z) / dir.z;
-        float tz2 = (box.max.z - params.ray_origin.z) / dir.z;
+        float tz1 = (expanded_box.min.z - params.ray_origin.z) / dir.z;
+        float tz2 = (expanded_box.max.z - params.ray_origin.z) / dir.z;
         if (tz1 > tz2) std::swap(tz1, tz2);
         if (std::abs(t_near - tz1) < eps) normal = Vector3(0.0f, 0.0f, dir.z > 0.0f ? -1.0f : 1.0f);
     }
