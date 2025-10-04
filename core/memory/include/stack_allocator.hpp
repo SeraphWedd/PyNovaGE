@@ -1,6 +1,7 @@
 #pragma once
 
 #include "allocators.hpp"
+#include "memory_utils.hpp"
 #include <cstdint>
 #include <cassert>
 #include <atomic>
@@ -68,7 +69,27 @@ public:
     LockFreeStackAllocator(const LockFreeStackAllocator&) = delete;
     LockFreeStackAllocator& operator=(const LockFreeStackAllocator&) = delete;
 
-    void* allocate(std::size_t size, std::size_t alignment = alignof(std::max_align_t)) override {
+    // Create a marker for the current stack position
+    Marker getMarker() const {
+        return Marker(top_.load(std::memory_order_acquire));
+    }
+
+    // Unwind the stack to a previous marker
+    void unwind(const Marker& marker) {
+        std::size_t new_top = marker.position_;
+        std::size_t old_top = top_.load(std::memory_order_acquire);
+        
+        assert(new_top <= old_top && "Invalid marker");
+        
+        // Update top pointer
+        top_.store(new_top, std::memory_order_release);
+        
+        // Update stats
+        used_memory_.fetch_sub(old_top - new_top, std::memory_order_relaxed);
+    }
+
+protected:
+    void* allocateImpl(std::size_t size, std::size_t alignment) override {
         assert(size > 0 && "Cannot allocate zero bytes");
         assert((alignment & (alignment - 1)) == 0 && "Alignment must be a power of 2");
         
@@ -117,29 +138,11 @@ public:
         }
     }
 
-    void deallocate(void* ptr) override {
+    void deallocateImpl(void*) override {
         // Stack allocator doesn't support individual deallocation
         // Use reset() or unwind() instead
     }
 
-    // Create a marker for the current stack position
-    Marker getMarker() const {
-        return Marker(top_.load(std::memory_order_acquire));
-    }
-
-    // Unwind the stack to a previous marker
-    void unwind(const Marker& marker) {
-        std::size_t new_top = marker.position_;
-        std::size_t old_top = top_.load(std::memory_order_acquire);
-        
-        assert(new_top <= old_top && "Invalid marker");
-        
-        // Update top pointer
-        top_.store(new_top, std::memory_order_release);
-        
-        // Update stats
-        used_memory_.fetch_sub(old_top - new_top, std::memory_order_relaxed);
-    }
 
     void reset() override {
         // Reset top pointer to start
@@ -149,7 +152,7 @@ public:
         allocation_count_.store(0, std::memory_order_relaxed);
         used_memory_.store(0, std::memory_order_relaxed);
     }
-
+public:
     std::size_t getUsedMemory() const override { 
         return used_memory_.load(std::memory_order_relaxed); 
     }

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "allocators.hpp"
+#include "memory_utils.hpp"
 #include <cstdint>
 #include <cassert>
 #include <vector>
@@ -52,42 +53,6 @@ public:
     ThreadLocalPoolAllocator(const ThreadLocalPoolAllocator&) = delete;
     ThreadLocalPoolAllocator& operator=(const ThreadLocalPoolAllocator&) = delete;
 
-    void* allocate(std::size_t size, std::size_t alignment = alignof(std::max_align_t)) override {
-        // Find the appropriate size class
-        const auto size_class_info = findSizeClass(size, alignment);
-        if (!size_class_info.first) {
-            return nullptr; // Size too large or alignment not supported
-        }
-
-        // Get the thread's pool and allocate from it
-        ThreadPool& pool = getOrCreateThreadPool();
-        void* ptr = pool.allocate(*size_class_info.first, size_class_info.second, *this);
-        
-        if (ptr) {
-            allocation_count_.fetch_add(1, std::memory_order_relaxed);
-            used_memory_.fetch_add(size_class_info.first->block_size, std::memory_order_relaxed);
-        }
-        
-        return ptr;
-    }
-
-    void deallocate(void* ptr) override {
-        if (!ptr) return;
-
-        // Get the thread's pool and deallocate from it
-        ThreadPool& pool = getOrCreateThreadPool();
-        const auto size_class_info = pool.findSizeClassForPointer(ptr);
-        if (!size_class_info.first) {
-            // Handle pointers from other allocators silently
-            // This allows heterogeneous allocator usage in benchmarks
-            return;
-        }
-
-        pool.deallocate(ptr, *size_class_info.first, size_class_info.second, *this);
-        
-        used_memory_.fetch_sub(size_class_info.first->block_size, std::memory_order_relaxed);
-    }
-
     // Optional batch allocation to reduce per-call overhead when many objects of the same size are needed
     std::vector<void*> allocateBatch(std::size_t count, std::size_t size, std::size_t alignment = alignof(std::max_align_t)) {
         std::vector<void*> out;
@@ -128,6 +93,44 @@ public:
         }
     }
 
+protected:
+    void* allocateImpl(std::size_t size, std::size_t alignment) override {
+        // Find the appropriate size class
+        const auto size_class_info = findSizeClass(size, alignment);
+        if (!size_class_info.first) {
+            return nullptr; // Size too large or alignment not supported
+        }
+
+        // Get the thread's pool and allocate from it
+        ThreadPool& pool = getOrCreateThreadPool();
+        void* ptr = pool.allocate(*size_class_info.first, size_class_info.second, *this);
+        
+        if (ptr) {
+            allocation_count_.fetch_add(1, std::memory_order_relaxed);
+            used_memory_.fetch_add(size_class_info.first->block_size, std::memory_order_relaxed);
+        }
+        
+        return ptr;
+    }
+
+    void deallocateImpl(void* ptr) override {
+        if (!ptr) return;
+
+        // Get the thread's pool and deallocate from it
+        ThreadPool& pool = getOrCreateThreadPool();
+        const auto size_class_info = pool.findSizeClassForPointer(ptr);
+        if (!size_class_info.first) {
+            // Handle pointers from other allocators silently
+            // This allows heterogeneous allocator usage in benchmarks
+            return;
+        }
+
+        pool.deallocate(ptr, *size_class_info.first, size_class_info.second, *this);
+        
+        used_memory_.fetch_sub(size_class_info.first->block_size, std::memory_order_relaxed);
+    }
+
+
     void reset() override {
         // Increment generation to invalidate all thread-local caches
         ++generation_;
@@ -140,6 +143,7 @@ public:
         used_memory_.store(0, std::memory_order_relaxed);
     }
 
+public:
     std::size_t getUsedMemory() const override { 
         return used_memory_.load(std::memory_order_relaxed); 
     }

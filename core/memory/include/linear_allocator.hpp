@@ -1,6 +1,7 @@
 #pragma once
 
 #include "allocators.hpp"
+#include "memory_utils.hpp"
 #include <cstdint>
 #include <cassert>
 
@@ -57,6 +58,12 @@ public:
         other.allocation_count_ = 0;
     }
 
+    void reset() {
+        current_ = start_;
+        used_ = 0;
+        allocation_count_ = 0;
+    }
+
     LinearAllocator& operator=(LinearAllocator&& other) noexcept {
         if (this != &other) {
             std::free(start_);
@@ -74,7 +81,8 @@ public:
         return *this;
     }
 
-    void* allocate(std::size_t size, std::size_t alignment = DefaultAlignment) override {
+protected:
+    void* allocateImpl(std::size_t size, std::size_t alignment) override {
         assert(size > 0 && "Cannot allocate zero bytes");
         assert((alignment & (alignment - 1)) == 0 && "Alignment must be a power of 2");
         
@@ -96,16 +104,11 @@ public:
         return aligned_addr;
     }
 
-    void deallocate(void*) override {
+    void deallocateImpl(void*) override {
         // Linear allocator doesn't support individual deallocation
     }
 
-    void reset() override {
-        current_ = start_;
-        used_ = 0;
-        allocation_count_ = 0;
-    }
-
+public:
     std::size_t getUsedMemory() const override { return used_; }
     std::size_t getTotalMemory() const override { return capacity_; }
     std::size_t getAllocationCount() const override { return allocation_count_; }

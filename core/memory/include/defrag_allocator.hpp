@@ -1,6 +1,7 @@
 #pragma once
 
 #include "allocators.hpp"
+#include "memory_utils.hpp"
 #include <cassert>
 #include <cstddef>
 #include <cstdint>
@@ -189,7 +190,8 @@ public:
     DefragmentingAllocator(const DefragmentingAllocator&) = delete;
     DefragmentingAllocator& operator=(const DefragmentingAllocator&) = delete;
 
-    void* allocate(std::size_t size, std::size_t alignment = alignof(std::max_align_t)) override {
+protected:
+    void* allocateImpl(std::size_t size, std::size_t alignment = alignof(std::max_align_t)) override {
         if (size == 0) return nullptr;
         
         // Try size class allocation first if alignment allows
@@ -325,7 +327,7 @@ public:
         throw std::bad_alloc();
     }
 
-    void deallocate(void* ptr) override {
+    void deallocateImpl(void* ptr) override {
         if (!ptr) return;
         
         // Check if this is a size class allocation
@@ -380,6 +382,7 @@ public:
         mergeFreeBlocks(header);
     }
 
+public:
     void reset() override {
         std::lock_guard<std::mutex> lock(mutex_);
         
@@ -426,6 +429,7 @@ public:
     std::size_t getAllocationCount() const override {
         return allocation_count_;
     }
+
 
 private:
     // Allocate a raw payload region of given size and alignment from the general pool.
