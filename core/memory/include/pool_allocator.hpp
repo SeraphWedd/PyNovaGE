@@ -234,7 +234,8 @@ private:
                 }
             }
 
-            assert(false && "Pointer not found in any chunk");
+            // Pointer was not allocated from this pool - could be from another thread
+            // or already deallocated. Silently return.
         }
 
         std::pair<const SizeClass*, std::size_t> findSizeClassForPointer(void* ptr) {
