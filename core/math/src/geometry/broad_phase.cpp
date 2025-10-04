@@ -78,9 +78,10 @@ AABBProxy* BroadPhase::createProxy(const AABB& aabb, bool is_static) {
     if (is_static) {
         insertIntoGrid(proxy);
     } else {
+        // Add to dynamic lists and mark for sorting later
         for (int axis = 0; axis < 3; axis++) {
             mDynamicProxies[axis].push_back(proxy);
-            sortAxisList(axis);
+            mDirtyAxes[axis] = true;  // Mark for sorting in finalize
         }
     }
     
