@@ -71,8 +71,8 @@ Track A: Performance Foundation    Track B: Engine Core           Track C: High-
 #### 1.2 Core Math Library [C++] [ ]
 
 ##### 1.2.1 Vector Mathematics [✓]
-- 2D vector operations (for sprite-based games)
-- 3D vector operations (for 3D rendering)
+- 2D vector operations (for sprite-based games) — Benchmarks: add ~3.2ns, dot ~2.9ns, normalize ~11ns
+- 3D vector operations (for 3D rendering) — Benchmarks: add ~5.1ns, dot ~2.9ns, cross ~4.0ns, normalize ~16.2ns
 - 4D vector operations (for homogeneous coordinates)
 - SIMD-optimized implementations
 - Vector field calculations (for particle systems)
@@ -99,6 +99,9 @@ Track A: Performance Foundation    Track B: Engine Core           Track C: High-
 
 ###### 1.2.4.1 Static Collision Detection [✓]
 - Basic intersection tests (ray/box/sphere/polygon)
+  - Benchmarks (Release):
+    - Ray-Plane ~22.9ns, Ray-Sphere ~44.5ns, Ray-AABB ~24.6ns
+    - Sphere-Sphere ~28.9ns, AABB-AABB ~9.8ns
 - Distance calculations
 - Bounding volume computations
 - Convex hull calculations
@@ -110,6 +113,10 @@ Track A: Performance Foundation    Track B: Engine Core           Track C: High-
 - Motion interpolation
 - Time of impact calculations
 - Trajectory prediction
+  - Benchmarks (Release):
+    - Moving Sphere-Sphere (Direct) ~72.5ns, (No Collision) ~25.1ns
+    - Moving Sphere-AABB (Direct) ~96.3ns, (No Collision) ~44.5ns
+    - Varying speeds (1x/10x/100x): ~69–72ns
 
 ###### 1.2.4.3 High-Speed Collision Systems [✓]
 - Bullet penetration mathematics
