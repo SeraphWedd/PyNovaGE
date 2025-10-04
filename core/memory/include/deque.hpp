@@ -127,11 +127,59 @@ public:
     explicit Deque(Allocator alloc) noexcept : allocator_(alloc) {}
 
     // Destructor
-    ~Deque() = default;
+    ~Deque() { clear(); }
 
-    // Disable copying for now
-    Deque(const Deque&) = delete;
-    Deque& operator=(const Deque&) = delete;
+    // Copy/move operations
+    Deque(const Deque& other)
+        : allocator_(other.allocator_) {
+        // Deep copy elements in order
+        for (const auto& v : other) {
+            push_back(v);
+        }
+    }
+
+    Deque& operator=(const Deque& other) {
+        if (this == &other) return *this;
+        clear();
+        allocator_ = other.allocator_;
+        for (const auto& v : other) {
+            push_back(v);
+        }
+        return *this;
+    }
+
+    Deque(Deque&& other) noexcept
+        : first_block_(other.first_block_),
+          last_block_(other.last_block_),
+          front_index_(other.front_index_),
+          back_index_(other.back_index_),
+          size_(other.size_),
+          allocator_(other.allocator_) {
+        other.first_block_ = nullptr;
+        other.last_block_ = nullptr;
+        other.front_index_ = 0;
+        other.back_index_ = 0;
+        other.size_ = 0;
+        other.allocator_ = nullptr;
+    }
+
+    Deque& operator=(Deque&& other) noexcept {
+        if (this == &other) return *this;
+        clear();
+        first_block_ = other.first_block_;
+        last_block_ = other.last_block_;
+        front_index_ = other.front_index_;
+        back_index_ = other.back_index_;
+        size_ = other.size_;
+        allocator_ = other.allocator_;
+        other.first_block_ = nullptr;
+        other.last_block_ = nullptr;
+        other.front_index_ = 0;
+        other.back_index_ = 0;
+        other.size_ = 0;
+        other.allocator_ = nullptr;
+        return *this;
+    }
 
 // Basic capacity operations
     bool empty() const noexcept { return size_ == 0; }
@@ -273,6 +321,23 @@ public:
             last_block_->data()[back_index_].~T();
         }
         size_--;
+    }
+
+    // Resize operations
+    void resize(size_type count) {
+        if (count < size_) {
+            while (size_ > count) pop_back();
+        } else if (count > size_) {
+            while (size_ < count) emplace_back();
+        }
+    }
+
+    void resize(size_type count, const T& value) {
+        if (count < size_) {
+            while (size_ > count) pop_back();
+        } else if (count > size_) {
+            while (size_ < count) push_back(value);
+        }
     }
 
     // Iterators

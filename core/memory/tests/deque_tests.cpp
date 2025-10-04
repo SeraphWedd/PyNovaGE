@@ -238,6 +238,69 @@ TEST(DequeTests, Clear) {
     EXPECT_EQ(deque.front(), 42);
 }
 
+TEST(DequeTests, CopyConstructorAndAssignment) {
+    pynovage::memory::tests::MockAllocator allocator;
+    pynovage::memory::Deque<int> a(&allocator);
+    for (int i = 0; i < 10; ++i) a.push_back(i);
+
+    // Copy construct
+    pynovage::memory::Deque<int> b = a;
+    EXPECT_EQ(b.size(), a.size());
+    for (size_t i = 0; i < a.size(); ++i) {
+        EXPECT_EQ(b[i], a[i]);
+    }
+
+    // Copy assign
+    pynovage::memory::Deque<int> c(&allocator);
+    c = a;
+    EXPECT_EQ(c.size(), a.size());
+    for (size_t i = 0; i < a.size(); ++i) {
+        EXPECT_EQ(c[i], a[i]);
+    }
+}
+
+TEST(DequeTests, MoveConstructorAndAssignment) {
+    pynovage::memory::tests::MockAllocator allocator;
+    pynovage::memory::Deque<int> a(&allocator);
+    for (int i = 0; i < 10; ++i) a.push_back(i);
+
+    // Move construct
+    pynovage::memory::Deque<int> b(std::move(a));
+    EXPECT_EQ(b.size(), 10);
+    for (int i = 0; i < 10; ++i) {
+        EXPECT_EQ(b[i], i);
+    }
+
+    // Now move assign to c
+    pynovage::memory::Deque<int> c(&allocator);
+    c = std::move(b);
+    EXPECT_EQ(c.size(), 10);
+    for (int i = 0; i < 10; ++i) {
+        EXPECT_EQ(c[i], i);
+    }
+}
+
+TEST(DequeTests, Resize) {
+    pynovage::memory::tests::MockAllocator allocator;
+    pynovage::memory::Deque<int> d(&allocator);
+
+    // Grow with default values
+    d.resize(5);
+    EXPECT_EQ(d.size(), 5);
+
+    // Set known values and grow with value
+    for (int i = 0; i < 5; ++i) d[i] = i;
+    d.resize(8, 42);
+    EXPECT_EQ(d.size(), 8);
+    for (int i = 0; i < 5; ++i) EXPECT_EQ(d[i], i);
+    for (int i = 5; i < 8; ++i) EXPECT_EQ(d[i], 42);
+
+    // Shrink
+    d.resize(3);
+    EXPECT_EQ(d.size(), 3);
+    for (int i = 0; i < 3; ++i) EXPECT_EQ(d[i], i);
+}
+
 } // namespace tests
 } // namespace memory
 } // namespace pynovage
