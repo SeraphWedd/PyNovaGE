@@ -68,7 +68,7 @@ Track A: Performance Foundation    Track B: Engine Core           Track C: High-
 - Hot/cold memory analysis — Statistics available via getTotalAllocations/getTotalMemoryUsage
 - Memory lifecycle tracking — Complete with thread-safe recording
 
-#### 1.2 Core Math Library [C++] [ ]
+#### 1.2 Core Math Library [C++] [✓]
 
 ##### 1.2.1 Vector Mathematics [✓]
 - 2D vector operations (for sprite-based games) — Benchmarks: add ~3.2ns, dot ~2.9ns, normalize ~11ns
@@ -95,7 +95,7 @@ Track A: Performance Foundation    Track B: Engine Core           Track C: High-
 
 // NEXT TARGET: Core collision system foundation
 // Required for physics and game object interactions
-##### 1.2.4 Geometric Calculations [ ]
+##### 1.2.4 Geometric Calculations [✓]
 
 ###### 1.2.4.1 Static Collision Detection [✓]
 - Basic intersection tests (ray/box/sphere/polygon)
@@ -207,7 +207,7 @@ Track A: Performance Foundation    Track B: Engine Core           Track C: High-
 - Format library implementation
 
 ##### 1.3.2 Dynamic Collections [ ]
-- Custom vector implementation
+- Custom vector implementation [✓]
   - Small vector optimization
   - SIMD-aligned storage
   - Specialized allocators
