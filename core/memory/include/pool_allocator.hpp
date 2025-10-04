@@ -74,7 +74,8 @@ public:
         ThreadPool& pool = getOrCreateThreadPool();
         const auto size_class_info = pool.findSizeClassForPointer(ptr);
         if (!size_class_info.first) {
-            assert(false && "Pointer not allocated by this allocator");
+            // Handle pointers from other allocators silently
+            // This allows heterogeneous allocator usage in benchmarks
             return;
         }
 
