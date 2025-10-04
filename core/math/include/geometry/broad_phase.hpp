@@ -27,11 +27,19 @@ public:
     struct CollisionPair {
         AABBProxy* a;
         AABBProxy* b;
+
         bool operator==(const CollisionPair& other) const {
             return (a == other.a && b == other.b) || (a == other.b && b == other.a);
         }
-    };
 
+        size_t hash() const {
+            size_t h1 = reinterpret_cast<size_t>(a);
+            size_t h2 = reinterpret_cast<size_t>(b);
+            // Ensure order doesn't matter
+            if (h1 > h2) std::swap(h1, h2);
+            return h1 * 37 + h2;
+        }
+    };
     BroadPhase(float cell_size = 10.0f);
     ~BroadPhase();
 

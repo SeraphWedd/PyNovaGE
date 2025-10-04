@@ -2,6 +2,7 @@
 #include <algorithm>
 #include <cmath>
 #include <limits>
+#include <unordered_set>
 
 namespace pynovage {
 namespace math {
@@ -104,30 +105,32 @@ void BroadPhase::updateProxy(AABBProxy* proxy, const AABB& aabb) {
 
 std::vector<BroadPhase::CollisionPair> BroadPhase::findPotentialCollisions(size_t max_pairs) {
     std::vector<CollisionPair> pairs;
+    std::unordered_set<size_t> pairHashes;  // Track pairs we've already checked
     if (max_pairs == 0) {
         max_pairs = std::numeric_limits<size_t>::max();
     }
     
     // First check dynamic vs dynamic using SAP
-    for (int axis = 0; axis < 3; axis++) {
-        const auto& list = mDynamicProxies[axis];
-        for (size_t i = 0; i < list.size() && pairs.size() < max_pairs; i++) {
-            float max_i = list[i]->max[axis];
-            for (size_t j = i + 1; j < list.size() && pairs.size() < max_pairs; j++) {
-                if (list[j]->min[axis] > max_i) break; // No more overlaps possible
-                
-                if (testOverlap(list[i], list[j])) {
-                    CollisionPair pair{list[i], list[j]};
-                    // Check if this pair is already added
-                    if (std::find(pairs.begin(), pairs.end(), pair) == pairs.end()) {
-                        pairs.push_back(pair);
-                    }
+    // Only need to check X-axis since if objects don't overlap on X, they can't overlap at all
+    const auto& list = mDynamicProxies[0];  // X-axis list
+    for (size_t i = 0; i < list.size() && pairs.size() < max_pairs; i++) {
+        float max_i = list[i]->max[0];
+        for (size_t j = i + 1; j < list.size() && pairs.size() < max_pairs; j++) {
+            if (list[j]->min[0] > max_i) break; // No more overlaps possible on X-axis
+            
+            // Quick SIMD check for Y and Z axes
+            if (list[i]->min[1] <= list[j]->max[1] && list[j]->min[1] <= list[i]->max[1] &&
+                list[i]->min[2] <= list[j]->max[2] && list[j]->min[2] <= list[i]->max[2]) {
+                CollisionPair pair{list[i], list[j]};
+                size_t hash = pair.hash();
+                if (pairHashes.insert(hash).second) {
+                    pairs.push_back(pair);
                 }
             }
         }
     }
     
-    // Then check dynamic vs static using grid
+    // Then check dynamic vs static using grid, with optimizations
     for (const auto& proxy : mProxies) {
         if (pairs.size() >= max_pairs) break;
         if (proxy->isStatic) continue;
@@ -136,19 +139,65 @@ std::vector<BroadPhase::CollisionPair> BroadPhase::findPotentialCollisions(size_
         Vector3 min_cell = proxy->aabb.min / mCellSize;
         Vector3 max_cell = proxy->aabb.max / mCellSize;
         
-        for (int x = static_cast<int>(min_cell.x); x <= static_cast<int>(max_cell.x); x++) {
-            for (int y = static_cast<int>(min_cell.y); y <= static_cast<int>(max_cell.y); y++) {
-                for (int z = static_cast<int>(min_cell.z); z <= static_cast<int>(max_cell.z); z++) {
+        // Pre-compute cell range to avoid excessive divisions
+        int min_x = static_cast<int>(min_cell.x);
+        int max_x = static_cast<int>(max_cell.x);
+        int min_y = static_cast<int>(min_cell.y);
+        int max_y = static_cast<int>(max_cell.y);
+        int min_z = static_cast<int>(min_cell.z);
+        int max_z = static_cast<int>(max_cell.z);
+        
+        // Early exit if object spans too many cells (indicating it's too large)
+        int cell_span = (max_x - min_x + 1) * (max_y - min_y + 1) * (max_z - min_z + 1);
+        if (cell_span > 27) {  // More than 3x3x3 grid? Use SAP instead
+            for (const auto& other : mProxies) {
+                if (!other->isStatic) continue;
+                
+                if (testOverlap(proxy, other)) {
+                    CollisionPair pair{proxy, other};
+                    size_t hash = pair.hash();
+                    if (pairHashes.insert(hash).second) {
+                        pairs.push_back(pair);
+                    }
+                }
+            }
+            continue;
+        }
+        
+        // Process grid cells
+        for (int x = min_x; x <= max_x; x++) {
+            for (int y = min_y; y <= max_y; y++) {
+                for (int z = min_z; z <= max_z; z++) {
                     Vector3 cell_pos(static_cast<float>(x), static_cast<float>(y), static_cast<float>(z));
                     size_t key = hashPosition(cell_pos);
                     
                     auto it = mGrid.find(key);
                     if (it != mGrid.end()) {
-                        for (const auto& static_proxy : it->second) {
-                            if (testOverlap(proxy, static_proxy)) {
-                                CollisionPair pair{proxy, static_proxy};
-                                if (std::find(pairs.begin(), pairs.end(), pair) == pairs.end()) {
-                                    pairs.push_back(pair);
+                        const auto& cell = it->second;
+                        // If cell has too many objects, use SAP for this cell
+                        if (cell.size() > 16) {
+                            float max_proxy = proxy->max[0];
+                            for (const auto& static_proxy : cell) {
+                                if (static_proxy->min[0] > max_proxy) continue;
+                                
+                                if (proxy->min[1] <= static_proxy->max[1] && static_proxy->min[1] <= proxy->max[1] &&
+                                    proxy->min[2] <= static_proxy->max[2] && static_proxy->min[2] <= proxy->max[2]) {
+                                    CollisionPair pair{proxy, static_proxy};
+                                    size_t hash = pair.hash();
+                                    if (pairHashes.insert(hash).second) {
+                                        pairs.push_back(pair);
+                                    }
+                                }
+                            }
+                        } else {
+                            // For small cells, just test all pairs
+                            for (const auto& static_proxy : cell) {
+                                if (testOverlap(proxy, static_proxy)) {
+                                    CollisionPair pair{proxy, static_proxy};
+                                    size_t hash = pair.hash();
+                                    if (pairHashes.insert(hash).second) {
+                                        pairs.push_back(pair);
+                                    }
                                 }
                             }
                         }
