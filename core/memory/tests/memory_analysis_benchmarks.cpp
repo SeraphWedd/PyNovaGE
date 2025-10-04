@@ -156,33 +156,41 @@ static void BM_MemoryOverhead(benchmark::State& state) {
         state.ResumeTiming();
 
         // Linear allocator test
-        for (size_t i = 0; i < num_allocs; ++i) {
-            size_t size = base_size * (1 + (i % 4));
-            void* ptr = linear.allocate(size);
-            benchmark::DoNotOptimize(ptr);
-            stats[0].requested += size;
-            stats[0].actual += alignTo(size, 16);
-            stats[0].operations++;
-            ptrs.push_back(ptr);
+        {
+            std::vector<void*> linear_ptrs;
+            linear_ptrs.reserve(num_allocs);
+            for (size_t i = 0; i < num_allocs; ++i) {
+                size_t size = base_size * (1 + (i % 4));
+                void* ptr = linear.allocate(size);
+                benchmark::DoNotOptimize(ptr);
+                stats[0].requested += size;
+                stats[0].actual += alignTo(size, 16);
+                stats[0].operations++;
+                linear_ptrs.push_back(ptr);
+            }
+            // Linear allocator cleanup
+            linear.reset();
         }
-        ptrs.clear();
-        linear.reset();
 
         // Pool allocator test
-        for (size_t i = 0; i < num_allocs; ++i) {
-            size_t size = base_size * (1 + (i % 4));
-            void* ptr = pool.allocate(size);
-            benchmark::DoNotOptimize(ptr);
-            stats[1].requested += size;
-            // Actual size is determined by the pool's size class
-            stats[1].actual += (size <= 16) ? 16 : (size <= 64) ? 64 : 256;
-            stats[1].operations++;
-            ptrs.push_back(ptr);
+        {
+            std::vector<void*> pool_ptrs;
+            pool_ptrs.reserve(num_allocs);
+            for (size_t i = 0; i < num_allocs; ++i) {
+                size_t size = base_size * (1 + (i % 4));
+                void* ptr = pool.allocate(size);
+                benchmark::DoNotOptimize(ptr);
+                stats[1].requested += size;
+                // Actual size is determined by the pool's size class
+                stats[1].actual += (size <= 16) ? 16 : (size <= 64) ? 64 : 256;
+                stats[1].operations++;
+                pool_ptrs.push_back(ptr);
+            }
+            // Pool allocator cleanup
+            for (void* ptr : pool_ptrs) {
+                pool.deallocate(ptr);
+            }
         }
-        for (void* ptr : ptrs) {
-            pool.deallocate(ptr);
-        }
-        ptrs.clear();
 
 
         // Calculate and report overhead percentages

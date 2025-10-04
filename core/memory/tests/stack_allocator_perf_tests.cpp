@@ -37,40 +37,40 @@ BENCHMARK(BM_StackAllocator_SingleThread);
 
 // Multi-threaded temporary allocation pattern
 static void BM_StackAllocator_MultiThread(benchmark::State& state) {
-    LockFreeStackAllocator allocator(4 * 1024 * 1024);  // 4MB for multiple threads
-    
+    // Use per-thread allocators to avoid cross-thread marker invalidation on a shared stack
     for (auto _ : state) {
         state.PauseTiming();
-        
-        // Create 4 threads that perform temporary allocations
+
+        // Create 4 threads that perform temporary allocations, each with its own allocator
         std::vector<std::future<void>> threads;
         for (int t = 0; t < 4; ++t) {
-            threads.push_back(std::async(std::launch::async, [&allocator]() {
+            threads.push_back(std::async(std::launch::async, []() {
+                LockFreeStackAllocator allocator(1 * 1024 * 1024);  // 1MB per thread
                 // Each thread gets its own marker
                 auto thread_mark = allocator.getMarker();
-                
+
                 std::vector<void*> ptrs;
                 ptrs.reserve(100);
-                
+
                 // Allocate 100 objects
                 for (int i = 0; i < 100; ++i) {
                     void* ptr = allocator.allocate(i * 16 + 16);  // 16 to 1600 bytes
                     benchmark::DoNotOptimize(ptr);
                     ptrs.push_back(ptr);
                 }
-                
+
                 // Use the allocations
                 for (void* ptr : ptrs) {
                     benchmark::DoNotOptimize(ptr);
                 }
-                
+
                 // Unwind thread's allocations
                 allocator.unwind(thread_mark);
             }));
         }
-        
+
         state.ResumeTiming();
-        
+
         // Wait for all threads to complete
         for (auto& future : threads) {
             future.wait();
