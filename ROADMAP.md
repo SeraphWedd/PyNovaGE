@@ -124,6 +124,10 @@ Track A: Performance Foundation    Track B: Engine Core           Track C: High-
 - Velocity-based path prediction
 - Back-tracking for missed collisions
 - Multi-sampling along trajectory
+  - Benchmarks (Release):
+    - Sphere Penetration: Basic ~71ns, Offset ~72ns
+    - AABB Penetration: Basic ~24ns, Angled ~25ns
+    - Grazing Collisions: Sphere ~72ns, AABB ~73ns
 
 ###### 1.2.4.4 Collision Response [✓]
 - Impulse calculations (270ns)
