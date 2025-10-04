@@ -177,17 +177,44 @@ std::vector<CollisionPair> BroadPhase::findPotentialCollisions(size_t max_pairs)
         }
     }
     
-    // First check dynamic vs dynamic using SAP
-    // Only need to check X-axis since if objects don't overlap on X, they can't overlap at all
+    // Check dynamic vs dynamic using SAP with optimized cache access
     const auto& list = mDynamicProxies[0];  // X-axis list
-    for (size_t i = 0; i < list.size() && pairs.size() < max_pairs; i++) {
-        float max_i = list[i]->max[0];
-        for (size_t j = i + 1; j < list.size() && pairs.size() < max_pairs; j++) {
-            if (list[j]->min[0] > max_i) break; // No more overlaps possible on X-axis
+    const size_t listSize = list.size();
+
+    // Pre-compute and cache min/max bounds for current iteration
+    struct BoundsCache {
+        float minX, maxX;
+        float minY, maxY;
+        float minZ, maxZ;
+    };
+    std::vector<BoundsCache> cache(listSize);
+    
+    // Build cache - this should be more cache-friendly than random access
+    for (size_t i = 0; i < listSize; i++) {
+        const auto* proxy = list[i];
+        cache[i].minX = proxy->min[0];
+        cache[i].maxX = proxy->max[0];
+        cache[i].minY = proxy->min[1];
+        cache[i].maxY = proxy->max[1];
+        cache[i].minZ = proxy->min[2];
+        cache[i].maxZ = proxy->max[2];
+    }
+    
+    // Do sweep with cached bounds
+    for (size_t i = 0; i < listSize && pairs.size() < max_pairs; i++) {
+        const float max_i = cache[i].maxX;
+        const float min_i_y = cache[i].minY;
+        const float max_i_y = cache[i].maxY;
+        const float min_i_z = cache[i].minZ;
+        const float max_i_z = cache[i].maxZ;
+        
+        for (size_t j = i + 1; j < listSize && pairs.size() < max_pairs; j++) {
+            // Quick X-axis check
+            if (cache[j].minX > max_i) break;
             
-            // Quick axis checks for Y and Z axes
-            if (list[i]->min[1] <= list[j]->max[1] && list[j]->min[1] <= list[i]->max[1] &&
-                list[i]->min[2] <= list[j]->max[2] && list[j]->min[2] <= list[i]->max[2]) {
+            // Y and Z axes check using cached values
+            if (min_i_y <= cache[j].maxY && cache[j].minY <= max_i_y &&
+                min_i_z <= cache[j].maxZ && cache[j].minZ <= max_i_z) {
                 CollisionPair pair{list[i], list[j]};
                 size_t hash = pair.hash();
                 if (pairHashes.insert(hash).second) {
