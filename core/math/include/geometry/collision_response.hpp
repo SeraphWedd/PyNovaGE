@@ -24,10 +24,10 @@ struct MaterialProperties {
  * @brief Physical properties of a rigid body
  */
 struct RigidBodyProperties {
-    float mass = 1.0f;                   // Mass of the body
-    Matrix3 inertia_tensor;              // Inertia tensor (for rotational dynamics)
-    Matrix3 inverse_inertia_tensor;      // Inverse of inertia tensor
-    MaterialProperties material;          // Material properties
+    float mass = 1.0f;                     // Mass of the body
+    Matrix3x3 inertia_tensor;              // Inertia tensor (for rotational dynamics)
+    Matrix3x3 inverse_inertia_tensor;      // Inverse of inertia tensor
+    MaterialProperties material;           // Material properties
 
     // Velocities
     Vector3 linear_velocity;             // Linear velocity
@@ -42,9 +42,10 @@ struct RigidBodyProperties {
  * @brief Result of an impulse-based collision response calculation
  */
 struct CollisionResponse {
-    Vector3 linear_impulse;          // Linear impulse to apply
-    Vector3 angular_impulse;         // Angular impulse to apply
-    Vector3 friction_impulse;        // Friction impulse to apply
+    Vector3 linear_impulse;          // Magnitude and direction of impulse (along normal)
+    Vector3 angular_impulse;         // Angular impulse computed for body 1 contact arm
+    Vector3 friction_impulse;        // Tangential impulse
+    Vector3 normal;                  // Contact normal (used to determine impulse sign per body)
     float energy_loss = 0.0f;        // Energy dissipated in collision
 };
 

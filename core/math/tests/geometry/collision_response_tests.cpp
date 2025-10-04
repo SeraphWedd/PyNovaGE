@@ -85,6 +85,7 @@ TEST_F(CollisionResponseTest, ElasticSphereCollision) {
     // Calculate and apply response
     CollisionResponse response = calculateSphereResponse(sphere1, sphere2, props1, props2, contact);
     applyCollisionResponse(response, props1, 1.0f);
+    applyCollisionResponse(response, props2, 1.0f);
     
     // For elastic collision, velocities should be perfectly reversed
     EXPECT_NEAR(props1.linear_velocity.x, -1.0f, 1e-4f);
