@@ -35,7 +35,9 @@ static void BM_BroadPhaseInsertion(benchmark::State& state) {
 }
 BENCHMARK(BM_BroadPhaseInsertion)->Range(8, 8<<10);
 
-// Original non-batched update benchmark for comparison
+// Non-batched update benchmark - finalizes after each update
+// This is generally slower as each update requires its own finalization,
+// resulting in redundant sorting operations
 static void BM_BroadPhaseUpdate_NoBatch(benchmark::State& state) {
     const int num_objects = state.range(0);
     std::mt19937 rng(42);
@@ -58,15 +60,18 @@ static void BM_BroadPhaseUpdate_NoBatch(benchmark::State& state) {
         }
         state.ResumeTiming();
         
-        // Update all proxies
+        // Update all proxies with immediate finalization
         for (size_t i = 0; i < num_objects; i++) {
             bp.updateProxy(proxies[i], aabbs[i]);
+            bp.finalizeBroadPhase();
         }
     }
 }
 BENCHMARK(BM_BroadPhaseUpdate_NoBatch)->Range(8, 8<<10);
 
-// New batched update benchmark
+// Batched update benchmark - updates all objects first, then finalizes once
+// This is much more efficient as it only needs to sort each axis once
+// and only updates spatial bins once at the end
 static void BM_BroadPhaseUpdate(benchmark::State& state) {
     const int num_objects = state.range(0);
     std::mt19937 rng(42);
