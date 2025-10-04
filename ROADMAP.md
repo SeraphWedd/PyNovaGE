@@ -138,11 +138,13 @@ Track A: Performance Foundation    Track B: Engine Core           Track C: High-
 
 ###### 1.2.4.5 Optimization Structures [✓]
 - Broad-phase collision culling
-  - Benchmarks (Release):
-    - Non-batched update (8192 objects): ~0.18ms
-    - Batched update (8192 objects): ~2.29ms
-    - Query (8192 objects): ~7.6ms
-    - Mixed operations: ~57.8ms
+  - Benchmarks (Release, clean build):
+    - Non-batched update (8192 objects): ~0.186 ms
+    - Batched update (8192 objects): ~2.04 ms
+    - Query (8192 objects): ~3.59 ms
+    - Mixed operations (8192 objects): ~4.71 ms
+    - Insertion (8192 objects): ~153 ms
+    - Worst-case (8192 objects): ~31.25 ms
 - Temporal bounding volume hierarchy
 - Motion-aware spatial partitioning
 - Dynamic AABB trees
