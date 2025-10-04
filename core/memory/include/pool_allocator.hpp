@@ -31,7 +31,8 @@ public:
         , thread_local_pools_()
         , allocation_count_(0)
         , total_memory_(0)
-        , used_memory_(0) {
+        , used_memory_(0)
+        , generation_(0) {
         assert(!size_classes.empty() && "Must provide at least one size class");
         
         // Initialize the main thread's pool
@@ -39,6 +40,9 @@ public:
     }
 
     ~ThreadLocalPoolAllocator() override {
+        // Increment generation to invalidate all thread-local caches
+        ++generation_;
+        
         // Clean up all thread pools
         std::lock_guard<std::mutex> lock(pools_mutex_);
         thread_local_pools_.clear();
@@ -85,6 +89,9 @@ public:
     }
 
     void reset() override {
+        // Increment generation to invalidate all thread-local caches
+        ++generation_;
+        
         std::lock_guard<std::mutex> lock(pools_mutex_);
         thread_local_pools_.clear();
         
@@ -148,8 +155,13 @@ private:
         }
     };
 
-    // Per-thread pool of chunks for each size class
-    struct ThreadPool {
+    // Per-thread pool of chunks for each size class, cache-aligned for performance
+    struct alignas(64) ThreadPool {
+        static constexpr std::size_t CACHE_LINE_SIZE = 64;
+        
+        // Generation counter to detect stale pools
+        std::size_t generation;
+
         struct ChunkList {
             std::vector<Chunk> chunks;      // Chunks for this size class
             std::size_t active_chunk = 0;   // Index of last used chunk
@@ -162,10 +174,15 @@ private:
         explicit ThreadPool(std::size_t num_size_classes, ThreadLocalPoolAllocator* parent)
             : chunks_by_class(num_size_classes)
             , thread_id(std::this_thread::get_id())
-            , allocator(parent) {}
+            , allocator(parent)
+            , generation(parent->generation_) {
+            assert(allocator != nullptr && "Parent allocator cannot be null");
+        }
 
-        void* allocate(const SizeClass& size_class, std::size_t class_index, ThreadLocalPoolAllocator& allocator) {
-            assert(class_index < chunks_by_class.size());
+        void* allocate(const SizeClass& size_class, std::size_t class_index, ThreadLocalPoolAllocator& alloc) {
+            assert(class_index < chunks_by_class.size() && "Invalid size class index");
+            assert(&alloc == allocator && "Allocator mismatch - wrong allocator provided");
+            assert(generation == alloc.generation_ && "Pool generation mismatch - stale pool");
             
             auto& list = chunks_by_class[class_index];
             auto& chunks = list.chunks;
@@ -199,7 +216,7 @@ private:
             auto& new_chunk = chunks.back();
             
             // Update total memory
-            allocator.total_memory_.fetch_add(new_chunk.total_bytes, std::memory_order_relaxed);
+            allocator->total_memory_.fetch_add(new_chunk.total_bytes, std::memory_order_relaxed);
 
             // Allocate from new chunk
             FreeBlock* block = new_chunk.free_list;
@@ -260,21 +277,23 @@ private:
         return {nullptr, 0};
     }
 
-    // Get or create thread pool for current thread
+    // Get or create thread pool for current thread (safe baseline: search by thread_id)
     ThreadPool& getOrCreateThreadPool() {
-        auto thread_id = std::this_thread::get_id();
-
+        auto tid = std::this_thread::get_id();
         std::lock_guard<std::mutex> lock(pools_mutex_);
-        
-        // Try to find existing pool
-        auto it = std::find_if(thread_local_pools_.begin(), thread_local_pools_.end(),
-            [thread_id](const ThreadPool& pool) { return pool.thread_id == thread_id; });
-            
-        if (it != thread_local_pools_.end()) {
-            return *it;
+
+        // Try to find existing pool for this thread id
+        for (auto& pool : thread_local_pools_) {
+            if (pool.thread_id == tid) {
+                // If allocator generation changed (e.g., reset/destruct), refresh pool
+                if (pool.generation != generation_) {
+                    pool = ThreadPool(size_classes_.size(), this);
+                }
+                return pool;
+            }
         }
 
-        // Create new pool
+        // Create new pool for this thread
         thread_local_pools_.emplace_back(size_classes_.size(), this);
         return thread_local_pools_.back();
     }
@@ -286,6 +305,7 @@ private:
     std::atomic<std::size_t> allocation_count_;  // Total number of active allocations
     std::atomic<std::size_t> total_memory_;  // Total memory allocated
     std::atomic<std::size_t> used_memory_;   // Currently used memory
+    std::atomic<std::size_t> generation_;    // Generation counter for pool validity
 };
 
 } // namespace memory

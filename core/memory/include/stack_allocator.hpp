@@ -4,9 +4,28 @@
 #include <cstdint>
 #include <cassert>
 #include <atomic>
+#include <thread>
+
+#if defined(_MSC_VER)
+#include <intrin.h>
+#endif
 
 namespace pynovage {
 namespace memory {
+
+// CPU yield hint for different architectures
+inline void cpu_yield() {
+#if defined(_MSC_VER)
+    _mm_pause(); // Windows/x86
+#elif defined(__x86_64__) || defined(__i386__)
+    __asm__ __volatile__("pause" ::: "memory"); // GCC/Clang x86
+#elif defined(__arm__) || defined(__aarch64__)
+    __yield(); // ARM
+#else
+    // Generic fallback
+    std::this_thread::yield();
+#endif
+}
 
 class LockFreeStackAllocator : public IAllocator {
 public:
@@ -58,7 +77,8 @@ public:
         std::size_t aligned_header_size = alignTo(header_size, alignment);
         std::size_t total_size = aligned_header_size + alignTo(size, alignment);
 
-        // Try to allocate using atomic CAS
+        // Try to allocate using atomic CAS with exponential backoff
+        unsigned backoff = 1;
         while (true) {
             std::size_t current_top = top_.load(std::memory_order_acquire);
             std::size_t new_top = current_top + total_size;
@@ -70,14 +90,14 @@ public:
 
             // Try to update top pointer
             if (top_.compare_exchange_weak(current_top, new_top,
-                                         std::memory_order_release,
+                                         std::memory_order_acq_rel,
                                          std::memory_order_relaxed)) {
                 // Success - initialize the allocation header
                 auto* header = reinterpret_cast<AllocationHeader*>(memory_ + current_top);
                 header->size = size;
                 header->alignment = alignment;
 
-                // Update stats
+                // Update stats with relaxed ordering (stats are not synchronization-critical)
                 allocation_count_.fetch_add(1, std::memory_order_relaxed);
                 used_memory_.fetch_add(total_size, std::memory_order_relaxed);
 
@@ -85,7 +105,15 @@ public:
                 return memory_ + current_top + aligned_header_size;
             }
 
-            // CAS failed - another thread won the race, try again
+            // CAS failed - exponential backoff
+            if (backoff < 1024) {
+                for (unsigned i = 0; i < backoff; ++i) {
+                    cpu_yield();
+                }
+                backoff *= 2;
+            } else {
+                std::this_thread::yield(); // Full thread yield on max backoff
+            }
         }
     }
 
