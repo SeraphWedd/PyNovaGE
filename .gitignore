@@ -1,99 +1,70 @@
-# Build directories
+# Build directories and outputs
 build/
 out/
-
-# IDE directories
-.vs/
-.vscode/
-.idea/
-
-# Compiled files
-*.exe
-*.obj
-*.lib
-*.dll
-*.pdb
-*.ilk
-
-# CMake generated files
-CMakeFiles/
-CMakeCache.txt
-cmake_install.cmake
-install_manifest.txt
-
-# Python cache
-__pycache__/
-*.pyc
-
-# Platform-specific
-.DS_Store
-Thumbs.db
-
-# Build directories
-build/
 Debug/
 Release/
 x64/
 Win32/
-*.exe
-*.dll
-*.lib
-*.pdb
-
-# CMake
-CMakeCache.txt
-CMakeFiles/
-CMakeScripts/
-Testing/
-Makefile
-cmake_install.cmake
-install_manifest.txt
-compile_commands.json
-CTestTestfile.cmake
 
 # IDE specific files
 .vs/
 .vscode/
+.idea/
 *.swp
 *.swo
-.idea/
 *.user
 *.vcxproj
 *.vcxproj.filters
 *.sln
 
-# Compiled Object files
+# Compiled files
+## Object files
 *.slo
 *.lo
 *.o
 *.obj
 
-# Precompiled Headers
-*.gch
-*.pch
-
-# Compiled Dynamic libraries
+## Dynamic libraries
+*.dll
 *.so
 *.dylib
 
-# Fortran module files
-*.mod
-*.smod
-
-# Compiled Static libraries
+## Static libraries
+*.lib
 *.lai
 *.la
 *.a
+
+## Executables
+*.exe
+
+## Debug info
+*.pdb
+*.ilk
+
+## Precompiled headers
+*.gch
+*.pch
+
+# CMake files
+CMakeFiles/
+CMakeScripts/
+CMakeCache.txt
+Makefile
+cmake_install.cmake
+install_manifest.txt
+compile_commands.json
+CTestTestfile.cmake
+Testing/
 
 # Python
 __pycache__/
 *.py[cod]
 *$py.class
-*.so
 .Python
 venv/
 ENV/
 
-# OS specific
+# Platform-specific
 .DS_Store
-Thumbs.db
+Thumb.db
