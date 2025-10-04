@@ -49,7 +49,10 @@ private:
         } large_;
     };
     
-    [[no_unique_address]] Allocator allocator_;
+#if __cplusplus >= 202002L
+    [[no_unique_address]]
+#endif
+    Allocator allocator_;
 
 public:
     // Constructors

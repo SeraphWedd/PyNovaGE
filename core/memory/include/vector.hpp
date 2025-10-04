@@ -32,7 +32,10 @@ private:
     pointer data_ = nullptr;
     size_type size_ = 0;
     size_type capacity_ = 0;
-    [[no_unique_address]] Allocator allocator_ = nullptr;
+#if __cplusplus >= 202002L
+    [[no_unique_address]]
+#endif
+    Allocator allocator_ = nullptr;
 
 public:
     Vector() noexcept {

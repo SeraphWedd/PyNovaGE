@@ -1,5 +1,36 @@
 # Build directories
 build/
+out/
+
+# IDE directories
+.vs/
+.vscode/
+.idea/
+
+# Compiled files
+*.exe
+*.obj
+*.lib
+*.dll
+*.pdb
+*.ilk
+
+# CMake generated files
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+install_manifest.txt
+
+# Python cache
+__pycache__/
+*.pyc
+
+# Platform-specific
+.DS_Store
+Thumbs.db
+
+# Build directories
+build/
 Debug/
 Release/
 x64/
