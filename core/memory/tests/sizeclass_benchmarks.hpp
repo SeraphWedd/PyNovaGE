@@ -57,9 +57,9 @@ static void BM_SizeClassAllocation(benchmark::State& state) {
             }
         }
         
-        // Cleanup
-        for (void* ptr : ptrs) {
-            if (ptr) allocator.deallocate(ptr);
+        // Cleanup - deallocate in reverse order to maintain free list LIFO order
+        for (auto it = ptrs.rbegin(); it != ptrs.rend(); ++it) {
+            if (*it) allocator.deallocate(*it);
         }
         
         // Get hit rate stats before reset
@@ -128,9 +128,9 @@ static void BM_MixedSizeWorkload(benchmark::State& state) {
             }
         }
         
-        // Cleanup
-        for (void* ptr : ptrs) {
-            if (ptr) allocator.deallocate(ptr);
+        // Cleanup - deallocate in reverse order to maintain free list LIFO order
+        for (auto it = ptrs.rbegin(); it != ptrs.rend(); ++it) {
+            if (*it) allocator.deallocate(*it);
         }
         
         // Get stats before reset
