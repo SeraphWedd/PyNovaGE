@@ -34,6 +34,22 @@ BroadPhase::~BroadPhase() {
     }
 }
 
+void BroadPhase::updateTemporalCoherence() {
+    mPrevPairs.clear();
+    mPrevPairs.shrink_to_fit();
+    // Recompute previous states and movement thresholds
+    for (auto* proxy : mProxies) {
+        PreviousState st;
+        st.center = proxy->center;
+        Vector3 halfExtent = (proxy->aabb.max - proxy->aabb.min) * 0.5f;
+        st.extent = halfExtent;
+        // Allow motion up to 10% of max extent without forcing retest
+        float maxExtent = std::max(halfExtent.x, std::max(halfExtent.y, halfExtent.z));
+        st.moveThresh = std::max(0.01f, 0.1f * maxExtent);
+        mPrevStates[proxy] = st;
+    }
+}
+
 AABBProxy* BroadPhase::createProxy(const AABB& aabb, bool is_static) {
     AABBProxy* proxy = new AABBProxy();
     proxy->aabb = aabb;
@@ -110,6 +126,28 @@ std::vector<BroadPhase::CollisionPair> BroadPhase::findPotentialCollisions(size_
     if (max_pairs == 0) {
         max_pairs = std::numeric_limits<size_t>::max();
     }
+
+    // Reuse previous pairs if movement since last frame is small (temporal coherence)
+    if (!mPrevPairs.empty() && !mPrevStates.empty()) {
+        for (const auto& prevPair : mPrevPairs) {
+            if (pairs.size() >= max_pairs) break;
+            AABBProxy *pa, *pb;
+            prevPair.getOrdered(pa, pb);
+            auto ita = mPrevStates.find(pa);
+            auto itb = mPrevStates.find(pb);
+            if (ita == mPrevStates.end() || itb == mPrevStates.end()) continue;
+            const auto& sa = ita->second;
+            const auto& sb = itb->second;
+            float da = (pa->center - sa.center).length();
+            float db = (pb->center - sb.center).length();
+            if (da <= sa.moveThresh && db <= sb.moveThresh) {
+                size_t h = prevPair.hash();
+                if (pairHashes.insert(h).second) {
+                    pairs.push_back(prevPair);
+                }
+            }
+        }
+    }
     
     // First check dynamic vs dynamic using SAP
     // Only need to check X-axis since if objects don't overlap on X, they can't overlap at all
@@ -119,7 +157,7 @@ std::vector<BroadPhase::CollisionPair> BroadPhase::findPotentialCollisions(size_
         for (size_t j = i + 1; j < list.size() && pairs.size() < max_pairs; j++) {
             if (list[j]->min[0] > max_i) break; // No more overlaps possible on X-axis
             
-            // Quick SIMD check for Y and Z axes
+            // Quick axis checks for Y and Z axes
             if (list[i]->min[1] <= list[j]->max[1] && list[j]->min[1] <= list[i]->max[1] &&
                 list[i]->min[2] <= list[j]->max[2] && list[j]->min[2] <= list[i]->max[2]) {
                 CollisionPair pair{list[i], list[j]};
@@ -175,7 +213,7 @@ std::vector<BroadPhase::CollisionPair> BroadPhase::findPotentialCollisions(size_
                     auto it = mGrid.find(key);
                     if (it != mGrid.end()) {
                         const auto& cell = it->second;
-                        // If cell has too many objects, use SAP for this cell
+                        // If cell has too many objects, use SIMD batched checks for this cell
                         if (cell.size() > 16) {
                             // Batch SIMD overlap checks 4 at a time
                             float minA[3] = { proxy->min[0], proxy->min[1], proxy->min[2] };
@@ -238,6 +276,9 @@ std::vector<BroadPhase::CollisionPair> BroadPhase::findPotentialCollisions(size_
             }
         }
     }
+
+    // Store pairs for next frame temporal coherence
+    mPrevPairs = pairs;
     
     return pairs;
 }

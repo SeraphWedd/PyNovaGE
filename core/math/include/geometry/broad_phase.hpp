@@ -39,6 +39,19 @@ public:
             if (h1 > h2) std::swap(h1, h2);
             return h1 * 37 + h2;
         }
+
+        // Extract canonical ordering (useful for temporal coherence)
+        void getOrdered(AABBProxy*& first, AABBProxy*& second) const {
+            size_t id1 = reinterpret_cast<size_t>(a);
+            size_t id2 = reinterpret_cast<size_t>(b);
+            if (id1 < id2) {
+                first = a;
+                second = b;
+            } else {
+                first = b;
+                second = a;
+            }
+        }
     };
     BroadPhase(float cell_size = 10.0f);
     ~BroadPhase();
@@ -71,9 +84,15 @@ public:
      */
     std::vector<CollisionPair> findPotentialCollisions(size_t max_pairs = 0);
 
-private:
-    // Morton code computation for spatial coherence
-    uint32_t computeMortonCode(const Vector3& position) const;
+    /**
+     * @brief Updates temporal coherence data after physics step
+     * Call this after all proxies have been updated for the frame
+     */
+    void updateTemporalCoherence();
+
+    private:
+        // Morton code computation for spatial coherence
+        uint32_t computeMortonCode(const Vector3& position) const;
     
     // Sweep and prune helpers
     void sortAxisList(int axis);
@@ -90,6 +109,15 @@ private:
     std::vector<AABBProxy*> mProxies;   // All proxies
     std::vector<AABBProxy*> mDynamicProxies[3];  // Sorted lists for each axis (SAP)
     std::unordered_map<size_t, std::vector<AABBProxy*>> mGrid;  // Spatial hash grid
+
+    // Temporal coherence tracking
+    struct PreviousState {
+        Vector3 center;      // Previous center position
+        Vector3 extent;      // Previous half-extents
+        float moveThresh;   // How far object can move before needing retest
+    };
+    std::unordered_map<AABBProxy*, PreviousState> mPrevStates;
+    std::vector<CollisionPair> mPrevPairs;
 };
 
 /**
