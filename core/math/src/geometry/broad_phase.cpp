@@ -25,7 +25,12 @@ namespace {
     };
 }
 
-BroadPhase::BroadPhase(float cell_size) : mCellSize(cell_size) {}
+BroadPhase::BroadPhase(float cell_size) : mCellSize(cell_size) {
+    // Initialize all axes as clean
+    for (int i = 0; i < 3; ++i) {
+        mDirtyAxes[i] = false;
+    }
+}
 
 BroadPhase::~BroadPhase() {
     // Clean up all proxies
@@ -61,7 +66,6 @@ AABBProxy* BroadPhase::createProxy(const AABB& aabb, bool is_static) {
     for (int i = 0; i < 3; i++) {
         proxy->min[i] = aabb.min[i];
         proxy->max[i] = aabb.max[i];
-        proxy->prevMin[i] = aabb.min[i];  // Initialize previous position
         proxy->sortKeys[i] = static_cast<int32_t>(mDynamicProxies[i].size());  // Will be inserted at end
         proxy->needsResort[i] = false;
     }
@@ -116,14 +120,14 @@ void BroadPhase::updateProxy(AABBProxy* proxy, const AABB& aabb) {
         proxy->needsResort[i] = movement > 1e-4f;  // Small epsilon to avoid floating point issues
     }
     
-    // Update grid if static, incrementally resort if dynamic
+    // Update grid if static. For dynamic, mark axes as dirty (sorting deferred)
     if (proxy->isStatic) {
         removeFromGrid(proxy);
         insertIntoGrid(proxy);
     } else {
         for (int axis = 0; axis < 3; axis++) {
             if (proxy->needsResort[axis]) {
-                sortAxisList(axis);
+                mDirtyAxes[axis] = true;
             }
         }
     }
@@ -376,6 +380,16 @@ void BroadPhase::insertIntoGrid(AABBProxy* proxy) {
     size_t key = hashPosition(cell_pos);
     proxy->gridKey = key;
     mGrid[key].push_back(proxy);
+}
+
+void BroadPhase::finalizeBroadPhase() {
+    // Sort only the axes that were marked as dirty
+    for (int axis = 0; axis < 3; ++axis) {
+        if (mDirtyAxes[axis]) {
+            sortAxisList(axis);
+            mDirtyAxes[axis] = false;
+        }
+    }
 }
 
 void BroadPhase::removeFromGrid(AABBProxy* proxy) {

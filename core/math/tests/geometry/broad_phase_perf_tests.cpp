@@ -35,7 +35,8 @@ static void BM_BroadPhaseInsertion(benchmark::State& state) {
 }
 BENCHMARK(BM_BroadPhaseInsertion)->Range(8, 8<<10);
 
-static void BM_BroadPhaseUpdate(benchmark::State& state) {
+// Original non-batched update benchmark for comparison
+static void BM_BroadPhaseUpdate_NoBatch(benchmark::State& state) {
     const int num_objects = state.range(0);
     std::mt19937 rng(42);
     
@@ -61,6 +62,38 @@ static void BM_BroadPhaseUpdate(benchmark::State& state) {
         for (size_t i = 0; i < num_objects; i++) {
             bp.updateProxy(proxies[i], aabbs[i]);
         }
+    }
+}
+BENCHMARK(BM_BroadPhaseUpdate_NoBatch)->Range(8, 8<<10);
+
+// New batched update benchmark
+static void BM_BroadPhaseUpdate(benchmark::State& state) {
+    const int num_objects = state.range(0);
+    std::mt19937 rng(42);
+    
+    BroadPhase bp(10.0f);
+    std::vector<AABB> aabbs(num_objects);
+    std::vector<AABBProxy*> proxies(num_objects);
+    
+    // Setup initial state
+    for (size_t i = 0; i < num_objects; i++) {
+        generateRandomAABB(aabbs[i], rng);
+        proxies[i] = bp.createProxy(aabbs[i], false);
+    }
+    
+    for (auto _ : state) {
+        state.PauseTiming();
+        // Generate new positions
+        for (auto& aabb : aabbs) {
+            generateRandomAABB(aabb, rng, 5.0f, 100.0f);
+        }
+        state.ResumeTiming();
+        
+        // Update all proxies and finalize once
+        for (size_t i = 0; i < num_objects; i++) {
+            bp.updateProxy(proxies[i], aabbs[i]);
+        }
+        bp.finalizeBroadPhase();
     }
 }
 BENCHMARK(BM_BroadPhaseUpdate)->Range(8, 8<<10);

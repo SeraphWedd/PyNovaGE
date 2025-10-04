@@ -3,6 +3,7 @@
 
 #include <vector>
 #include <unordered_map>
+#include <unordered_set>
 #include "primitives.hpp"
 #include "../vector3.hpp"
 
@@ -71,11 +72,22 @@ public:
     void destroyProxy(AABBProxy* proxy);
 
     /**
-     * @brief Update an AABB's position/size
+     * @brief Update an AABB's position/size without immediate sorting
      * @param proxy The proxy to update
      * @param aabb The new AABB
+     * 
+     * This operation is fast as it only marks axes as needing resort.
+     * Call finalizeBroadPhase() after all updates to perform the actual sorting.
      */
     void updateProxy(AABBProxy* proxy, const AABB& aabb);
+
+    /**
+     * @brief Finalizes all pending broad phase updates
+     * 
+     * Call this after performing all updateProxy operations for the frame.
+     * This will sort the necessary axis lists for sweep and prune collision detection.
+     */
+    void finalizeBroadPhase();
 
     /**
      * @brief Find all potential collisions
@@ -91,6 +103,9 @@ public:
     void updateTemporalCoherence();
 
     private:
+        // Flags to track which axes need sorting
+        bool mDirtyAxes[3];
+
         // Morton code computation for spatial coherence
         uint32_t computeMortonCode(const Vector3& position) const;
     
@@ -134,8 +149,7 @@ struct AABBProxy {
     // SAP data (for dynamic objects)
     float min[3];            // Minimum bounds on each axis
     float max[3];            // Maximum bounds on each axis
-    float prevMin[3];        // Previous minimum bounds for incremental sorting
-    int32_t sortKeys[3];     // Sort keys for each axis (represents position in sorted list)
+    int32_t sortKeys[3];     // Sort keys for each axis
     bool needsResort[3];     // Flags to track which axes need resorting
 };
 
