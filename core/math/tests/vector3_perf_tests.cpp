@@ -232,8 +232,11 @@ static void BM_Vector2vs3_Addition(benchmark::State& state) {
 }
 BENCHMARK(BM_Vector2vs3_Addition)->Arg(0)->Arg(1)->Name("BM_Vector2vs3_Addition(2D=0/3D=1)");
 
-// Array operations with different sizes
-static void BM_Vector3ArrayOperations(benchmark::State& state) {
+// Benchmark measuring performance of 1024 Vector3 addition operations
+// Expected time per operation should be in nanoseconds range
+// Total operations = 1024 (array size) * iterations
+// Each iteration performs element-wise addition of two arrays of Vector3s
+static void BM_Vector3Array1024Additions(benchmark::State& state) {
     const size_t ArraySize = 1024; // Cache-friendly size
     std::array<Vector3, ArraySize> arr1, arr2, result;
     
@@ -254,4 +257,4 @@ static void BM_Vector3ArrayOperations(benchmark::State& state) {
         benchmark::DoNotOptimize(result);
     }
 }
-BENCHMARK(BM_Vector3ArrayOperations);
+BENCHMARK(BM_Vector3Array1024Additions)->Name("Vector3_1024_Array_Additions");
