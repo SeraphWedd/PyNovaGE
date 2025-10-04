@@ -136,8 +136,13 @@ Track A: Performance Foundation    Track B: Engine Core           Track C: High-
 - Angular response (297ns for box-box)
 - Multi-body collision resolution (Compatible)
 
-###### 1.2.4.5 Optimization Structures [ ]
+###### 1.2.4.5 Optimization Structures [✓]
 - Broad-phase collision culling
+  - Benchmarks (Release):
+    - Non-batched update (8192 objects): ~0.18ms
+    - Batched update (8192 objects): ~2.29ms
+    - Query (8192 objects): ~7.6ms
+    - Mixed operations: ~57.8ms
 - Temporal bounding volume hierarchy
 - Motion-aware spatial partitioning
 - Dynamic AABB trees
