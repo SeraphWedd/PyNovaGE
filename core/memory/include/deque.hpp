@@ -7,6 +7,7 @@
 #include <stdexcept>
 #include <utility>
 #include <iterator>
+#include <vector>
 
 namespace pynovage {
 namespace memory {
@@ -340,6 +341,54 @@ public:
         }
     }
 
+    // Modifiers: insert/erase (implemented via rebuild for simplicity and correctness)
+    iterator insert(const_iterator pos, const T& value) {
+        size_type idx = pos.global_index_;
+        // Collect existing elements
+        std::vector<T> tmp;
+        tmp.reserve(size_ + 1);
+        for (const auto& v : *this) tmp.push_back(v);
+        // Insert
+        tmp.insert(tmp.begin() + static_cast<std::ptrdiff_t>(idx), value);
+        // Rebuild
+        clear();
+        for (auto& v : tmp) push_back(std::move(v));
+        return iterator_at_index(idx);
+    }
+
+    iterator erase(const_iterator pos) {
+        if (empty()) throw std::out_of_range("Deque is empty");
+        size_type idx = pos.global_index_;
+        if (idx >= size_) throw std::out_of_range("Deque erase position out of range");
+        std::vector<T> tmp;
+        tmp.reserve(size_);
+        size_type cur = 0;
+        for (auto& v : *this) {
+            if (cur != idx) tmp.push_back(std::move(v));
+            ++cur;
+        }
+        clear();
+        for (auto& v : tmp) push_back(std::move(v));
+        return iterator_at_index(idx < tmp.size() ? idx : tmp.size());
+    }
+
+    iterator erase(const_iterator first, const_iterator last) {
+        if (first.global_index_ > last.global_index_) throw std::out_of_range("Deque erase range invalid");
+        size_type start = first.global_index_;
+        size_type end = last.global_index_;
+        if (start > size_ || end > size_) throw std::out_of_range("Deque erase range out of range");
+        std::vector<T> tmp;
+        tmp.reserve(size_ - (end - start));
+        size_type cur = 0;
+        for (auto& v : *this) {
+            if (cur < start || cur >= end) tmp.push_back(std::move(v));
+            ++cur;
+        }
+        clear();
+        for (auto& v : tmp) push_back(std::move(v));
+        return iterator_at_index(start < tmp.size() ? start : tmp.size());
+    }
+
     // Iterators
     iterator begin() {
         if (empty()) return end();
@@ -454,6 +503,15 @@ private:
         const Block* b = first_block_;
         for (size_type j = 0; j < block_jumps && b; ++j) b = b->next;
         return {b, offset % BLOCK_CAPACITY};
+    }
+
+    iterator iterator_at_index(size_type idx) {
+        if (idx >= size_) return end();
+        const size_type offset = front_index_ + idx;
+        const size_type block_jumps = offset / BLOCK_CAPACITY;
+        Block* b = first_block_;
+        for (size_type j = 0; j < block_jumps && b; ++j) b = b->next;
+        return iterator(this, b, offset % BLOCK_CAPACITY, idx);
     }
 
     // Block structure for deque storage

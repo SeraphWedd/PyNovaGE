@@ -301,6 +301,55 @@ TEST(DequeTests, Resize) {
     for (int i = 0; i < 3; ++i) EXPECT_EQ(d[i], i);
 }
 
+TEST(DequeTests, InsertAtVariousPositions) {
+    pynovage::memory::tests::MockAllocator allocator;
+    pynovage::memory::Deque<int> d(&allocator);
+
+    // Fill
+    for (int i = 0; i < 5; ++i) d.push_back(i); // [0,1,2,3,4]
+
+    // Insert in middle
+    auto itc = d.cbegin();
+    for (int i = 0; i < 2; ++i) ++itc;
+    auto it = d.insert(itc, 99); // [0,1,99,2,3,4]
+    EXPECT_EQ(d.size(), 6);
+    EXPECT_EQ(d[2], 99);
+
+    // Insert at beginning
+    it = d.insert(d.cbegin(), -1); // [-1,0,1,99,2,3,4]
+    EXPECT_EQ(d.size(), 7);
+    EXPECT_EQ(d.front(), -1);
+
+    // Insert at end
+    it = d.insert(d.cend(), 100); // [-1,0,1,99,2,3,4,100]
+    EXPECT_EQ(d.size(), 8);
+    EXPECT_EQ(d.back(), 100);
+}
+
+TEST(DequeTests, EraseSingleAndRange) {
+    pynovage::memory::tests::MockAllocator allocator;
+    pynovage::memory::Deque<int> d(&allocator);
+
+    for (int i = 0; i < 10; ++i) d.push_back(i); // [0..9]
+
+    // Erase single in middle (erase 5)
+    auto itc = d.cbegin();
+    for (int i = 0; i < 5; ++i) ++itc;
+    d.erase(itc); // [0,1,2,3,4,6,7,8,9]
+    EXPECT_EQ(d.size(), 9);
+    EXPECT_EQ(d[5], 6);
+
+    // Erase range [2,5) -> remove 2,3,4
+    auto first = d.cbegin();
+    for (int i = 0; i < 2; ++i) ++first;
+    auto last = d.cbegin();
+    for (int i = 0; i < 5; ++i) ++last;
+    d.erase(first, last); // [0,1,6,7,8,9]
+    EXPECT_EQ(d.size(), 6);
+    EXPECT_EQ(d[2], 6);
+    EXPECT_EQ(d[3], 7);
+}
+
 } // namespace tests
 } // namespace memory
 } // namespace pynovage
