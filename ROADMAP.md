@@ -95,7 +95,7 @@ Track A: Performance Foundation    Track B: Engine Core           Track C: High-
 
 // NEXT TARGET: Core collision system foundation
 // Required for physics and game object interactions
-##### 1.2.4 Geometric Calculations [✓]
+##### 1.2.4 Geometric Calculations [ ]
 
 ###### 1.2.4.1 Static Collision Detection [✓]
 - Basic intersection tests (ray/box/sphere/polygon)
@@ -118,7 +118,7 @@ Track A: Performance Foundation    Track B: Engine Core           Track C: High-
 - Back-tracking for missed collisions
 - Multi-sampling along trajectory
 
-###### 1.2.4.4 Collision Response [✓]
+###### 1.2.4.4 Collision Response [ ]
 - Impulse calculations
 - Energy conservation
 - Friction and restitution
