@@ -1,5 +1,5 @@
 #include "matrix3.hpp"
-#include "math/math_constants.hpp"
+#include "math_constants.hpp"
 #include <gtest/gtest.h>
 #include <cmath>
 

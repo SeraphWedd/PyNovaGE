@@ -2,7 +2,7 @@
 #define PYNOVAGE_MATH_PRIMITIVES_HPP
 
 #include "vector3.hpp"
-#include "math/matrix3.hpp"
+#include "matrix3.hpp"
 #include <limits>
 
 namespace pynovage {

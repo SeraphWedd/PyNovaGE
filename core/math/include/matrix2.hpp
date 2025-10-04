@@ -2,7 +2,7 @@
 #define PYNOVAGE_MATH_MATRIX2_HPP
 
 #include "simd_utils.hpp"
-#include "math/vector2.hpp"
+#include "vector2.hpp"
 #include "math/math_constants.hpp"
 #include <cmath>
 

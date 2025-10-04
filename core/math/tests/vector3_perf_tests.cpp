@@ -1,6 +1,6 @@
 #include <benchmark/benchmark.h>
 #include "vector3.hpp"
-#include "math/vector2.hpp"
+#include "vector2.hpp"
 #include <vector>
 #include <random>
 #include <array>
