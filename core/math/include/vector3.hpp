@@ -176,6 +176,14 @@ public:
     }
 
     // Component access
+    float& operator[](int index) {
+        return (&x)[index];
+    }
+
+    float operator[](int index) const {
+        return (&x)[index];
+    }
+
     float x;
     float y;
     float z;

@@ -7,6 +7,7 @@ add_library(pynovage_math
     src/geometry/continuous_collision.cpp
     src/geometry/high_speed_collision.cpp
     src/geometry/collision_response.cpp
+    src/geometry/broad_phase.cpp
 )
 
 # Add include directories
@@ -60,6 +61,7 @@ add_executable(math_tests
     tests/geometry/continuous_collision_tests.cpp
     tests/geometry/high_speed_collision_tests.cpp
     tests/geometry/collision_response_tests.cpp
+    tests/geometry/broad_phase_tests.cpp
 )
 
 target_link_libraries(math_tests
@@ -84,6 +86,7 @@ add_executable(math_benchmarks
     tests/geometry/intersection_perf_tests.cpp
     tests/geometry/continuous_collision_perf_tests.cpp
     tests/geometry/collision_response_perf_tests.cpp
+    tests/geometry/broad_phase_perf_tests.cpp
 )
 
 target_link_libraries(math_benchmarks
