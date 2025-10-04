@@ -3,7 +3,7 @@
 
 #include "simd_utils.hpp"
 #include "vector2.hpp"
-#include "math/math_constants.hpp"
+#include "math_constants.hpp"
 #include <cmath>
 
 namespace pynovage {
