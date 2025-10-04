@@ -6,6 +6,7 @@ add_library(pynovage_math
     src/simd_utils.cpp
     src/geometry/continuous_collision.cpp
     src/geometry/high_speed_collision.cpp
+    src/geometry/collision_response.cpp
 )
 
 # Add include directories
@@ -58,6 +59,7 @@ add_executable(math_tests
     tests/geometry/intersection_tests.cpp
     tests/geometry/continuous_collision_tests.cpp
     tests/geometry/high_speed_collision_tests.cpp
+    tests/geometry/collision_response_tests.cpp
 )
 
 target_link_libraries(math_tests
@@ -81,6 +83,7 @@ add_executable(math_benchmarks
     tests/primitives_perf_tests.cpp
     tests/geometry/intersection_perf_tests.cpp
     tests/geometry/continuous_collision_perf_tests.cpp
+    tests/geometry/collision_response_perf_tests.cpp
 )
 
 target_link_libraries(math_benchmarks
