@@ -183,5 +183,17 @@ target_link_libraries(memory_analysis_benchmarks
     )
 endif()
 
+# Deque tests
+add_executable(deque_tests
+    tests/deque_tests.cpp
+)
+target_link_libraries(deque_tests
+    PRIVATE
+        pynovage_memory
+        gtest
+        gtest_main
+)
+add_test(NAME deque_tests COMMAND deque_tests)
+
 # Add benchmark test with proper arguments
 add_test(NAME memory_benchmarks COMMAND allocator_benchmarks_linear ${BENCHMARK_ARGS})
