@@ -57,6 +57,159 @@ public:
         return last_block_->data()[(back_index_ - 1 + BLOCK_CAPACITY) % BLOCK_CAPACITY];
     }
 
+    // Element manipulation
+    void push_front(const T& value) {
+        if (empty()) {
+            if (!first_block_) {
+                first_block_ = allocate_block();
+                new (first_block_) Block();
+                last_block_ = first_block_;
+            }
+            front_index_ = back_index_ = 0;
+            new(first_block_->data() + front_index_) T(value);
+            back_index_++;
+        } else {
+            if (front_index_ == 0) {
+                // Need new block at front
+                first_block_ = create_block_before(first_block_);
+                front_index_ = BLOCK_CAPACITY - 1;
+                new(first_block_->data() + front_index_) T(value);
+            } else {
+                // Space in current front block
+                front_index_--;
+                new(first_block_->data() + front_index_) T(value);
+            }
+        }
+        size_++;
+    }
+
+    void push_back(const T& value) {
+        if (empty()) {
+            if (!first_block_) {
+                first_block_ = allocate_block();
+                new (first_block_) Block();
+                last_block_ = first_block_;
+            }
+            front_index_ = back_index_ = 0;
+            new(last_block_->data() + back_index_) T(value);
+            back_index_++;
+        } else {
+            if (back_index_ >= BLOCK_CAPACITY) {
+                // Need new block at back
+                auto new_block = create_block_after(last_block_);
+                back_index_ = 0;
+                last_block_ = new_block;
+                new(last_block_->data()) T(value);
+                back_index_++;
+            } else {
+                // Space in current back block
+                new(last_block_->data() + back_index_) T(value);
+                back_index_++;
+            }
+        }
+        size_++;
+    }
+
+    void pop_front() {
+        if (empty()) throw std::out_of_range("Deque is empty");
+
+        // Destroy front element
+        first_block_->data()[front_index_].~T();
+
+        // Update pointers and size
+        if (size_ == 1) {
+            front_index_ = back_index_ = 0;
+        } else {
+            front_index_++;
+            if (front_index_ >= BLOCK_CAPACITY && first_block_->next) {
+                // Move to next block if it exists
+                Block* old_block = first_block_;
+                first_block_ = first_block_->next;
+                first_block_->prev = nullptr;
+                front_index_ = 0;
+                destroy_block(old_block);
+            }
+        }
+        size_--;
+    }
+
+    void pop_back() {
+        if (empty()) throw std::out_of_range("Deque is empty");
+
+        // Update pointers and size
+        if (size_ == 1) {
+            // Last element - just destroy it and reset indices
+            last_block_->data()[back_index_ - 1].~T();
+            front_index_ = back_index_ = 0;
+        } else {
+            if (back_index_ == 0 && last_block_->prev) {
+                // Move to previous block if it exists
+                Block* old_block = last_block_;
+                last_block_ = last_block_->prev;
+                last_block_->next = nullptr;
+                back_index_ = BLOCK_CAPACITY;
+                destroy_block(old_block);
+            }
+            back_index_--;
+            last_block_->data()[back_index_].~T();
+        }
+        size_--;
+    }
+
+    template<typename... Args>
+    void emplace_front(Args&&... args) {
+        if (empty()) {
+            if (!first_block_) {
+                first_block_ = allocate_block();
+                new (first_block_) Block();
+                last_block_ = first_block_;
+            }
+            front_index_ = back_index_ = 0;
+            new(first_block_->data() + front_index_) T(std::forward<Args>(args)...);
+            back_index_++;
+        } else {
+            if (front_index_ == 0) {
+                // Need new block at front
+                first_block_ = create_block_before(first_block_);
+                front_index_ = BLOCK_CAPACITY - 1;
+                new(first_block_->data() + front_index_) T(std::forward<Args>(args)...);
+            } else {
+                // Space in current front block
+                front_index_--;
+                new(first_block_->data() + front_index_) T(std::forward<Args>(args)...);
+            }
+        }
+        size_++;
+    }
+
+    template<typename... Args>
+    void emplace_back(Args&&... args) {
+        if (empty()) {
+            if (!first_block_) {
+                first_block_ = allocate_block();
+                new (first_block_) Block();
+                last_block_ = first_block_;
+            }
+            front_index_ = back_index_ = 0;
+            new(last_block_->data() + back_index_) T(std::forward<Args>(args)...);
+            back_index_++;
+        } else {
+            if (back_index_ >= BLOCK_CAPACITY) {
+                // Need new block at back
+                auto new_block = create_block_after(last_block_);
+                back_index_ = 0;
+                last_block_ = new_block;
+                new(last_block_->data()) T(std::forward<Args>(args)...);
+                back_index_++;
+            } else {
+                // Space in current back block
+                new(last_block_->data() + back_index_) T(std::forward<Args>(args)...);
+                back_index_++;
+            }
+        }
+        size_++;
+    }
+
 private:
     // Block structure for deque storage
     static constexpr size_type BLOCK_SIZE = 512;  // Bytes per block
