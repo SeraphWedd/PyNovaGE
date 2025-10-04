@@ -7,6 +7,10 @@
 #include <cstdint>
 #include <stdexcept>
 #include <atomic>
+#include <sstream>
+#include <iomanip>
+#include <utility>
+#include <algorithm>
 #include <mutex>
 #include <numeric>
 #include <sstream>
@@ -15,6 +19,7 @@
 #include <cstring>
 #include <vector>
 #include <tuple>
+#include <memory>
 #include "size_classes.hpp"
 #include "size_class_free_list.hpp"
 
@@ -49,11 +54,11 @@ struct alignas(64) DefragHeader {
     
     // Validate header integrity
     bool isValid() const {
-        bool magic_ok = (magic == MAGIC_ACTIVE || magic == MAGIC_FREE);
-        bool checksum_ok = (checksum == calculateChecksum());
-        return magic_ok && checksum_ok;
+bool magic_ok = (magic == MAGIC_ACTIVE || magic == MAGIC_FREE);
+            bool checksum_ok = (checksum == calculateChecksum());
+            return magic_ok && checksum_ok;
     }
-    
+
     // Helper for debugging
     std::string debugString() const {
         std::stringstream ss;
@@ -126,12 +131,35 @@ struct alignas(64) DefragHeader {
 
 class DefragmentingAllocator final : public IAllocator {
 public:
+    struct AllocationInfo {
+        void* address;
+        std::size_t size;
+        std::size_t alignment;
+        bool is_size_class;
+        std::size_t size_class;
+        std::size_t timestamp;
+    };
+
+    struct FragmentationInfo {
+        std::size_t total_free_blocks{0};
+        std::size_t total_free_bytes{0};
+        std::size_t largest_free_block{0};
+        double fragmentation_ratio{0.0}; // 0.0 to 1.0, higher means more fragmented
+    };
+
     struct Stats {
         SizeClassManager::Stats size_class_stats;
-        size_t total_allocations{0};
-        size_t total_deallocations{0};
-        size_t total_fragmentation_cycles{0};
-        size_t total_blocks_merged{0};
+        std::size_t total_allocations{0};
+        std::size_t total_deallocations{0};
+        std::size_t total_fragmentation_cycles{0};
+        std::size_t total_blocks_merged{0};
+        std::size_t peak_memory_usage{0};
+        std::size_t current_memory_usage{0};
+        FragmentationInfo fragmentation;
+        
+        // Keep track of last N allocations for debugging
+        static constexpr std::size_t ALLOCATION_HISTORY_SIZE = 100;
+        std::vector<AllocationInfo> recent_allocations;
         
         void clear() {
             size_class_stats.clear();
@@ -139,6 +167,17 @@ public:
             total_deallocations = 0;
             total_fragmentation_cycles = 0;
             total_blocks_merged = 0;
+            peak_memory_usage = 0;
+            current_memory_usage = 0;
+            fragmentation = FragmentationInfo{};
+            recent_allocations.clear();
+        }
+        
+        void recordAllocation(const AllocationInfo& info) {
+            if (recent_allocations.size() >= ALLOCATION_HISTORY_SIZE) {
+                recent_allocations.erase(recent_allocations.begin());
+            }
+            recent_allocations.push_back(info);
         }
     };
     explicit DefragmentingAllocator(std::size_t total_size) {
@@ -152,11 +191,12 @@ public:
         }
         
         // Allocate memory with extra padding for alignment
-        memory_ = new std::byte[total_size_requested_ + alignof(std::max_align_t)];
+        // Allocate memory using unique_ptr
+        memory_ = std::make_unique<std::byte[]>(total_size_requested_ + alignof(std::max_align_t));
         
         // Set up initial free block
         std::size_t space = total_size_requested_ + alignof(std::max_align_t);
-        void* ptr = memory_;
+        void* ptr = memory_.get();
         void* aligned_start = std::align(
             alignof(DefragHeader),
             sizeof(DefragHeader),
@@ -165,7 +205,7 @@ public:
         );
         
         if (!aligned_start) {
-            delete[] memory_;
+            memory_.reset(); // unique_ptr will handle cleanup
             throw std::runtime_error("Failed to align initial memory");
         }
         
@@ -182,9 +222,7 @@ public:
         );
     }
     
-    ~DefragmentingAllocator() override {
-        delete[] memory_;
-    }
+    ~DefragmentingAllocator() override = default; // unique_ptr handles cleanup
     
     // Prevent copying
     DefragmentingAllocator(const DefragmentingAllocator&) = delete;
@@ -201,15 +239,18 @@ protected:
             if (ptr) {
                 // Validate alignment
                 if (reinterpret_cast<std::uintptr_t>(ptr) % alignment == 0) {
-                    updateStats([&](Stats& s) {
-                        s.total_allocations++;
-                        s.size_class_stats.allocations[size_class]++;
-                    });
-                    {
-                        std::lock_guard<std::mutex> map_lock(size_class_map_mutex_);
-                        size_class_blocks_[ptr] = size_class;
-                    }
-                    return ptr;
+                        updateStats([&](Stats& s) {
+                            s.total_allocations++;
+                            s.size_class_stats.allocations[size_class]++;
+                            s.current_memory_usage = used_memory_;
+s.peak_memory_usage = std::max(s.peak_memory_usage, static_cast<std::size_t>(used_memory_.load()));
+                            s.fragmentation = getCurrentFragmentation();
+                        });
+                        {
+                            std::lock_guard<std::mutex> map_lock(size_class_map_mutex_);
+                            size_class_blocks_[ptr] = size_class;
+                        }
+                        return ptr;
                 }
                 // If alignment doesn't match, return to free list
                 size_class_lists_.addToFreeList(ptr, size_class);
@@ -295,6 +336,13 @@ protected:
                 used_memory_ += aligned_size;
                 allocation_count_++;
                 
+                updateStats([&](Stats& s) {
+                    s.current_memory_usage += aligned_size;
+                    s.peak_memory_usage = std::max(s.peak_memory_usage, s.current_memory_usage);
+                    AllocationInfo info{current->getPayload(), aligned_size, alignment, false, 0, static_cast<std::size_t>(std::time(nullptr))};
+                    s.recordAllocation(info);
+                });
+                
                 return current->getPayload();
             }
             current = current->next;
@@ -369,13 +417,15 @@ protected:
         }
         
         // Update block state
-        used_memory_ -= header->size;
+        std::size_t freed = header->size;
+        used_memory_ -= freed;
         allocation_count_--;
         
         header->initializeFree(true);
         
         updateStats([&](Stats& s) {
             s.total_deallocations++;
+            s.current_memory_usage -= freed;
         });
         
         // Try to merge with adjacent blocks
@@ -413,6 +463,134 @@ public:
     }
     
     // Get current statistics
+    bool validateMemory() const {
+        std::lock_guard<std::mutex> lock(mutex_);
+        DefragHeader* current = first_block_;
+        std::size_t total_size = 0;
+        std::size_t block_count = 0;
+
+        try {
+            while (current) {
+                if (!current->isValid()) {
+                    return false; // Block header corruption
+                }
+
+                // Check for basic block invariants
+                if (reinterpret_cast<std::byte*>(current) < memory_start_ ||
+                    reinterpret_cast<std::byte*>(current) >= memory_end_) {
+                    return false; // Block outside pool bounds
+                }
+
+                total_size += current->size + sizeof(DefragHeader);
+                if (total_size > pool_size_) {
+                    return false; // Total size exceeds pool
+                }
+
+                // Check for overlapping blocks
+                DefragHeader* next = current->next;
+                if (next) {
+                    std::byte* block_end = reinterpret_cast<std::byte*>(current) + 
+                                          sizeof(DefragHeader) + current->size;
+                    if (block_end > reinterpret_cast<std::byte*>(next)) {
+                        return false; // Blocks overlap
+                    }
+                }
+
+                block_count++;
+                if (block_count > allocation_count_ * 2) { // Sanity check for cycles
+                    return false; // Too many blocks, possible cycle
+                }
+
+                current = current->next;
+            }
+            return true;
+        } catch (...) {
+            return false; // Any unexpected exception indicates corruption
+        }
+    }
+
+    FragmentationInfo getCurrentFragmentation() const {
+        std::lock_guard<std::mutex> lock(mutex_);
+        FragmentationInfo info{};
+        
+        // Analyze current fragmentation state
+        DefragHeader* current = first_block_;
+        while (current) {
+            if (current->is_free) {
+                info.total_free_blocks++;
+                info.total_free_bytes += current->size;
+                info.largest_free_block = std::max(info.largest_free_block, current->size);
+            }
+            current = current->next;
+        }
+        
+        // Calculate fragmentation ratio
+        if (info.total_free_bytes > 0) {
+            double ideal_ratio = static_cast<double>(info.largest_free_block) / info.total_free_bytes;
+            info.fragmentation_ratio = 1.0 - ideal_ratio; // Higher means more fragmented
+        }
+        
+        return info;
+    }
+
+    std::string generateDebugReport() const {
+        std::stringstream report;
+        std::lock_guard<std::mutex> stats_lock(stats_mutex_);
+        std::lock_guard<std::mutex> alloc_lock(mutex_);
+
+        // General stats
+        report << "=== Memory Allocator Debug Report ===\n";
+        report << "Total Memory: " << pool_size_ << " bytes\n";
+        report << "Used Memory: " << used_memory_ << " bytes\n";
+        report << "Peak Memory Usage: " << stats_.peak_memory_usage << " bytes\n";
+        report << "Active Allocations: " << allocation_count_ << "\n";
+        report << "Total Allocations: " << stats_.total_allocations << "\n";
+        report << "Total Deallocations: " << stats_.total_deallocations << "\n\n";
+
+        // Fragmentation analysis
+        auto frag = stats_.fragmentation;
+        report << "=== Fragmentation Analysis ===\n";
+        report << "Free Blocks: " << frag.total_free_blocks << "\n";
+        report << "Total Free Space: " << frag.total_free_bytes << " bytes\n";
+        report << "Largest Free Block: " << frag.largest_free_block << " bytes\n";
+        report << "Fragmentation Ratio: " << std::fixed << std::setprecision(2)
+               << (frag.fragmentation_ratio * 100.0) << "%\n\n";
+
+        // Size class statistics
+        report << "=== Size Class Usage ===\n";
+        for (size_t i = 0; i < stats_.size_class_stats.allocations.size(); i++) {
+            if (stats_.size_class_stats.allocations[i] > 0) {
+                report << "Class " << i << " (" << SizeClassManager::getSizeForClass(i) << " bytes): "
+                       << stats_.size_class_stats.allocations[i] << " allocs, "
+                       << stats_.size_class_stats.deallocations[i] << " deallocs\n";
+            }
+        }
+        report << "\n";
+
+        // Recent allocation history
+        report << "=== Recent Allocations ===\n";
+        for (const auto& alloc : stats_.recent_allocations) {
+            report << "Address: " << alloc.address
+                   << ", Size: " << alloc.size
+                   << ", Alignment: " << alloc.alignment;
+            if (alloc.is_size_class) {
+                report << ", Size Class: " << alloc.size_class;
+            }
+            report << ", Time: " << alloc.timestamp << "\n";
+        }
+
+        // Memory block chain analysis
+        report << "\n=== Memory Block Chain ===\n";
+        DefragHeader* current = first_block_;
+        size_t block_count = 0;
+        while (current) {
+            report << "Block " << block_count++ << ": " << current->debugString() << "\n";
+            current = current->next;
+        }
+
+        return report.str();
+    }
+
     Stats getStats() const {
         std::lock_guard<std::mutex> lock(stats_mutex_);
         return stats_;
@@ -612,10 +790,13 @@ private:
             }
         } while (changes_made);
         
-        if (blocks_merged > 0) {
-            updateStats([blocks_merged](Stats& s) {
+            if (blocks_merged > 0) {
+            updateStats([blocks_merged, this](Stats& s) {
                 s.total_fragmentation_cycles++;
                 s.total_blocks_merged += blocks_merged;
+                s.fragmentation = this->getCurrentFragmentation();
+                s.current_memory_usage = used_memory_;
+s.peak_memory_usage = std::max(s.peak_memory_usage, static_cast<std::size_t>(used_memory_.load()));
             });
         }
         
@@ -674,7 +855,7 @@ private:
         func(stats_);
     }
 
-    std::byte* memory_;                    // Raw memory buffer (base allocation)
+    std::unique_ptr<std::byte[]> memory_;   // Raw memory buffer (RAII managed)
     std::byte* memory_start_;              // Aligned start of usable pool
     std::byte* memory_end_;                // End of usable pool
     DefragHeader* first_block_;            // First block in the chain
