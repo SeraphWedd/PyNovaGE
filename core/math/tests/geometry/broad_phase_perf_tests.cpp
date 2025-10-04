@@ -42,7 +42,7 @@ static void BM_BroadPhaseUpdate_NoBatch(benchmark::State& state) {
     
     BroadPhase bp(10.0f);
     std::vector<AABB> aabbs(num_objects);
-    std::vector<AABBProxy*> proxies(num_objects);
+    std::vector<ProxyId> proxies(num_objects);
     
     // Setup initial state
     for (size_t i = 0; i < num_objects; i++) {
@@ -73,7 +73,7 @@ static void BM_BroadPhaseUpdate(benchmark::State& state) {
     
     BroadPhase bp(10.0f);
     std::vector<AABB> aabbs(num_objects);
-    std::vector<AABBProxy*> proxies(num_objects);
+    std::vector<ProxyId> proxies(num_objects);
     
     // Setup initial state
     for (size_t i = 0; i < num_objects; i++) {
@@ -155,12 +155,14 @@ static void BM_BroadPhaseMixed(benchmark::State& state) {
     
     BroadPhase bp(10.0f);
     std::vector<AABB> aabbs(num_objects);
-    std::vector<AABBProxy*> proxies(num_objects);
+    std::vector<ProxyId> proxies(num_objects);
+    std::vector<bool> is_static_flags(num_objects);
     
     // Setup with mix of static/dynamic
     for (int i = 0; i < num_objects; i++) {
         generateRandomAABB(aabbs[i], rng);
         bool is_static = (i % 3 == 0);  // Make every third object static
+        is_static_flags[i] = is_static;
         proxies[i] = bp.createProxy(aabbs[i], is_static);
     }
     
@@ -168,8 +170,8 @@ static void BM_BroadPhaseMixed(benchmark::State& state) {
     
     for (auto _ : state) {
         // Update about 20% of dynamic objects
-        for (size_t i = 0; i < num_objects; i++) {
-            if (!proxies[i]->isStatic && update_dist(rng) < 0.2f) {
+        for (size_t i = 0; i < static_cast<size_t>(num_objects); i++) {
+            if (!is_static_flags[i] && update_dist(rng) < 0.2f) {
                 state.PauseTiming();
                 generateRandomAABB(aabbs[i], rng);
                 state.ResumeTiming();
