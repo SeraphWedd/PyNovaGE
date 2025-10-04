@@ -10,6 +10,7 @@ enable_testing()
 
 # Build options
 option(PYNOVAGE_BUILD_BENCHMARKS "Build benchmark executables" ON)
+option(PROFILE_BROADPHASE "Enable detailed profiling of broad phase" OFF)
 
 # Add subdirectories
 add_subdirectory(core)

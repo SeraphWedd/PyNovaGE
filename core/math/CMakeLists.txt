@@ -2,6 +2,11 @@
 cmake_minimum_required(VERSION 3.15)
 
 # Create the math library target
+# Add profiling option
+if(PROFILE_BROADPHASE)
+    add_compile_definitions(PROFILE_BROADPHASE)
+endif()
+
 add_library(pynovage_math
     src/simd_utils.cpp
     src/geometry/continuous_collision.cpp
