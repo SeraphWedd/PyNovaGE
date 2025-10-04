@@ -46,6 +46,10 @@ set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
 set(BENCHMARK_ENABLE_TESTING OFF CACHE BOOL "" FORCE)
 set(BENCHMARK_ENABLE_GTEST_TESTS OFF CACHE BOOL "" FORCE)
 
+# Set default benchmark runtime configuration
+set(BENCHMARK_MIN_TIME "0.1s" CACHE STRING "Minimum time to run each benchmark")
+set(BENCHMARK_ARGS "--benchmark_min_time=${BENCHMARK_MIN_TIME}" CACHE STRING "Arguments to pass to benchmark executables")
+
 FetchContent_MakeAvailable(googletest googlebenchmark)
 
 add_executable(math_tests
@@ -100,3 +104,6 @@ target_include_directories(math_benchmarks
     PRIVATE
         ${CMAKE_BINARY_DIR}/_deps/googlebenchmark-src/include
 )
+
+# Add benchmark test with proper arguments
+add_test(NAME math_benchmarks COMMAND math_benchmarks ${BENCHMARK_ARGS})
