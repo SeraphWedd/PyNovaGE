@@ -255,6 +255,28 @@ public:
      * @return true if matrix was invertible, false otherwise
      */
     static bool InvertMatrix4x4(const float* m, float* result);
+
+    /**
+     * @brief Tests if 4 AABBs overlap with a target AABB along a single axis using SIMD
+     * 
+     * @param min_a Min value of target AABB for the axis
+     * @param max_a Max value of target AABB for the axis
+     * @param mins Array of 4 min values from test AABBs
+     * @param maxs Array of 4 max values from test AABBs
+     * @param result Array to store 4 boolean results (as integers)
+     */
+    static void TestAxisOverlap4f(float min_a, float max_a, const float* mins, const float* maxs, int* result);
+
+    /**
+     * @brief Tests if 4 AABBs overlap with a target AABB using SIMD (all 3 axes at once)
+     * 
+     * @param min_a Min values of target AABB (x,y,z)
+     * @param max_a Max values of target AABB (x,y,z)
+     * @param mins Array of 4 sets of min values (x0,x1,x2,x3, y0,y1,y2,y3, z0,z1,z2,z3)
+     * @param maxs Array of 4 sets of max values (x0,x1,x2,x3, y0,y1,y2,y3, z0,z1,z2,z3)
+     * @param result Array to store 4 boolean results (as integers)
+     */
+    static void TestAABBOverlap4f(const float* min_a, const float* max_a, const float* mins, const float* maxs, int* result);
 };
 
 } // namespace math

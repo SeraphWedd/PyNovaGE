@@ -288,5 +288,64 @@ bool SimdUtils::InvertMatrix3x3(const float* m, float* result) {
     return true;
 }
 
+void SimdUtils::TestAxisOverlap4f(float min_a, float max_a, const float* mins, const float* maxs, int* result) {
+#if PYNOVAGE_MATH_HAS_SSE2
+    __m128 vMinA = _mm_set1_ps(min_a);
+    __m128 vMaxA = _mm_set1_ps(max_a);
+    __m128 vMins = _mm_loadu_ps(mins);
+    __m128 vMaxs = _mm_loadu_ps(maxs);
+
+    __m128 cmp1 = _mm_cmple_ps(vMins, vMaxA); // mins <= max_a
+    __m128 cmp2 = _mm_cmple_ps(vMinA, vMaxs); // min_a <= maxs
+    __m128 overlap = _mm_and_ps(cmp1, cmp2);
+
+    _mm_storeu_ps((float*)result, overlap);
+    // Convert mask floats to int 0/1
+    for (int i = 0; i < 4; ++i) result[i] = result[i] ? 1 : 0;
+#else
+    for (int i = 0; i < 4; ++i) {
+        result[i] = (mins[i] <= max_a) && (min_a <= maxs[i]);
+    }
+#endif
+}
+
+void SimdUtils::TestAABBOverlap4f(const float* min_a, const float* max_a, const float* mins, const float* maxs, int* result) {
+#if PYNOVAGE_MATH_HAS_SSE2
+    __m128 minAx = _mm_set1_ps(min_a[0]);
+    __m128 minAy = _mm_set1_ps(min_a[1]);
+    __m128 minAz = _mm_set1_ps(min_a[2]);
+    __m128 maxAx = _mm_set1_ps(max_a[0]);
+    __m128 maxAy = _mm_set1_ps(max_a[1]);
+    __m128 maxAz = _mm_set1_ps(max_a[2]);
+
+    __m128 minBx = _mm_loadu_ps(&mins[0]);
+    __m128 minBy = _mm_loadu_ps(&mins[4]);
+    __m128 minBz = _mm_loadu_ps(&mins[8]);
+    __m128 maxBx = _mm_loadu_ps(&maxs[0]);
+    __m128 maxBy = _mm_loadu_ps(&maxs[4]);
+    __m128 maxBz = _mm_loadu_ps(&maxs[8]);
+
+    __m128 cmpX = _mm_and_ps(_mm_cmple_ps(minBx, maxAx), _mm_cmple_ps(minAx, maxBx));
+    __m128 cmpY = _mm_and_ps(_mm_cmple_ps(minBy, maxAy), _mm_cmple_ps(minAy, maxBy));
+    __m128 cmpZ = _mm_and_ps(_mm_cmple_ps(minBz, maxAz), _mm_cmple_ps(minAz, maxBz));
+
+    __m128 overlap = _mm_and_ps(_mm_and_ps(cmpX, cmpY), cmpZ);
+    _mm_storeu_ps((float*)result, overlap);
+    for (int i = 0; i < 4; ++i) result[i] = result[i] ? 1 : 0;
+#else
+    for (int i = 0; i < 4; ++i) {
+        float minBx = mins[i];
+        float minBy = mins[4 + i];
+        float minBz = mins[8 + i];
+        float maxBx = maxs[i];
+        float maxBy = maxs[4 + i];
+        float maxBz = maxs[8 + i];
+        result[i] = (minBx <= max_a[0] && min_a[0] <= maxBx) &&
+                    (minBy <= max_a[1] && min_a[1] <= maxBy) &&
+                    (minBz <= max_a[2] && min_a[2] <= maxBz);
+    }
+#endif
+}
+
 } // namespace math
 } // namespace pynovage

@@ -1,4 +1,5 @@
 #include "geometry/broad_phase.hpp"
+#include "simd_utils.hpp"
 #include <algorithm>
 #include <cmath>
 #include <limits>
@@ -176,11 +177,42 @@ std::vector<BroadPhase::CollisionPair> BroadPhase::findPotentialCollisions(size_
                         const auto& cell = it->second;
                         // If cell has too many objects, use SAP for this cell
                         if (cell.size() > 16) {
-                            float max_proxy = proxy->max[0];
-                            for (const auto& static_proxy : cell) {
-                                if (static_proxy->min[0] > max_proxy) continue;
-                                
-                                if (proxy->min[1] <= static_proxy->max[1] && static_proxy->min[1] <= proxy->max[1] &&
+                            // Batch SIMD overlap checks 4 at a time
+                            float minA[3] = { proxy->min[0], proxy->min[1], proxy->min[2] };
+                            float maxA[3] = { proxy->max[0], proxy->max[1], proxy->max[2] };
+
+                            size_t k = 0;
+                            for (; k + 3 < cell.size(); k += 4) {
+                                float mins[12]; // x0..x3, y0..y3, z0..z3
+                                float maxs[12];
+                                for (int t = 0; t < 4; ++t) {
+                                    const auto* sp = cell[k + t];
+                                    mins[0 + t] = sp->min[0];
+                                    mins[4 + t] = sp->min[1];
+                                    mins[8 + t] = sp->min[2];
+                                    maxs[0 + t] = sp->max[0];
+                                    maxs[4 + t] = sp->max[1];
+                                    maxs[8 + t] = sp->max[2];
+                                }
+                                int res[4];
+                                SimdUtils::TestAABBOverlap4f(minA, maxA, mins, maxs, res);
+                                for (int t = 0; t < 4; ++t) {
+                                    if (res[t]) {
+                                        CollisionPair pair{proxy, cell[k + t]};
+                                        size_t hash = pair.hash();
+                                        if (pairHashes.insert(hash).second) {
+                                            pairs.push_back(pair);
+                                            if (pairs.size() >= max_pairs) break;
+                                        }
+                                    }
+                                }
+                                if (pairs.size() >= max_pairs) break;
+                            }
+                            // Tail process remaining
+                            for (; k < cell.size() && pairs.size() < max_pairs; ++k) {
+                                const auto& static_proxy = cell[k];
+                                if (proxy->min[0] <= static_proxy->max[0] && static_proxy->min[0] <= proxy->max[0] &&
+                                    proxy->min[1] <= static_proxy->max[1] && static_proxy->min[1] <= proxy->max[1] &&
                                     proxy->min[2] <= static_proxy->max[2] && static_proxy->min[2] <= proxy->max[2]) {
                                     CollisionPair pair{proxy, static_proxy};
                                     size_t hash = pair.hash();
