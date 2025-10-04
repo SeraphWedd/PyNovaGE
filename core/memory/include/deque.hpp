@@ -4,6 +4,9 @@
 #include <cstddef>
 #include <type_traits>
 #include <memory>
+#include <stdexcept>
+#include <utility>
+#include <iterator>
 
 namespace pynovage {
 namespace memory {
@@ -19,6 +22,104 @@ public:
     using pointer = value_type*;
     using const_pointer = const value_type*;
 
+    struct Block; // forward declaration for iterators and helpers
+
+    // Forward iterator traversing elements across blocks
+    class iterator {
+    public:
+        using iterator_category = std::forward_iterator_tag;
+        using value_type = T;
+        using difference_type = std::ptrdiff_t;
+        using pointer = T*;
+        using reference = T&;
+
+        iterator() = default;
+        iterator(Deque* owner, void* blk, size_type idx, size_type global_index)
+            : owner_(owner), blk_(static_cast<typename Deque::Block*>(blk)), idx_(idx), global_index_(global_index) {}
+
+        reference operator*() const { return blk_->data()[idx_]; }
+        pointer operator->() const { return &blk_->data()[idx_]; }
+
+        iterator& operator++() { advance(); return *this; }
+        iterator operator++(int) { iterator tmp = *this; advance(); return tmp; }
+
+        bool operator==(const iterator& other) const {
+            return owner_ == other.owner_ && global_index_ == other.global_index_;
+        }
+        bool operator!=(const iterator& other) const { return !(*this == other); }
+
+    private:
+        Deque* owner_ = nullptr;
+        typename Deque::Block* blk_ = nullptr;
+        size_type idx_ = 0;
+        size_type global_index_ = 0; // 0..size_
+
+        void advance() {
+            if (!owner_ || global_index_ >= owner_->size_) return; // end-safe
+            // Move to next element position
+            ++global_index_;
+            if (global_index_ == owner_->size_) {
+                // set to end sentinel
+                blk_ = nullptr; idx_ = 0; return;
+            }
+            // compute next local position from global offset
+            const size_type offset = owner_->front_index_ + global_index_;
+            const size_type block_jumps = offset / owner_->BLOCK_CAPACITY;
+            typename Deque::Block* b = owner_->first_block_;
+            for (size_type j = 0; j < block_jumps && b; ++j) b = b->next;
+            blk_ = b;
+            idx_ = offset % owner_->BLOCK_CAPACITY;
+        }
+
+        friend class Deque;
+    };
+
+    class const_iterator {
+    public:
+        using iterator_category = std::forward_iterator_tag;
+        using value_type = const T;
+        using difference_type = std::ptrdiff_t;
+        using pointer = const T*;
+        using reference = const T&;
+
+        const_iterator() = default;
+        const_iterator(const iterator& it)
+            : owner_(it.owner_), blk_(it.blk_), idx_(it.idx_), global_index_(it.global_index_) {}
+        const_iterator(const Deque* owner, const void* blk, size_type idx, size_type global_index)
+            : owner_(owner), blk_(static_cast<const typename Deque::Block*>(blk)), idx_(idx), global_index_(global_index) {}
+
+        reference operator*() const { return blk_->data()[idx_]; }
+        pointer operator->() const { return &blk_->data()[idx_]; }
+
+        const_iterator& operator++() { advance(); return *this; }
+        const_iterator operator++(int) { const_iterator tmp = *this; advance(); return tmp; }
+
+        bool operator==(const const_iterator& other) const {
+            return owner_ == other.owner_ && global_index_ == other.global_index_;
+        }
+        bool operator!=(const const_iterator& other) const { return !(*this == other); }
+
+    private:
+        const Deque* owner_ = nullptr;
+        const typename Deque::Block* blk_ = nullptr;
+        size_type idx_ = 0;
+        size_type global_index_ = 0; // 0..size_
+
+        void advance() {
+            if (!owner_ || global_index_ >= owner_->size_) return;
+            ++global_index_;
+            if (global_index_ == owner_->size_) { blk_ = nullptr; idx_ = 0; return; }
+            const size_type offset = owner_->front_index_ + global_index_;
+            const size_type block_jumps = offset / owner_->BLOCK_CAPACITY;
+            const typename Deque::Block* b = owner_->first_block_;
+            for (size_type j = 0; j < block_jumps && b; ++j) b = b->next;
+            blk_ = b;
+            idx_ = offset % owner_->BLOCK_CAPACITY;
+        }
+
+        friend class Deque;
+    };
+
     // Default constructor
     Deque() noexcept : allocator_(nullptr) {}
     
@@ -32,9 +133,27 @@ public:
     Deque(const Deque&) = delete;
     Deque& operator=(const Deque&) = delete;
 
-    // Basic capacity operations
+// Basic capacity operations
     bool empty() const noexcept { return size_ == 0; }
     size_type size() const noexcept { return size_; }
+
+    // Random access
+    reference operator[](size_type pos) {
+        auto [blk, idx] = block_index_for_pos(pos);
+        return blk->data()[idx];
+    }
+    const_reference operator[](size_type pos) const {
+        auto [blk, idx] = block_index_for_pos(pos);
+        return blk->data()[idx];
+    }
+    reference at(size_type pos) {
+        if (pos >= size_) throw std::out_of_range("Deque index out of range");
+        return (*this)[pos];
+    }
+    const_reference at(size_type pos) const {
+        if (pos >= size_) throw std::out_of_range("Deque index out of range");
+        return (*this)[pos];
+    }
 
     // Get first/last elements
     reference front() { 
@@ -156,6 +275,49 @@ public:
         size_--;
     }
 
+    // Iterators
+    iterator begin() {
+        if (empty()) return end();
+        return iterator(this, first_block_, front_index_, 0);
+    }
+    iterator end() { return iterator(this, nullptr, 0, size_); }
+    const_iterator begin() const { return cbegin(); }
+    const_iterator end() const { return cend(); }
+    const_iterator cbegin() const {
+        if (empty()) return cend();
+        return const_iterator(this, first_block_, front_index_, 0);
+    }
+    const_iterator cend() const { return const_iterator(this, nullptr, 0, size_); }
+
+    // Clear contents
+    void clear() {
+        if (empty()) return;
+        // Destroy elements in first block from front_index_
+        Block* b = first_block_;
+        size_type count = size_;
+        size_type idx = front_index_;
+        while (b && count > 0) {
+            const size_type destroy_from = (b == first_block_) ? idx : 0;
+            const bool is_last_block = (b == last_block_);
+            size_type destroy_to = is_last_block ? back_index_ : BLOCK_CAPACITY;
+            if (is_last_block && destroy_to == 0 && count > 0) {
+                // last block completely full
+                destroy_to = BLOCK_CAPACITY;
+            }
+            // destroy elements in [destroy_from, destroy_to)
+            for (size_type i = destroy_from; i < destroy_to && count > 0; ++i) {
+                b->data()[i].~T();
+                --count;
+            }
+            Block* next = b->next;
+            destroy_block(b);
+            b = next;
+        }
+        first_block_ = last_block_ = nullptr;
+        front_index_ = back_index_ = 0;
+        size_ = 0;
+    }
+
     template<typename... Args>
     void emplace_front(Args&&... args) {
         if (empty()) {
@@ -211,6 +373,24 @@ public:
     }
 
 private:
+    // Helpers
+    std::pair<Block*, size_type> block_index_for_pos(size_type pos) {
+        if (pos >= size_) throw std::out_of_range("Deque index out of range");
+        const size_type offset = front_index_ + pos;
+        const size_type block_jumps = offset / BLOCK_CAPACITY;
+        Block* b = first_block_;
+        for (size_type j = 0; j < block_jumps && b; ++j) b = b->next;
+        return {b, offset % BLOCK_CAPACITY};
+    }
+    std::pair<const Block*, size_type> block_index_for_pos(size_type pos) const {
+        if (pos >= size_) throw std::out_of_range("Deque index out of range");
+        const size_type offset = front_index_ + pos;
+        const size_type block_jumps = offset / BLOCK_CAPACITY;
+        const Block* b = first_block_;
+        for (size_type j = 0; j < block_jumps && b; ++j) b = b->next;
+        return {b, offset % BLOCK_CAPACITY};
+    }
+
     // Block structure for deque storage
     static constexpr size_type BLOCK_SIZE = 512;  // Bytes per block
     static constexpr size_type BLOCK_CAPACITY = BLOCK_SIZE / sizeof(T);

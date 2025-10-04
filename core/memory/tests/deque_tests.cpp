@@ -162,6 +162,82 @@ TEST(DequeTests, EmplaceOperations) {
     EXPECT_EQ(deque.back().second, 2);
 }
 
+TEST(DequeTests, RandomAccess) {
+    MockAllocator allocator;
+    Deque<int> deque(&allocator);
+
+    // Fill with some elements
+    for (int i = 0; i < 10; ++i) {
+        deque.push_back(i);
+    }
+
+    // Test operator[]
+    for (size_t i = 0; i < deque.size(); ++i) {
+        EXPECT_EQ(deque[i], i);
+    }
+
+    // Test at() with valid indices
+    for (size_t i = 0; i < deque.size(); ++i) {
+        EXPECT_EQ(deque.at(i), i);
+    }
+
+    // Test at() with invalid index
+    EXPECT_THROW(deque.at(deque.size()), std::out_of_range);
+}
+
+TEST(DequeTests, Iterators) {
+    MockAllocator allocator;
+    Deque<int> deque(&allocator);
+
+    // Test empty container
+    EXPECT_EQ(deque.begin(), deque.end());
+    EXPECT_EQ(deque.cbegin(), deque.cend());
+
+    // Fill with elements
+    for (int i = 0; i < 10; ++i) {
+        deque.push_back(i);
+    }
+
+    // Test iteration
+    int expected = 0;
+    for (const auto& value : deque) {
+        EXPECT_EQ(value, expected++);
+    }
+
+    // Test const iteration
+    const auto& const_deque = deque;
+    expected = 0;
+    for (const auto& value : const_deque) {
+        EXPECT_EQ(value, expected++);
+    }
+}
+
+TEST(DequeTests, Clear) {
+    MockAllocator allocator;
+    Deque<int> deque(&allocator);
+
+    // Test clear on empty deque
+    deque.clear();
+    EXPECT_TRUE(deque.empty());
+    EXPECT_EQ(deque.size(), 0);
+
+    // Fill with elements
+    for (int i = 0; i < 10; ++i) {
+        deque.push_back(i);
+    }
+    EXPECT_EQ(deque.size(), 10);
+
+    // Clear and verify
+    deque.clear();
+    EXPECT_TRUE(deque.empty());
+    EXPECT_EQ(deque.size(), 0);
+
+    // Verify we can still add elements after clear
+    deque.push_back(42);
+    EXPECT_EQ(deque.size(), 1);
+    EXPECT_EQ(deque.front(), 42);
+}
+
 } // namespace tests
 } // namespace memory
 } // namespace pynovage
