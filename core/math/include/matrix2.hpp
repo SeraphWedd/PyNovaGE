@@ -1,7 +1,7 @@
 #ifndef PYNOVAGE_MATH_MATRIX2_HPP
 #define PYNOVAGE_MATH_MATRIX2_HPP
 
-#include "math/simd_utils.hpp"
+#include "simd_utils.hpp"
 #include "math/vector2.hpp"
 #include "math/math_constants.hpp"
 #include <cmath>

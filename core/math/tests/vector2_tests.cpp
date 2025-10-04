@@ -1,5 +1,5 @@
 #include <gtest/gtest.h>
-#include "math/vector2.hpp"
+#include "vector2.hpp"
 #include <cmath>
 
 using namespace pynovage::math;

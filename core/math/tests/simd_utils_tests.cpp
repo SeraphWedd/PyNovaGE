@@ -1,5 +1,5 @@
 #include <gtest/gtest.h>
-#include "math/simd_utils.hpp"
+#include "simd_utils.hpp"
 #include <cmath>
 
 using namespace pynovage::math;

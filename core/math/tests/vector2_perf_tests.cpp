@@ -1,5 +1,5 @@
 #include <benchmark/benchmark.h>
-#include "math/vector2.hpp"
+#include "vector2.hpp"
 #include <vector>
 #include <chrono>
 #include <random>

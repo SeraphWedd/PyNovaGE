@@ -1,6 +1,6 @@
 #include "geometry/high_speed_collision.hpp"
 #include "geometry/intersection.hpp"
-#include "math/math_constants.hpp"
+#include "math_constants.hpp"
 #include <gtest/gtest.h>
 
 using namespace pynovage::math;

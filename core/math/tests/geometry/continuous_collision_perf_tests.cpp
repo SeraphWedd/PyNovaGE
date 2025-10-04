@@ -1,4 +1,4 @@
-#include "math/geometry/continuous_collision.hpp"
+#include "geometry/continuous_collision.hpp"
 #include <benchmark/benchmark.h>
 
 using namespace pynovage::math;

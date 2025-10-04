@@ -1,6 +1,6 @@
 #include "geometry/high_speed_collision.hpp"
 #include "geometry/intersection.hpp"
-#include "../math_constants.hpp"
+#include "../../include/math_constants.hpp"
 #include <limits>
 
 namespace pynovage {

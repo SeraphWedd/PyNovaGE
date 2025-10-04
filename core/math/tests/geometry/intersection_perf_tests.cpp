@@ -1,4 +1,4 @@
-#include "math/geometry/intersection.hpp"
+#include "geometry/intersection.hpp"
 #include <benchmark/benchmark.h>
 
 using namespace pynovage::math;

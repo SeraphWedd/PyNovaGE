@@ -1,5 +1,5 @@
 #include <benchmark/benchmark.h>
-#include "math/vector3.hpp"
+#include "vector3.hpp"
 #include "math/vector2.hpp"
 #include <vector>
 #include <random>

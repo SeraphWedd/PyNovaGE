@@ -1,7 +1,7 @@
 #ifndef PYNOVAGE_MATH_VECTOR3_HPP
 #define PYNOVAGE_MATH_VECTOR3_HPP
 
-#include "math/simd_utils.hpp"
+#include "simd_utils.hpp"
 #include <cmath>
 
 namespace pynovage {

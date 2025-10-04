@@ -1,7 +1,7 @@
 #ifndef PYNOVAGE_MATH_PRIMITIVES_HPP
 #define PYNOVAGE_MATH_PRIMITIVES_HPP
 
-#include "math/vector3.hpp"
+#include "vector3.hpp"
 #include "math/matrix3.hpp"
 #include <limits>
 
