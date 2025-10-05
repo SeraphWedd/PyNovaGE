@@ -216,6 +216,13 @@ public:
         return a + (b - a) * t;
     }
 
+    // Returns a new vector that has been reflected off the given normal
+    Vector4 reflect(const Vector4& normal) const {
+        Vector4 normalized_normal = normal.normalized();
+        float d = dot(normalized_normal);
+        return *this - normalized_normal * (2.0f * d);
+    }
+
     // Distance functions
     float distanceTo(const Vector4& other) const {
         return (*this - other).length();

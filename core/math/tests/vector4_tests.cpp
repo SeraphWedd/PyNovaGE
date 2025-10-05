@@ -203,6 +203,33 @@ TEST(Vector4Tests, ProjectReject) {
     EXPECT_FLOAT_EQ(rej.w, 0.0f);
 }
 
+TEST(Vector4Tests, Reflection) {
+    // Reflect across the YZ-plane (normal along +X)
+    Vector4 v(1.0f, 1.0f, 0.0f, 0.0f);
+    Vector4 normal = Vector4::unitX();
+    Vector4 reflected = v.reflect(normal);
+    EXPECT_FLOAT_EQ(reflected.x, -1.0f);
+    EXPECT_FLOAT_EQ(reflected.y, 1.0f);
+    EXPECT_FLOAT_EQ(reflected.z, 0.0f);
+    EXPECT_FLOAT_EQ(reflected.w, 0.0f);
+
+    // Reflect across the plane with 45-degree normal (1,1,0) normalized
+    Vector4 diagNormal(1.0f, 1.0f, 0.0f, 0.0f);
+    diagNormal = diagNormal.normalized();
+    Vector4 v2(0.0f, 1.0f, 0.0f, 0.0f);
+    Vector4 reflected2 = v2.reflect(diagNormal);
+    EXPECT_NEAR(reflected2.x, -1.0f, 1e-6f);
+    EXPECT_NEAR(reflected2.y, 0.0f, 1e-6f);
+    EXPECT_NEAR(reflected2.z, 0.0f, 1e-6f);
+    EXPECT_FLOAT_EQ(reflected2.w, 0.0f);
+
+    // Test reflection preserves length
+    Vector4 v3(2.0f, 3.0f, 4.0f, 0.0f);
+    Vector4 n3(0.0f, 1.0f, 0.0f, 0.0f);
+    Vector4 r3 = v3.reflect(n3);
+    EXPECT_NEAR(v3.length(), r3.length(), 1e-6f);
+}
+
 TEST(Vector4Tests, MinMax) {
     Vector4 a(1.0f, 4.0f, 2.0f, 5.0f);
     Vector4 b(2.0f, 3.0f, 1.0f, 6.0f);
