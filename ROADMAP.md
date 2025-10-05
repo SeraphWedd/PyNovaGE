@@ -77,6 +77,31 @@ Track A: Performance Foundation    Track B: Engine Core           Track C: High-
 - SIMD-optimized implementations
 - Vector field calculations (for particle systems)
 
+###### 1.2.1.1 Vector API Standardization [ ]
+- Common interface across all vector types
+  - Array access operator[]
+  - Stream operators for I/O
+  - Comparison operators
+  - Linear interpolation (lerp)
+  - Component-wise operations
+  - Distance and angle calculations
+  - String conversion methods
+  - Directional constants
+- Consistent naming conventions
+  - Method names (lerp vs Lerp)
+  - Directional vectors (forward vs unitZ)
+  - String methods (toString vs ToString)
+- Comprehensive documentation
+  - API examples
+  - Performance characteristics
+  - SIMD optimizations
+  - Usage guidelines
+- Extended test coverage
+  - New operations
+  - Edge cases
+  - Performance validation
+  - Cross-type interaction
+
 ##### 1.2.2 Matrix Operations [✓]
 - 2x2 matrices (2D transformations)
 - 3x3 matrices (2D homogeneous transforms)
