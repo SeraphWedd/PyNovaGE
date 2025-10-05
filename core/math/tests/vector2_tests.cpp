@@ -283,6 +283,32 @@ TEST_F(Vector2Test, DistanceAndAngle) {
     EXPECT_NEAR(right.angleTo(right), 0.0f, epsilon);
 }
 
+TEST_F(Vector2Test, ProjectionAndRejection) {
+    Vector2 v(3.0f, 3.0f);
+    Vector2 x = Vector2::unitX();
+
+    // Projection onto X-axis should keep X component and zero Y
+    Vector2 proj = v.projectOnto(x);
+    EXPECT_FLOAT_EQ(proj.x, 3.0f);
+    EXPECT_FLOAT_EQ(proj.y, 0.0f);
+
+    // Rejection from X-axis should remove X component and keep Y
+    Vector2 rej = v.rejectFrom(x);
+    EXPECT_FLOAT_EQ(rej.x, 0.0f);
+    EXPECT_FLOAT_EQ(rej.y, 3.0f);
+
+    // Projection onto zero vector should return zero
+    Vector2 zero;
+    Vector2 projZero = v.projectOnto(zero);
+    EXPECT_FLOAT_EQ(projZero.x, 0.0f);
+    EXPECT_FLOAT_EQ(projZero.y, 0.0f);
+
+    // Decomposition check: v = proj + rej
+    Vector2 sum = proj + rej;
+    EXPECT_FLOAT_EQ(sum.x, v.x);
+    EXPECT_FLOAT_EQ(sum.y, v.y);
+}
+
 TEST_F(Vector2Test, ComponentWiseOperations) {
     Vector2 a(2.0f, 3.0f);
     Vector2 b(4.0f, 2.0f);

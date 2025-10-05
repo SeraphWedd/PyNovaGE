@@ -204,6 +204,18 @@ public:
         return a + (b - a) * t;
     }
 
+    // Project this vector onto another vector
+    Vector2 projectOnto(const Vector2& other) const {
+        float otherLengthSq = other.lengthSquared();
+        if (otherLengthSq < 1e-6f) return Vector2();
+        return other * (dot(other) / otherLengthSq);
+    }
+
+    // Reject this vector from another vector (perpendicular component)
+    Vector2 rejectFrom(const Vector2& other) const {
+        return *this - projectOnto(other);
+    }
+
     // Unary operators
     Vector2 operator-() const {
         return Vector2(-x, -y);
