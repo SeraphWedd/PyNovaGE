@@ -25,7 +25,7 @@ namespace math {
  * - Perspective and orthographic projections
  * - View transformations
  */
-class Matrix4x4 {
+class Matrix4 {
 public:
     // Data storage (row-major order for easier SIMD operations)
     alignas(16) float m[4][4];
@@ -51,14 +51,14 @@ public:
     /**
      * @brief Default constructor, creates identity matrix
      */
-    Matrix4x4() {
+    Matrix4() {
         setIdentity();
     }
 
     /**
      * @brief Constructs matrix from 16 values in row-major order
      */
-    Matrix4x4(float m00, float m01, float m02, float m03,
+    Matrix4(float m00, float m01, float m02, float m03,
               float m10, float m11, float m12, float m13,
               float m20, float m21, float m22, float m23,
               float m30, float m31, float m32, float m33) {
@@ -71,15 +71,15 @@ public:
     /**
      * @brief Copy constructor
      */
-    Matrix4x4(const Matrix4x4& other) = default;
+    Matrix4(const Matrix4& other) = default;
 
     /**
      * @brief Assignment operator
      */
-    Matrix4x4& operator=(const Matrix4x4& other) = default;
+    Matrix4& operator=(const Matrix4& other) = default;
 
     // Compound assignment operators
-    Matrix4x4& operator*=(const Matrix4x4& other) {
+    Matrix4& operator*=(const Matrix4& other) {
         *this = *this * other;
         return *this;
     }
@@ -97,15 +97,15 @@ public:
     /**
      * @brief Returns the identity matrix
      */
-    static Matrix4x4 Identity() {
-        return Matrix4x4();
+    static Matrix4 identity() {
+        return Matrix4();
     }
 
     /**
      * @brief Creates a translation matrix
      */
-    static Matrix4x4 Translation(float x, float y, float z) {
-        return Matrix4x4(
+    static Matrix4 translation(float x, float y, float z) {
+        return Matrix4(
             1.0f, 0.0f, 0.0f, x,
             0.0f, 1.0f, 0.0f, y,
             0.0f, 0.0f, 1.0f, z,
@@ -116,8 +116,8 @@ public:
     /**
      * @brief Creates a scaling matrix
      */
-    static Matrix4x4 Scale(float sx, float sy, float sz) {
-        return Matrix4x4(
+    static Matrix4 scale(float sx, float sy, float sz) {
+        return Matrix4(
             sx,   0.0f, 0.0f, 0.0f,
             0.0f, sy,   0.0f, 0.0f,
             0.0f, 0.0f, sz,   0.0f,
@@ -129,10 +129,10 @@ public:
      * @brief Creates a rotation matrix around X axis
      * @param angle Rotation angle in radians
      */
-    static Matrix4x4 RotationX(float angle) {
+    static Matrix4 rotationX(float angle) {
         float c = std::cos(angle);
         float s = std::sin(angle);
-        return Matrix4x4(
+        return Matrix4(
             1.0f, 0.0f, 0.0f, 0.0f,
             0.0f, c,    -s,   0.0f,
             0.0f, s,    c,    0.0f,
@@ -144,10 +144,10 @@ public:
      * @brief Creates a rotation matrix around Y axis
      * @param angle Rotation angle in radians
      */
-    static Matrix4x4 RotationY(float angle) {
+    static Matrix4 rotationY(float angle) {
         float c = std::cos(angle);
         float s = std::sin(angle);
-        return Matrix4x4(
+        return Matrix4(
             c,    0.0f, s,    0.0f,
             0.0f, 1.0f, 0.0f, 0.0f,
             -s,   0.0f, c,    0.0f,
@@ -159,10 +159,10 @@ public:
      * @brief Creates a rotation matrix around Z axis
      * @param angle Rotation angle in radians
      */
-    static Matrix4x4 RotationZ(float angle) {
+    static Matrix4 rotationZ(float angle) {
         float c = std::cos(angle);
         float s = std::sin(angle);
-        return Matrix4x4(
+        return Matrix4(
             c,    -s,   0.0f, 0.0f,
             s,    c,    0.0f, 0.0f,
             0.0f, 0.0f, 1.0f, 0.0f,
@@ -173,8 +173,8 @@ public:
     /**
      * @brief Matrix multiplication operator
      */
-    Matrix4x4 operator*(const Matrix4x4& other) const {
-        Matrix4x4 result;
+    Matrix4 operator*(const Matrix4& other) const {
+        Matrix4 result;
         SimdUtils::MultiplyMatrix4x4(
             reinterpret_cast<const float*>(m),
             reinterpret_cast<const float*>(other.m),
@@ -229,8 +229,8 @@ public:
     /**
      * @brief Returns the transposed matrix
      */
-    Matrix4x4 transposed() const {
-        Matrix4x4 result(*this);
+    Matrix4 transposed() const {
+        Matrix4 result(*this);
         result.transpose();
         return result;
     }
@@ -258,7 +258,7 @@ public:
      * @param[out] result The inverse matrix
      * @return true if matrix was invertible, false otherwise
      */
-    bool getInverse(Matrix4x4& result) const {
+    bool getInverse(Matrix4& result) const {
         return SimdUtils::InvertMatrix4x4(
             reinterpret_cast<const float*>(m),
             reinterpret_cast<float*>(result.m)
@@ -288,19 +288,19 @@ public:
      * @param target Point to look at
      * @param up Up vector
      */
-    static Matrix4x4 LookAt(const Vector3& eye, const Vector3& target, const Vector3& up) {
+    static Matrix4 lookAt(const Vector3& eye, const Vector3& target, const Vector3& up) {
         Vector3 zaxis = (target - eye).normalized();  // Forward
         Vector3 xaxis = up.cross(zaxis).normalized(); // Right
         Vector3 yaxis = zaxis.cross(xaxis);          // Up
 
-        Matrix4x4 rotation(
+        Matrix4 rotation(
             xaxis.x, xaxis.y, xaxis.z, 0.0f,
             yaxis.x, yaxis.y, yaxis.z, 0.0f,
             zaxis.x, zaxis.y, zaxis.z, 0.0f,
             0.0f,    0.0f,    0.0f,    1.0f
         );
 
-        Matrix4x4 translation = Translation(-eye.x, -eye.y, -eye.z);
+        Matrix4 translation = translation(-eye.x, -eye.y, -eye.z);
         return rotation * translation;
     }
 
@@ -311,13 +311,13 @@ public:
      * @param near Near clipping plane
      * @param far Far clipping plane
      */
-    static Matrix4x4 Perspective(float fovY, float aspect, float near, float far) {
+    static Matrix4 perspective(float fovY, float aspect, float near, float far) {
         using namespace constants;
         float tanHalfFovY = std::tan(fovY / 2.0f);
         float f = 1.0f / tanHalfFovY;
         float nf = 1.0f / (near - far);
 
-        return Matrix4x4(
+        return Matrix4(
             f/aspect,   0.0f,       0.0f,                         0.0f,
             0.0f,       f,          0.0f,                         0.0f,
             0.0f,       0.0f,       (far+near)*nf,                (2.0f*far*near)*nf,
@@ -334,12 +334,12 @@ public:
      * @param near Near clipping plane
      * @param far Far clipping plane
      */
-    static Matrix4x4 Orthographic(float left, float right, float bottom, float top, float near, float far) {
+    static Matrix4 orthographic(float left, float right, float bottom, float top, float near, float far) {
         float rml = right - left;
         float tmb = top - bottom;
         float fmn = far - near;
 
-        return Matrix4x4(
+        return Matrix4(
             2.0f/rml,   0.0f,       0.0f,        -(right+left)/rml,
             0.0f,       2.0f/tmb,   0.0f,        -(top+bottom)/tmb,
             0.0f,       0.0f,       -2.0f/fmn,   -(far+near)/fmn,
@@ -352,12 +352,12 @@ public:
      * @param axis Rotation axis (should be normalized)
      * @param angle Rotation angle in radians
      */
-    static Matrix4x4 RotationAxis(const Vector3& axis, float angle) {
+    static Matrix4 rotationAxis(const Vector3& axis, float angle) {
         float c = std::cos(angle);
         float s = std::sin(angle);
         float t = 1.0f - c;
 
-        return Matrix4x4(
+        return Matrix4(
             t*axis.x*axis.x + c,      t*axis.x*axis.y - s*axis.z, t*axis.x*axis.z + s*axis.y, 0.0f,
             t*axis.x*axis.y + s*axis.z, t*axis.y*axis.y + c,      t*axis.y*axis.z - s*axis.x, 0.0f,
             t*axis.x*axis.z - s*axis.y, t*axis.y*axis.z + s*axis.x, t*axis.z*axis.z + c,      0.0f,
@@ -371,15 +371,15 @@ public:
      * @param pitch Rotation around X axis (radians)
      * @param roll Rotation around Z axis (radians)
      */
-    static Matrix4x4 FromEulerAngles(float yaw, float pitch, float roll) {
-        return RotationY(yaw) * RotationX(pitch) * RotationZ(roll);
+    static Matrix4 fromEulerAngles(float yaw, float pitch, float roll) {
+        return rotationY(yaw) * rotationX(pitch) * rotationZ(roll);
     }
 
     /**
      * @brief Creates a matrix from a quaternion
      * @param q Quaternion representing the rotation
      */
-    static Matrix4x4 FromQuaternion(const Quaternion& q) {
+    static Matrix4 fromQuaternion(const Quaternion& q) {
         float qx2 = q.x * q.x;
         float qy2 = q.y * q.y;
         float qz2 = q.z * q.z;
@@ -391,7 +391,7 @@ public:
         float qyw = q.y * q.w;
         float qzw = q.z * q.w;
 
-        return Matrix4x4(
+        return Matrix4(
             1.0f - 2.0f * (qy2 + qz2),     2.0f * (qxy - qzw),         2.0f * (qxz + qyw),         0.0f,
             2.0f * (qxy + qzw),         1.0f - 2.0f * (qx2 + qz2),     2.0f * (qyz - qxw),         0.0f,
             2.0f * (qxz - qyw),         2.0f * (qyz + qxw),         1.0f - 2.0f * (qx2 + qy2),    0.0f,
@@ -405,9 +405,9 @@ public:
      * @param aspect Aspect ratio (width/height)
      * @param near Near clipping plane
      */
-    static Matrix4x4 PerspectiveInfinite(float fovY, float aspect, float near) {
+    static Matrix4 perspectiveInfinite(float fovY, float aspect, float near) {
         float f = 1.0f / std::tan(fovY * 0.5f);
-        return Matrix4x4(
+        return Matrix4(
             f/aspect,   0.0f,    0.0f,    0.0f,
             0.0f,       f,       0.0f,    0.0f,
             0.0f,       0.0f,    -1.0f,   -2.0f*near,
@@ -490,7 +490,7 @@ public:
     Quaternion extractRotation() const {
         // First extract scale to normalize rotation components
         Vector3 scale = extractScale();
-        Matrix4x4 rotationOnly = *this;
+        Matrix4 rotationOnly = *this;
 
         // Remove scale by normalizing columns
         rotationOnly[0][0] /= scale.x; rotationOnly[1][0] /= scale.x; rotationOnly[2][0] /= scale.x;
@@ -562,7 +562,7 @@ public:
     /**
      * @brief Performs linear interpolation between two matrices
      */
-    static Matrix4x4 Lerp(const Matrix4x4& a, const Matrix4x4& b, float t) {
+    static Matrix4 lerp(const Matrix4& a, const Matrix4& b, float t) {
         // Extract components
         Vector3 transA = a.extractTranslation();
         Vector3 scaleA = a.extractScale();
@@ -578,7 +578,7 @@ public:
         Quaternion rot = Quaternion::Slerp(rotA, rotB, t);
 
         // Rebuild matrix: apply scale to basis columns
-        Matrix4x4 result = FromQuaternion(rot);
+        Matrix4 result = fromQuaternion(rot);
         result[0][0] *= scale.x; result[1][0] *= scale.x; result[2][0] *= scale.x;
         result[0][1] *= scale.y; result[1][1] *= scale.y; result[2][1] *= scale.y;
         result[0][2] *= scale.z; result[1][2] *= scale.z; result[2][2] *= scale.z;
@@ -591,7 +591,7 @@ public:
 };
 
 // Stream operators
-inline std::ostream& operator<<(std::ostream& os, const Matrix4x4& m) {
+inline std::ostream& operator<<(std::ostream& os, const Matrix4& m) {
     os << m.toString();
     return os;
 }

@@ -212,7 +212,7 @@ BENCHMARK(BM_Matrix2_Raw_Multiply);
 static void BM_Matrix4_Multiplication(benchmark::State& state) {
     const size_t MatrixCount = 1000000;
     auto random_floats = GenerateRandomFloats(MatrixCount * 16);
-    std::vector<Matrix4x4> matrices;
+    std::vector<Matrix4> matrices;
     matrices.reserve(MatrixCount);
     
     for (size_t i = 0; i < MatrixCount; ++i) {
@@ -265,13 +265,13 @@ BENCHMARK(BM_Matrix4_VectorMultiplication);
 // Cache performance tests for Matrix4x4
 static void BM_Matrix4_Sequential_Multiplication(benchmark::State& state) {
     const size_t MatrixCount = 1024;  // Cache-friendly size
-    std::vector<Matrix4x4> matrices(MatrixCount);
-    std::vector<Matrix4x4> results(MatrixCount);
+    std::vector<Matrix4> matrices(MatrixCount);
+    std::vector<Matrix4> results(MatrixCount);
     
     auto random_floats = GenerateRandomFloats(MatrixCount * 16);
     for (size_t i = 0; i < MatrixCount; ++i) {
         const float* row = &random_floats[i * 16];
-        matrices[i] = Matrix4x4(
+        matrices[i] = Matrix4(
             row[0],  row[1],  row[2],  row[3],
             row[4],  row[5],  row[6],  row[7],
             row[8],  row[9],  row[10], row[11],
@@ -290,14 +290,14 @@ BENCHMARK(BM_Matrix4_Sequential_Multiplication);
 
 static void BM_Matrix4_Random_Multiplication(benchmark::State& state) {
     const size_t MatrixCount = 1024;  // Same size as sequential for comparison
-    std::vector<Matrix4x4> matrices(MatrixCount);
-    std::vector<Matrix4x4> results(MatrixCount);
+    std::vector<Matrix4> matrices(MatrixCount);
+    std::vector<Matrix4> results(MatrixCount);
     std::vector<size_t> indices(MatrixCount);
     
     auto random_floats = GenerateRandomFloats(MatrixCount * 16);
     for (size_t i = 0; i < MatrixCount; ++i) {
         const float* row = &random_floats[i * 16];
-        matrices[i] = Matrix4x4(
+        matrices[i] = Matrix4(
             row[0],  row[1],  row[2],  row[3],
             row[4],  row[5],  row[6],  row[7],
             row[8],  row[9],  row[10], row[11],
