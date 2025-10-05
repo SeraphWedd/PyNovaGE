@@ -138,6 +138,11 @@ public:
         return Vector3(1.0f, 1.0f, 1.0f);
     }
 
+    // Linear interpolation between vectors
+    static Vector3 Lerp(const Vector3& a, const Vector3& b, float t) {
+        return a + (b - a) * t;
+    }
+
     static Vector3 up() {
         return Vector3(0.0f, 1.0f, 0.0f);
     }

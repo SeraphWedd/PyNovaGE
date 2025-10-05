@@ -368,6 +368,139 @@ EXPECT_NEAR(result.z, -std::sin(smallAngle), 1e-6f);
     }
 }
 
+TEST(Matrix4Tests, MatrixDecomposition) {
+    // Create a complex matrix with known translation, rotation, and scale
+    Vector3 trans(1.0f, 2.0f, 3.0f);
+    Vector3 scale(2.0f, 3.0f, 4.0f);
+    float angle = constants::quarter_pi;
+    Quaternion rot(Vector3(0.0f, 1.0f, 0.0f), angle);
+
+    Matrix4x4 transform = Matrix4x4::Translation(trans.x, trans.y, trans.z) *
+                         Matrix4x4::FromQuaternion(rot) *
+                         Matrix4x4::Scale(scale.x, scale.y, scale.z);
+
+    // Test translation extraction
+    Vector3 extractedTrans = transform.extractTranslation();
+    EXPECT_NEAR(extractedTrans.x, trans.x, 1e-6f);
+    EXPECT_NEAR(extractedTrans.y, trans.y, 1e-6f);
+    EXPECT_NEAR(extractedTrans.z, trans.z, 1e-6f);
+
+    // Test scale extraction
+    Vector3 extractedScale = transform.extractScale();
+    EXPECT_NEAR(extractedScale.x, scale.x, 1e-6f);
+    EXPECT_NEAR(extractedScale.y, scale.y, 1e-6f);
+    EXPECT_NEAR(extractedScale.z, scale.z, 1e-6f);
+
+    // Test quaternion extraction
+    Quaternion extractedRot = transform.extractRotation();
+    EXPECT_NEAR(extractedRot.w, rot.w, 1e-6f);
+    EXPECT_NEAR(extractedRot.x, rot.x, 1e-6f);
+    EXPECT_NEAR(extractedRot.y, rot.y, 1e-6f);
+    EXPECT_NEAR(extractedRot.z, rot.z, 1e-6f);
+}
+
+TEST(Matrix4Tests, BasisVectors) {
+    // Create a 90-degree Y-rotation matrix
+    Matrix4x4 rot = Matrix4x4::RotationY(constants::half_pi);
+
+    // Check basis vectors
+    Vector3 right = rot.right();
+    EXPECT_NEAR(right.x, 0.0f, 1e-6f);
+    EXPECT_NEAR(right.y, 0.0f, 1e-6f);
+    EXPECT_NEAR(right.z, -1.0f, 1e-6f);
+
+    Vector3 up = rot.up();
+    EXPECT_NEAR(up.x, 0.0f, 1e-6f);
+    EXPECT_NEAR(up.y, 1.0f, 1e-6f);
+    EXPECT_NEAR(up.z, 0.0f, 1e-6f);
+
+    Vector3 forward = rot.forward();
+    EXPECT_NEAR(forward.x, 1.0f, 1e-6f);
+    EXPECT_NEAR(forward.y, 0.0f, 1e-6f);
+    EXPECT_NEAR(forward.z, 0.0f, 1e-6f);
+}
+
+TEST(Matrix4Tests, InfinitePerspective) {
+    float fov = constants::half_pi;
+    float aspect = 16.0f/9.0f;
+    float near = 0.1f;
+
+    Matrix4x4 proj = Matrix4x4::PerspectiveInfinite(fov, aspect, near);
+
+    // Test near plane point
+    Vector4 nearPoint(0.0f, 0.0f, -near, 1.0f);
+    Vector4 result = proj * nearPoint;
+    result = result * (1.0f/result.w);  // Perspective divide
+    EXPECT_NEAR(result.z, -1.0f, 1e-6f);
+
+    // Test that z approaches 1 as points move toward infinity
+    Vector4 farPoint(0.0f, 0.0f, -1000000.0f, 1.0f);
+    result = proj * farPoint;
+    result = result * (1.0f/result.w);
+    EXPECT_NEAR(result.z, 1.0f, 1e-6f);
+}
+
+TEST(Matrix4Tests, GimbalLock) {
+    // Test extreme pitch causes gimbal lock
+    Matrix4x4 lookUp = Matrix4x4::RotationX(-constants::half_pi);
+    float yaw, pitch, roll;
+    lookUp.extractEulerAngles(yaw, pitch, roll);
+
+    EXPECT_NEAR(pitch, constants::half_pi, 1e-6f);
+    EXPECT_NEAR(roll, 0.0f, 1e-6f);
+
+    // Test matrix to quaternion conversion handles gimbal lock
+    Quaternion q = lookUp.extractRotation();
+    Vector3 up(0.0f, 1.0f, 0.0f);
+    Vector3 rotatedUp = q.RotateVector(up);
+    EXPECT_NEAR(rotatedUp.y, 0.0f, 1e-6f);
+    EXPECT_NEAR(rotatedUp.z, -1.0f, 1e-6f);
+}
+
+TEST(Matrix4Tests, MatrixInterpolation) {
+    // Create two transforms with different rotations, scales, and translations
+    Vector3 transA(0.0f, 0.0f, 0.0f);
+    Vector3 scaleA(1.0f, 1.0f, 1.0f);
+    Quaternion rotA = Quaternion::Identity();
+
+    Vector3 transB(1.0f, 2.0f, 3.0f);
+    Vector3 scaleB(2.0f, 3.0f, 4.0f);
+    Quaternion rotB(Vector3(0.0f, 1.0f, 0.0f), constants::half_pi);
+
+    Matrix4x4 a = Matrix4x4::Translation(transA.x, transA.y, transA.z) *
+                   Matrix4x4::FromQuaternion(rotA) *
+                   Matrix4x4::Scale(scaleA.x, scaleA.y, scaleA.z);
+
+    Matrix4x4 b = Matrix4x4::Translation(transB.x, transB.y, transB.z) *
+                   Matrix4x4::FromQuaternion(rotB) *
+                   Matrix4x4::Scale(scaleB.x, scaleB.y, scaleB.z);
+
+    // Test interpolation at t = 0.5
+    Matrix4x4 mid = Matrix4x4::Lerp(a, b, 0.5f);
+
+    // Extract and verify components
+    Vector3 transMid = mid.extractTranslation();
+    Vector3 scaleMid = mid.extractScale();
+    Quaternion rotMid = mid.extractRotation();
+
+    // Translation should be halfway
+    EXPECT_NEAR(transMid.x, 0.5f, 1e-6f);
+    EXPECT_NEAR(transMid.y, 1.0f, 1e-6f);
+    EXPECT_NEAR(transMid.z, 1.5f, 1e-6f);
+
+    // Scale should be halfway
+    EXPECT_NEAR(scaleMid.x, 1.5f, 1e-6f);
+    EXPECT_NEAR(scaleMid.y, 2.0f, 1e-6f);
+    EXPECT_NEAR(scaleMid.z, 2.5f, 1e-6f);
+
+    // Rotation should be halfway (45 degrees around Y)
+    Vector3 axis;
+    float angle;
+    rotMid.ToAxisAngle(axis, angle);
+    EXPECT_NEAR(angle, constants::quarter_pi, 1e-6f);
+    EXPECT_NEAR(axis.y, 1.0f, 1e-6f);
+}
+
 TEST(Matrix4Tests, TransformationIdentities) {
     // Test that rotation of 2π equals identity
     Matrix4x4 fullRotation = Matrix4x4::RotationY(constants::two_pi);
