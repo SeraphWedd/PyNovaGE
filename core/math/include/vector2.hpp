@@ -181,20 +181,16 @@ public:
 
     // Component access by index
     float& operator[](int index) {
-#ifdef _DEBUG
         if (index < 0 || index >= 2) {
             throw std::out_of_range("Vector2 index out of range");
         }
-#endif
         return (&x)[index];
     }
 
     const float& operator[](int index) const {
-#ifdef _DEBUG
         if (index < 0 || index >= 2) {
             throw std::out_of_range("Vector2 index out of range");
         }
-#endif
         return (&x)[index];
     }
 

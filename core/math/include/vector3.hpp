@@ -226,20 +226,16 @@ public:
 
     // Component access
     float& operator[](int index) {
-#ifdef _DEBUG
         if (index < 0 || index >= 3) {
             throw std::out_of_range("Vector3 index out of range");
         }
-#endif
         return (&x)[index];
     }
 
     const float& operator[](int index) const {
-#ifdef _DEBUG
         if (index < 0 || index >= 3) {
             throw std::out_of_range("Vector3 index out of range");
         }
-#endif
         return (&x)[index];
     }
 
