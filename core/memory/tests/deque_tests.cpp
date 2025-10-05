@@ -350,6 +350,75 @@ TEST(DequeTests, EraseSingleAndRange) {
     EXPECT_EQ(d[3], 7);
 }
 
+TEST(DequeTests, EraseOnEmptyThrows) {
+    pynovage::memory::tests::MockAllocator allocator;
+    pynovage::memory::Deque<int> d(&allocator);
+    EXPECT_THROW(d.erase(d.cbegin()), std::out_of_range);
+}
+
+TEST(DequeTests, EraseInvalidPositionThrows) {
+    pynovage::memory::tests::MockAllocator allocator;
+    pynovage::memory::Deque<int> d(&allocator);
+    for (int i = 0; i < 3; ++i) d.push_back(i);
+    // cend() should be invalid for erase
+    EXPECT_THROW(d.erase(d.cend()), std::out_of_range);
+}
+
+TEST(DequeTests, EraseInvalidRangeThrows) {
+    pynovage::memory::tests::MockAllocator allocator;
+    pynovage::memory::Deque<int> d(&allocator);
+    for (int i = 0; i < 5; ++i) d.push_back(i);
+
+    // start > end
+    auto a = d.cbegin();
+    auto b = d.cbegin();
+    ++a; ++a; // a at 2
+    EXPECT_THROW(d.erase(a, b), std::out_of_range);
+
+    // start == end should be no-op
+    auto start = d.cbegin();
+    EXPECT_NO_THROW(d.erase(start, start));
+    EXPECT_EQ(d.size(), 5);
+}
+
+TEST(DequeTests, AtOnEmptyThrows) {
+    pynovage::memory::tests::MockAllocator allocator;
+    const pynovage::memory::Deque<int> d(&allocator);
+    EXPECT_THROW(d.at(0), std::out_of_range);
+}
+
+TEST(DequeTests, AtBeyondEndThrows) {
+    pynovage::memory::tests::MockAllocator allocator;
+    pynovage::memory::Deque<int> d(&allocator);
+    for (int i = 0; i < 3; ++i) d.push_back(i);
+    EXPECT_THROW(d.at(3), std::out_of_range);
+    EXPECT_THROW(d.at(10), std::out_of_range);
+}
+
+TEST(DequeTests, FrontOnEmptyThrows) {
+    pynovage::memory::tests::MockAllocator allocator;
+    pynovage::memory::Deque<int> d(&allocator);
+    EXPECT_THROW(d.front(), std::out_of_range);
+}
+
+TEST(DequeTests, BackOnEmptyThrows) {
+    pynovage::memory::tests::MockAllocator allocator;
+    pynovage::memory::Deque<int> d(&allocator);
+    EXPECT_THROW(d.back(), std::out_of_range);
+}
+
+TEST(DequeTests, PopFrontOnEmptyThrows) {
+    pynovage::memory::tests::MockAllocator allocator;
+    pynovage::memory::Deque<int> d(&allocator);
+    EXPECT_THROW(d.pop_front(), std::out_of_range);
+}
+
+TEST(DequeTests, PopBackOnEmptyThrows) {
+    pynovage::memory::tests::MockAllocator allocator;
+    pynovage::memory::Deque<int> d(&allocator);
+    EXPECT_THROW(d.pop_back(), std::out_of_range);
+}
+
 } // namespace tests
 } // namespace memory
 } // namespace pynovage
