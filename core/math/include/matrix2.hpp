@@ -85,8 +85,8 @@ public:
 
     // Array subscript operators with bounds checking
     float* operator[](int row) {
-#ifdef _DEBUG
-        if (row < 0 || row > 1) {
+#ifndef NDEBUG
+        if (row < 0 || row >= 2) {
             throw std::out_of_range("Matrix2 row index out of range");
         }
 #endif
@@ -94,8 +94,8 @@ public:
     }
 
     const float* operator[](int row) const {
-#ifdef _DEBUG
-        if (row < 0 || row > 1) {
+#ifndef NDEBUG
+        if (row < 0 || row >= 2) {
             throw std::out_of_range("Matrix2 row index out of range");
         }
 #endif

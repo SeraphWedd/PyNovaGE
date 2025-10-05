@@ -419,27 +419,122 @@ float SimdUtils::DotProduct4f(const float* a, const float* b) {
 }
 
 void SimdUtils::MultiplyMatrix4x4(const float* a, const float* b, float* result) {
-    // Correct row-major matrix multiply: result[i][j] = sum_k a[i][k] * b[k][j]
+#if PYNOVAGE_MATH_HAS_AVX
+    // Use AVX for faster matrix multiplication
+    // Load the rows of matrix A
+    __m256 a_row0 = _mm256_broadcast_ps((__m128*)&a[0]);
+    __m256 a_row1 = _mm256_broadcast_ps((__m128*)&a[4]);
+    __m256 a_row2 = _mm256_broadcast_ps((__m128*)&a[8]);
+    __m256 a_row3 = _mm256_broadcast_ps((__m128*)&a[12]);
+
+    // Load matrix B into two AVX registers (each containing two columns)
+    __m256 b_col01 = _mm256_loadu_ps(&b[0]);
+    __m256 b_col23 = _mm256_loadu_ps(&b[8]);
+
+    // Process first two columns
+    __m256 row0_result = _mm256_mul_ps(a_row0, b_col01);
+    __m256 row1_result = _mm256_mul_ps(a_row1, b_col01);
+    __m256 row2_result = _mm256_mul_ps(a_row2, b_col01);
+    __m256 row3_result = _mm256_mul_ps(a_row3, b_col01);
+
+    // Process last two columns and accumulate
+    row0_result = _mm256_add_ps(row0_result, _mm256_mul_ps(a_row0, b_col23));
+    row1_result = _mm256_add_ps(row1_result, _mm256_mul_ps(a_row1, b_col23));
+    row2_result = _mm256_add_ps(row2_result, _mm256_mul_ps(a_row2, b_col23));
+    row3_result = _mm256_add_ps(row3_result, _mm256_mul_ps(a_row3, b_col23));
+
+    // Store results
+    _mm256_storeu_ps(&result[0], row0_result);
+    _mm256_storeu_ps(&result[8], row1_result);
+
+#elif PYNOVAGE_MATH_HAS_SSE
+    // SSE fallback - still much faster than scalar
     for (int i = 0; i < 4; ++i) {
+        __m128 row = _mm_loadu_ps(&a[i*4]);
+        
         for (int j = 0; j < 4; ++j) {
-            float sum = 0.0f;
-            for (int k = 0; k < 4; ++k) {
-                sum += a[i*4 + k] * b[k*4 + j];
-            }
-            result[i*4 + j] = sum;
+            // Broadcast the j-th column element to all elements
+            __m128 bCol = _mm_set_ps(b[j+12], b[j+8], b[j+4], b[j]);
+            __m128 mul = _mm_mul_ps(row, bCol);
+            
+            // Horizontal add using SSE3 hadd
+            mul = _mm_hadd_ps(mul, mul);
+            mul = _mm_hadd_ps(mul, mul);
+            
+            // Store the result
+            result[i*4 + j] = _mm_cvtss_f32(mul);
         }
     }
+#else
+    // Scalar fallback with loop unrolling for better pipelining
+    for (int i = 0; i < 4; ++i) {
+        const float* row = &a[i*4];
+        float* resultRow = &result[i*4];
+        
+        // Unrolled inner loops
+        for (int j = 0; j < 4; ++j) {
+            float sum = row[0] * b[j];
+            sum += row[1] * b[j+4];
+            sum += row[2] * b[j+8];
+            sum += row[3] * b[j+12];
+            resultRow[j] = sum;
+        }
+    }
+#endif
 }
 
 void SimdUtils::MultiplyMatrix4x4Vec4(const float* m, const float* v, float* result) {
-    // Correct row-major matrix multiply: result[i] = sum_k m[i][k] * v[k]
+#if PYNOVAGE_MATH_HAS_AVX
+    // Load vector into AVX register, broadcast to both 128-bit lanes
+    __m256 vVec = _mm256_broadcast_ps((__m128*)v);
+
+    // Process two rows at a time with AVX
+    __m256 row01 = _mm256_loadu_ps(&m[0]);   // Load first two rows
+    __m256 row23 = _mm256_loadu_ps(&m[8]);   // Load second two rows
+    
+    // Multiply and horizontal add
+    __m256 prod01 = _mm256_mul_ps(row01, vVec);
+    __m256 prod23 = _mm256_mul_ps(row23, vVec);
+    
+    // Horizontal add within 128-bit lanes
+    __m256 sum01 = _mm256_hadd_ps(prod01, prod01);
+    __m256 sum23 = _mm256_hadd_ps(prod23, prod23);
+    sum01 = _mm256_hadd_ps(sum01, sum01);
+    sum23 = _mm256_hadd_ps(sum23, sum23);
+    
+    // Extract results
+    __m128 low = _mm256_castps256_ps128(sum01);
+    __m128 high = _mm256_castps256_ps128(sum23);
+    _mm_storel_pi((__m64*)&result[0], low);   // Store first two results
+    _mm_storel_pi((__m64*)&result[2], high);  // Store second two results
+    
+#elif PYNOVAGE_MATH_HAS_SSE
+    // Load vector once
+    __m128 vVec = _mm_loadu_ps(v);
+    
     for(int i = 0; i < 4; i++) {
-        float sum = 0.0f;
-        for(int k = 0; k < 4; k++) {
-            sum += m[i*4 + k] * v[k];
-        }
+        // Load matrix row and multiply
+        __m128 row = _mm_loadu_ps(&m[i*4]);
+        __m128 prod = _mm_mul_ps(row, vVec);
+        
+        // Horizontal add with SSE3
+        prod = _mm_hadd_ps(prod, prod);
+        prod = _mm_hadd_ps(prod, prod);
+        
+        // Store result
+        result[i] = _mm_cvtss_f32(prod);
+    }
+#else
+    // Scalar version with loop unrolling
+    for(int i = 0; i < 4; i++) {
+        const float* row = &m[i*4];
+        float sum = row[0] * v[0];
+        sum += row[1] * v[1];
+        sum += row[2] * v[2];
+        sum += row[3] * v[3];
         result[i] = sum;
     }
+#endif
 }
 
 void SimdUtils::TransposeMatrix4x4(float* m) {

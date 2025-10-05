@@ -1,6 +1,8 @@
 #include <benchmark/benchmark.h>
-#include "math/matrix2.hpp"
-#include "math/vector2.hpp"
+#include <matrix2.hpp>
+#include <matrix4.hpp>
+#include <vector2.hpp>
+#include <vector4.hpp>
 #include <vector>
 #include <random>
 #include <array>
@@ -205,3 +207,114 @@ static void BM_Matrix2_Raw_Multiply(benchmark::State& state) {
     }
 }
 BENCHMARK(BM_Matrix2_Raw_Multiply);
+
+// Matrix4x4 Operation Benchmarks
+static void BM_Matrix4_Multiplication(benchmark::State& state) {
+    const size_t MatrixCount = 1000000;
+    auto random_floats = GenerateRandomFloats(MatrixCount * 16);
+    std::vector<Matrix4x4> matrices;
+    matrices.reserve(MatrixCount);
+    
+    for (size_t i = 0; i < MatrixCount; ++i) {
+        const float* row = &random_floats[i * 16];
+        matrices.emplace_back(
+            row[0],  row[1],  row[2],  row[3],
+            row[4],  row[5],  row[6],  row[7],
+            row[8],  row[9],  row[10], row[11],
+            row[12], row[13], row[14], row[15]
+        );
+    }
+    
+    size_t index = 0;
+    for (auto _ : state) {
+        Matrix4x4 result = matrices[index % (MatrixCount-1)] * matrices[(index + 1) % (MatrixCount-1)];
+        benchmark::DoNotOptimize(result);
+        index++;
+    }
+}
+BENCHMARK(BM_Matrix4_Multiplication);
+
+static void BM_Matrix4_VectorMultiplication(benchmark::State& state) {
+    const size_t Count = 1000000;
+    auto random_floats = GenerateRandomFloats(Count * 20);  // 16 for matrix, 4 for vector
+    std::vector<Matrix4x4> matrices;
+    std::vector<Vector4> vectors;
+    matrices.reserve(Count);
+    vectors.reserve(Count);
+    
+    for (size_t i = 0; i < Count; ++i) {
+        const float* row = &random_floats[i * 20];
+        matrices.emplace_back(
+            row[0],  row[1],  row[2],  row[3],
+            row[4],  row[5],  row[6],  row[7],
+            row[8],  row[9],  row[10], row[11],
+            row[12], row[13], row[14], row[15]
+        );
+        vectors.emplace_back(row[16], row[17], row[18], row[19]);
+    }
+    
+    size_t index = 0;
+    for (auto _ : state) {
+        Vector4 result = matrices[index % Count] * vectors[index % Count];
+        benchmark::DoNotOptimize(result);
+        index++;
+    }
+}
+BENCHMARK(BM_Matrix4_VectorMultiplication);
+
+// Cache performance tests for Matrix4x4
+static void BM_Matrix4_Sequential_Multiplication(benchmark::State& state) {
+    const size_t MatrixCount = 1024;  // Cache-friendly size
+    std::vector<Matrix4x4> matrices(MatrixCount);
+    std::vector<Matrix4x4> results(MatrixCount);
+    
+    auto random_floats = GenerateRandomFloats(MatrixCount * 16);
+    for (size_t i = 0; i < MatrixCount; ++i) {
+        const float* row = &random_floats[i * 16];
+        matrices[i] = Matrix4x4(
+            row[0],  row[1],  row[2],  row[3],
+            row[4],  row[5],  row[6],  row[7],
+            row[8],  row[9],  row[10], row[11],
+            row[12], row[13], row[14], row[15]
+        );
+    }
+    
+    for (auto _ : state) {
+        for (size_t i = 0; i < MatrixCount-1; ++i) {
+            results[i] = matrices[i] * matrices[i+1];
+        }
+        benchmark::DoNotOptimize(results);
+    }
+}
+BENCHMARK(BM_Matrix4_Sequential_Multiplication);
+
+static void BM_Matrix4_Random_Multiplication(benchmark::State& state) {
+    const size_t MatrixCount = 1024;  // Same size as sequential for comparison
+    std::vector<Matrix4x4> matrices(MatrixCount);
+    std::vector<Matrix4x4> results(MatrixCount);
+    std::vector<size_t> indices(MatrixCount);
+    
+    auto random_floats = GenerateRandomFloats(MatrixCount * 16);
+    for (size_t i = 0; i < MatrixCount; ++i) {
+        const float* row = &random_floats[i * 16];
+        matrices[i] = Matrix4x4(
+            row[0],  row[1],  row[2],  row[3],
+            row[4],  row[5],  row[6],  row[7],
+            row[8],  row[9],  row[10], row[11],
+            row[12], row[13], row[14], row[15]
+        );
+        indices[i] = i;
+    }
+    
+    std::random_device rd;
+    std::mt19937 gen(rd());
+    std::shuffle(indices.begin(), indices.end(), gen);
+    
+    for (auto _ : state) {
+        for (size_t i = 0; i < MatrixCount-1; ++i) {
+            results[i] = matrices[indices[i]] * matrices[indices[i+1]];
+        }
+        benchmark::DoNotOptimize(results);
+    }
+}
+BENCHMARK(BM_Matrix4_Random_Multiplication);
