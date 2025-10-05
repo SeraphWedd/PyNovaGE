@@ -5,19 +5,51 @@
 #include "vector2.hpp"
 #include "math_constants.hpp"
 #include <cmath>
+#include <stdexcept>
+#include <sstream>
+#include <iomanip>
+#include <iosfwd>
 
 namespace pynovage {
 namespace math {
 
+/**
+ * @brief A SIMD-optimized 2x2 matrix class
+ * 
+ * Provides efficient operations for 2D transformations including:
+ * - Rotations
+ * - Scaling
+ * - Linear transformations
+ * - And more...
+ */
 class Matrix2 {
 public:
-    // Row-major storage: [ m00 m01 ; m10 m11 ]
+    // Data storage (row-major order for easier SIMD operations)
+    alignas(16) float m[4];
+
+    /**
+     * @brief Default constructor, creates identity matrix
+     */
     Matrix2() { setIdentity(); }
+
+    /**
+     * @brief Constructs matrix from 4 values in row-major order
+     */
     Matrix2(float m00, float m01, float m10, float m11) {
-        m[0]=m00; m[1]=m01; m[2]=m10; m[3]=m11;
+        m[0] = m00; m[1] = m01;
+        m[2] = m10; m[3] = m11;
     }
 
-    static Matrix2 identity() { return Matrix2(1,0, 0,1); }
+    /**
+     * @brief Returns the identity matrix
+     */
+    static Matrix2 identity() {
+        return Matrix2(1.0f, 0.0f, 0.0f, 1.0f);
+    }
+    /**
+     * @brief Creates a rotation matrix
+     * @param radians Rotation angle in radians
+     */
     static Matrix2 rotation(float radians) {
         float c = std::cos(radians);
         float s = std::sin(radians);
@@ -51,8 +83,112 @@ public:
         return r;
     }
 
-    float m[4];
+    // Array subscript operators with bounds checking
+    float* operator[](int row) {
+#ifdef _DEBUG
+        if (row < 0 || row > 1) {
+            throw std::out_of_range("Matrix2 row index out of range");
+        }
+#endif
+        return &m[row * 2];
+    }
+
+    const float* operator[](int row) const {
+#ifdef _DEBUG
+        if (row < 0 || row > 1) {
+            throw std::out_of_range("Matrix2 row index out of range");
+        }
+#endif
+        return &m[row * 2];
+    }
+
+    // Basic operators
+    bool operator==(const Matrix2& other) const {
+        const float epsilon = 1e-6f;
+        return std::abs(m[0] - other.m[0]) < epsilon &&
+               std::abs(m[1] - other.m[1]) < epsilon &&
+               std::abs(m[2] - other.m[2]) < epsilon &&
+               std::abs(m[3] - other.m[3]) < epsilon;
+    }
+
+    bool operator!=(const Matrix2& other) const {
+        return !(*this == other);
+    }
+
+    // Matrix-scalar operations
+    Matrix2 operator*(float scalar) const {
+        Matrix2 result;
+        for (int i = 0; i < 4; ++i) {
+            result.m[i] = m[i] * scalar;
+        }
+        return result;
+    }
+
+    Matrix2& operator*=(float scalar) {
+        for (int i = 0; i < 4; ++i) {
+            m[i] *= scalar;
+        }
+        return *this;
+    }
+
+    // Component-wise operations
+    Matrix2 cwiseProduct(const Matrix2& other) const {
+        Matrix2 result;
+        for (int i = 0; i < 4; ++i) {
+            result.m[i] = m[i] * other.m[i];
+        }
+        return result;
+    }
+
+    Matrix2 cwiseQuotient(const Matrix2& other) const {
+        Matrix2 result;
+        for (int i = 0; i < 4; ++i) {
+            result.m[i] = m[i] / other.m[i];
+        }
+        return result;
+    }
+
+    // String conversion
+    std::string toString() const {
+        std::ostringstream ss;
+        ss << std::fixed << std::setprecision(3);
+        ss << "[" << m[0] << ", " << m[1] << "]\n";
+        ss << "[" << m[2] << ", " << m[3] << "]";
+        return ss.str();
+    }
 };
+
+// Stream operators
+inline std::ostream& operator<<(std::ostream& os, const Matrix2& m) {
+    os << m.toString();
+    return os;
+}
+
+inline std::istream& operator>>(std::istream& is, Matrix2& m) {
+    char dummy;
+    float x0, x1, y0, y1;
+
+    // Expect '[' then two numbers separated by ',' then ']'
+    is >> dummy;        // '['
+    is >> x0 >> dummy >> x1; // number , number
+    is >> dummy;        // ']'
+
+    // Consume optional newline/whitespace and next '['
+    is >> std::ws;
+    is >> dummy;        // '['
+
+    // Second row: two numbers then ']'
+    is >> y0 >> dummy >> y1;
+    is >> dummy;        // ']'
+
+    m = Matrix2(x0, x1, y0, y1);
+    return is;
+}
+
+// Scalar multiplication
+inline Matrix2 operator*(float scalar, const Matrix2& mat) {
+    return mat * scalar;
+}
 
 } // namespace math
 } // namespace pynovage

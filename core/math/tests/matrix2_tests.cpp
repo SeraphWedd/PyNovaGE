@@ -2,6 +2,8 @@
 #include "matrix2.hpp"
 #include "math_constants.hpp"
 #include <cmath>
+#include <sstream>
+#include <string>
 
 using namespace pynovage::math;
 
@@ -151,8 +153,84 @@ TEST_F(Matrix2Test, MultiplyIdentity) {
     EXPECT_FLOAT_EQ(result.m[3], m1.m[3]);
 }
 
+TEST_F(Matrix2Test, BoundsChecking) {
+    Matrix2 m(1, 2, 3, 4);
+
+    // Valid indices should work
+    EXPECT_NO_THROW({
+        float val = m[0][0];
+        val = m[0][1];
+        val = m[1][0];
+        val = m[1][1];
+    });
+
+    // Invalid row indices should throw (column bounds are not checked by design)
+    EXPECT_THROW(m[-1][0], std::out_of_range);
+    EXPECT_THROW(m[2][0], std::out_of_range);
+}
+
+TEST_F(Matrix2Test, ComponentWiseOperations) {
+    Matrix2 a(1, 2, 3, 4);
+    Matrix2 b(2, 3, 4, 5);
+
+    // Test cwiseProduct
+    Matrix2 prod = a.cwiseProduct(b);
+    EXPECT_FLOAT_EQ(prod[0][0], 2);  // 1 * 2
+    EXPECT_FLOAT_EQ(prod[0][1], 6);  // 2 * 3
+    EXPECT_FLOAT_EQ(prod[1][0], 12); // 3 * 4
+    EXPECT_FLOAT_EQ(prod[1][1], 20); // 4 * 5
+
+    // Test cwiseQuotient
+    Matrix2 quot = a.cwiseQuotient(b);
+    EXPECT_FLOAT_EQ(quot[0][0], 0.5f);  // 1 / 2
+    EXPECT_FLOAT_EQ(quot[0][1], 2.0f/3.0f);  // 2 / 3
+    EXPECT_FLOAT_EQ(quot[1][0], 3.0f/4.0f);  // 3 / 4
+    EXPECT_FLOAT_EQ(quot[1][1], 4.0f/5.0f);  // 4 / 5
+}
+
+TEST_F(Matrix2Test, StringFormatting) {
+    Matrix2 m(1.2345f, 2.3456f, 3.4567f, 4.5678f);
+    std::string str = m.toString();
+    
+    // Should format with 3 decimal places
+    EXPECT_TRUE(str.find("1.235") != std::string::npos);
+    EXPECT_TRUE(str.find("2.346") != std::string::npos);
+    EXPECT_TRUE(str.find("3.457") != std::string::npos);
+    EXPECT_TRUE(str.find("4.568") != std::string::npos);
+
+    // Should have row delimiters
+    EXPECT_TRUE(str.find("[") != std::string::npos);
+    EXPECT_TRUE(str.find("]") != std::string::npos);
+    EXPECT_TRUE(str.find("\n") != std::string::npos);
+}
+
+TEST_F(Matrix2Test, StreamOperators) {
+    Matrix2 original(1.1f, 2.2f, 3.3f, 4.4f);
+    std::stringstream ss;
+
+    // Test output operator
+    ss << original;
+    std::string str = ss.str();
+    EXPECT_TRUE(str.find("1.100") != std::string::npos);
+    EXPECT_TRUE(str.find("2.200") != std::string::npos);
+    EXPECT_TRUE(str.find("3.300") != std::string::npos);
+    EXPECT_TRUE(str.find("4.400") != std::string::npos);
+
+    // Test input operator
+    ss.clear();
+    ss.str("[1.1, 2.2]\n[3.3, 4.4]");
+    Matrix2 loaded;
+    ss >> loaded;
+
+    EXPECT_FLOAT_EQ(loaded[0][0], 1.1f);
+    EXPECT_FLOAT_EQ(loaded[0][1], 2.2f);
+    EXPECT_FLOAT_EQ(loaded[1][0], 3.3f);
+    EXPECT_FLOAT_EQ(loaded[1][1], 4.4f);
+}
+
 TEST_F(Matrix2Test, RotationOrthogonality) {
-float angle = pynovage::math::constants::pi / 6.0f;  // 30 degrees
+    float angle = pynovage::math::constants::pi / 6.0f;  // 30 degrees
+    const float epsilon = 1e-6f;
     Matrix2 rot = Matrix2::rotation(angle);
     Vector2 v1(1.0f, 0.0f);
     Vector2 v2 = rot * v1;
