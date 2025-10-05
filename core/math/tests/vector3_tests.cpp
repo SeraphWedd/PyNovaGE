@@ -366,11 +366,6 @@ TEST_F(Vector3Test, LerpFunction) {
     EXPECT_FLOAT_EQ(result1.y, 2.0f);
     EXPECT_FLOAT_EQ(result1.z, 3.0f);
 
-    // Test deprecated uppercase Lerp (should give same results)
-    Vector3 result2 = Vector3::Lerp(v1, v2, 0.5f);
-    EXPECT_FLOAT_EQ(result2.x, result1.x);
-    EXPECT_FLOAT_EQ(result2.y, result1.y);
-    EXPECT_FLOAT_EQ(result2.z, result1.z);
 
     // Test edge cases
     Vector3 result3 = Vector3::lerp(v1, v2, 0.0f);

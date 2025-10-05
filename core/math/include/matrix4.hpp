@@ -573,8 +573,8 @@ public:
         Quaternion rotB = b.extractRotation();
 
         // Interpolate components
-        Vector3 trans = Vector3::Lerp(transA, transB, t);
-        Vector3 scale = Vector3::Lerp(scaleA, scaleB, t);
+        Vector3 trans = Vector3::lerp(transA, transB, t);
+        Vector3 scale = Vector3::lerp(scaleA, scaleB, t);
         Quaternion rot = Quaternion::Slerp(rotA, rotB, t);
 
         // Rebuild matrix: apply scale to basis columns
