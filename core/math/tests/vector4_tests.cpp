@@ -58,6 +58,15 @@ TEST(Vector4Tests, ComponentAccess) {
     EXPECT_FLOAT_EQ(v[2], 3.0f);
     EXPECT_FLOAT_EQ(v[3], 4.0f);
 
+    // Test bounds checking
+    EXPECT_THROW(v[-1], std::out_of_range);
+    EXPECT_THROW(v[4], std::out_of_range);
+
+    const Vector4& cv = v;
+    EXPECT_THROW(cv[-1], std::out_of_range);
+    EXPECT_THROW(cv[4], std::out_of_range);
+
+    // Test assignment
     v[0] = 5.0f;
     EXPECT_FLOAT_EQ(v.x, 5.0f);
 }

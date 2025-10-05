@@ -3,6 +3,7 @@
 
 #include "simd_utils.hpp"
 #include <cmath>
+#include <stdexcept>
 #include <string>
 #include <sstream>
 #include <iomanip>
@@ -27,12 +28,22 @@ public:
     Vector4(const Vector4& other) = default;
     Vector4& operator=(const Vector4& other) = default;
 
-    // Component access by index
+    // Component access by index with bounds checking
     float& operator[](int index) {
+#ifdef _DEBUG
+        if (index < 0 || index > 3) {
+            throw std::out_of_range("Vector4 index out of range");
+        }
+#endif
         return (&x)[index];
     }
 
     const float& operator[](int index) const {
+#ifdef _DEBUG
+        if (index < 0 || index > 3) {
+            throw std::out_of_range("Vector4 index out of range");
+        }
+#endif
         return (&x)[index];
     }
 
@@ -147,6 +158,15 @@ public:
         return Vector4(1.0f, 1.0f, 1.0f, 1.0f);
     }
 
+    // Directional constants
+    static Vector4 up() { return Vector4(0.0f, 1.0f, 0.0f, 0.0f); }
+    static Vector4 down() { return Vector4(0.0f, -1.0f, 0.0f, 0.0f); }
+    static Vector4 right() { return Vector4(1.0f, 0.0f, 0.0f, 0.0f); }
+    static Vector4 left() { return Vector4(-1.0f, 0.0f, 0.0f, 0.0f); }
+    static Vector4 forward() { return Vector4(0.0f, 0.0f, 1.0f, 0.0f); }
+    static Vector4 backward() { return Vector4(0.0f, 0.0f, -1.0f, 0.0f); }
+
+    // Standard basis vectors
     static Vector4 unitX() { return Vector4(1.0f, 0.0f, 0.0f, 0.0f); }
     static Vector4 unitY() { return Vector4(0.0f, 1.0f, 0.0f, 0.0f); }
     static Vector4 unitZ() { return Vector4(0.0f, 0.0f, 1.0f, 0.0f); }
