@@ -170,7 +170,7 @@ TEST_F(Vector3Test, Reflection) {
 TEST_F(Vector3Test, Projection) {
     Vector3 v(2.0f, 1.0f, 0.0f);
     Vector3 onto(1.0f, 0.0f, 0.0f);
-    Vector3 projected = v.project(onto);
+    Vector3 projected = v.projectOnto(onto);
     EXPECT_NEAR(projected.x, 2.0f, epsilon);
     EXPECT_NEAR(projected.y, 0.0f, epsilon);
     EXPECT_NEAR(projected.z, 0.0f, epsilon);
@@ -268,7 +268,7 @@ TEST_F(Vector3Test, CrossProductOrthogonality) {
 TEST_F(Vector3Test, ProjectionOnZeroVector) {
     Vector3 v(1.0f, 2.0f, 3.0f);
     Vector3 zero;
-    Vector3 result = v.project(zero);
+    Vector3 result = v.projectOnto(zero);
     // Projection onto zero vector should return zero vector
     EXPECT_TRUE(result.isZero());
 }
@@ -336,6 +336,17 @@ TEST_F(Vector3Test, MinMaxOperations) {
     EXPECT_FLOAT_EQ(maxVec.x, 2.0f);
     EXPECT_FLOAT_EQ(maxVec.y, 4.0f);
     EXPECT_FLOAT_EQ(maxVec.z, 2.0f);
+
+    // Also test static min/max methods
+    Vector3 minVecS = Vector3::min(v1, v2);
+    EXPECT_FLOAT_EQ(minVecS.x, 1.0f);
+    EXPECT_FLOAT_EQ(minVecS.y, 3.0f);
+    EXPECT_FLOAT_EQ(minVecS.z, 1.0f);
+
+    Vector3 maxVecS = Vector3::max(v1, v2);
+    EXPECT_FLOAT_EQ(maxVecS.x, 2.0f);
+    EXPECT_FLOAT_EQ(maxVecS.y, 4.0f);
+    EXPECT_FLOAT_EQ(maxVecS.z, 2.0f);
 }
 
 // Distance and angle calculations

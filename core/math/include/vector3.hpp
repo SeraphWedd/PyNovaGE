@@ -133,15 +133,20 @@ public:
 
     // Advanced geometric operations
     Vector3 reflect(const Vector3& normal) const {
-        float d = dot(normal);
-        return *this - normal * (2.0f * d);
+        Vector3 n = normal.normalized();
+        float d = dot(n);
+        return *this - n * (2.0f * d);
     }
 
+    Vector3 projectOnto(const Vector3& other) const {
+        float otherLengthSq = other.lengthSquared();
+        if (otherLengthSq < 1e-6f) return Vector3();
+        return other * (dot(other) / otherLengthSq);
+    }
+
+    // For backwards compatibility - will be deprecated
     Vector3 project(const Vector3& onto) const {
-        float ontoLengthSq = onto.lengthSquared();
-        if (ontoLengthSq < 1e-6f) return Vector3();
-        float scale = dot(onto) / ontoLengthSq;
-        return onto * scale;
+        return projectOnto(onto);
     }
 
     Vector3 projectOnPlane(const Vector3& planeNormal) const {
@@ -190,6 +195,23 @@ public:
 
     static Vector3 one() {
         return Vector3(1.0f, 1.0f, 1.0f);
+    }
+
+    // Min/Max operations
+    static Vector3 min(const Vector3& a, const Vector3& b) {
+        return Vector3(
+            std::min(a.x, b.x),
+            std::min(a.y, b.y),
+            std::min(a.z, b.z)
+        );
+    }
+
+    static Vector3 max(const Vector3& a, const Vector3& b) {
+        return Vector3(
+            std::max(a.x, b.x),
+            std::max(a.y, b.y),
+            std::max(a.z, b.z)
+        );
     }
 
     // Linear interpolation between vectors
