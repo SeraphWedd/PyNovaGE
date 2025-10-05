@@ -35,16 +35,17 @@ public:
     const float* operator[](int row) const { return m[row]; }
 
     // Comparison operators
-    bool operator==(const Matrix4x4& other) const {
+    bool operator==(const Matrix4& other) const {
+        const float epsilon = 1e-6f;
         for(int i = 0; i < 4; i++) {
             for(int j = 0; j < 4; j++) {
-                if(m[i][j] != other.m[i][j]) return false;
+                if(std::abs(m[i][j] - other.m[i][j]) > epsilon) return false;
             }
         }
         return true;
     }
 
-    bool operator!=(const Matrix4x4& other) const {
+    bool operator!=(const Matrix4& other) const {
         return !(*this == other);
     }
 
@@ -171,13 +172,13 @@ public:
     }
 
     /**
-     * @brief Matrix multiplication operator
+     * @brief Matrix multiplication operator for Matrix4 * Matrix4
      */
-    Matrix4 operator*(const Matrix4& other) const {
+    friend Matrix4 operator*(const Matrix4& lhs, const Matrix4& rhs) {
         Matrix4 result;
         SimdUtils::MultiplyMatrix4x4(
-            reinterpret_cast<const float*>(m),
-            reinterpret_cast<const float*>(other.m),
+            reinterpret_cast<const float*>(lhs.m),
+            reinterpret_cast<const float*>(rhs.m),
             reinterpret_cast<float*>(result.m)
         );
         return result;
@@ -300,8 +301,8 @@ public:
             0.0f,    0.0f,    0.0f,    1.0f
         );
 
-        Matrix4 translation = translation(-eye.x, -eye.y, -eye.z);
-        return rotation * translation;
+        Matrix4 translate = Matrix4::translation(-eye.x, -eye.y, -eye.z);
+        return rotation * translate;
     }
 
     /**
