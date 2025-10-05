@@ -200,11 +200,37 @@ TEST_F(Vector2Test, ComparisonOperators) {
     Vector2 a(1.0f, 2.0f);
     Vector2 b(1.0f, 2.0f);
     Vector2 c(2.0f, 1.0f);
+    Vector2 d(2.0f, 3.0f);
 
+    // Equality
     EXPECT_TRUE(a == b);
     EXPECT_FALSE(a == c);
     EXPECT_FALSE(a != b);
     EXPECT_TRUE(a != c);
+
+    // Less than (true only if ALL components are less)
+    EXPECT_TRUE(a < d);     // (1,2) < (2,3) -- all components are less
+    EXPECT_FALSE(d < a);   // No components less
+    EXPECT_FALSE(a < b);   // Equal components
+    EXPECT_FALSE(c < d);   // Not all components less
+
+    // Less than or equal (true if ALL components are less or equal)
+    EXPECT_TRUE(a <= d);   // All components less or equal
+    EXPECT_FALSE(d <= a);  // Some components greater
+    EXPECT_TRUE(a <= b);   // All components equal
+    EXPECT_TRUE(c <= d);   // All components less or equal (2<=2, 1<=3)
+
+    // Greater than
+    EXPECT_FALSE(a > d);   // Both components less
+    EXPECT_TRUE(d > a);    // Both components greater
+    EXPECT_FALSE(a > b);   // Equal components
+    EXPECT_FALSE(c > d);   // Mixed components
+
+    // Greater than or equal
+    EXPECT_FALSE(a >= d);  // Both components less
+    EXPECT_TRUE(d >= a);   // Both components greater
+    EXPECT_TRUE(a >= b);   // Equal components
+    EXPECT_FALSE(c >= d);  // Mixed components
 }
 
 TEST_F(Vector2Test, StringConversion) {

@@ -356,6 +356,37 @@ TEST_F(Vector3Test, DistanceAndAngle) {
 }
 
 // Lerp function tests
+TEST_F(Vector3Test, ComparisonOperators) {
+    Vector3 a(1.0f, 2.0f, 3.0f);
+    Vector3 b(1.0f, 2.0f, 3.0f);
+    Vector3 c(2.0f, 1.0f, 4.0f);
+    Vector3 d(2.0f, 3.0f, 4.0f);
+
+    // Less than (true only if ALL components are less)
+    EXPECT_TRUE(a < d);     // (1,2,3) < (2,3,4) -- all components are less
+    EXPECT_FALSE(d < a);   // No components less
+    EXPECT_FALSE(a < b);   // Equal components
+    EXPECT_FALSE(c < d);   // Not all components less
+
+    // Less than or equal (true if ALL components are less or equal)
+    EXPECT_TRUE(a <= d);   // All components less or equal
+    EXPECT_FALSE(d <= a);  // Some components greater
+    EXPECT_TRUE(a <= b);   // All components equal
+    EXPECT_TRUE(c <= d);   // All components less or equal (2<=2, 1<=3, 4<=4)
+
+    // Greater than
+    EXPECT_FALSE(a > d);   // All components less
+    EXPECT_TRUE(d > a);    // All components greater
+    EXPECT_FALSE(a > b);   // Equal components
+    EXPECT_FALSE(c > d);   // Mixed components
+
+    // Greater than or equal
+    EXPECT_FALSE(a >= d);  // All components less
+    EXPECT_TRUE(d >= a);   // All components greater
+    EXPECT_TRUE(a >= b);   // Equal components
+    EXPECT_FALSE(c >= d);  // Mixed components
+}
+
 TEST_F(Vector3Test, LerpFunction) {
     Vector3 v1(0.0f, 0.0f, 0.0f);
     Vector3 v2(2.0f, 4.0f, 6.0f);
