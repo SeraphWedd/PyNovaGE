@@ -277,6 +277,46 @@ public:
      * @param result Array to store 4 boolean results (as integers)
      */
     static void TestAABBOverlap4f(const float* min_a, const float* max_a, const float* mins, const float* maxs, int* result);
+
+    /**
+     * @brief Performs four float additions using SIMD if available
+     * @param a First set of four floats
+     * @param b Second set of four floats
+     * @param result Result of component-wise addition
+     */
+    static void Add4f(const float* a, const float* b, float* result);
+
+    /**
+     * @brief Performs four float subtractions using SIMD if available
+     * @param a First set of four floats
+     * @param b Second set of four floats
+     * @param result Result of component-wise subtraction
+     */
+    static void Subtract4f(const float* a, const float* b, float* result);
+
+    /**
+     * @brief Performs four float multiplications using SIMD if available
+     * @param a First set of four floats
+     * @param b Second set of four floats
+     * @param result Result of component-wise multiplication
+     */
+    static void Multiply4f(const float* a, const float* b, float* result);
+
+    /**
+     * @brief Performs four float divisions using SIMD if available
+     * @param a First set of four floats
+     * @param b Second set of four floats
+     * @param result Result of component-wise division
+     */
+    static void Divide4f(const float* a, const float* b, float* result);
+
+    /**
+     * @brief Calculates dot product of two 4D vectors using SIMD if available
+     * @param a First vector
+     * @param b Second vector
+     * @return Dot product result
+     */
+    static float DotProduct4f(const float* a, const float* b);
 };
 
 } // namespace math

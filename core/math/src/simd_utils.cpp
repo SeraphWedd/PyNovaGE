@@ -347,5 +347,288 @@ void SimdUtils::TestAABBOverlap4f(const float* min_a, const float* max_a, const 
 #endif
 }
 
+void SimdUtils::Add4f(const float* a, const float* b, float* result) {
+#if PYNOVAGE_MATH_HAS_SSE
+    __m128 va = _mm_loadu_ps(a);
+    __m128 vb = _mm_loadu_ps(b);
+    __m128 vr = _mm_add_ps(va, vb);
+    _mm_storeu_ps(result, vr);
+#else
+    result[0] = a[0] + b[0];
+    result[1] = a[1] + b[1];
+    result[2] = a[2] + b[2];
+    result[3] = a[3] + b[3];
+#endif
+}
+
+void SimdUtils::Subtract4f(const float* a, const float* b, float* result) {
+#if PYNOVAGE_MATH_HAS_SSE
+    __m128 va = _mm_loadu_ps(a);
+    __m128 vb = _mm_loadu_ps(b);
+    __m128 vr = _mm_sub_ps(va, vb);
+    _mm_storeu_ps(result, vr);
+#else
+    result[0] = a[0] - b[0];
+    result[1] = a[1] - b[1];
+    result[2] = a[2] - b[2];
+    result[3] = a[3] - b[3];
+#endif
+}
+
+void SimdUtils::Multiply4f(const float* a, const float* b, float* result) {
+#if PYNOVAGE_MATH_HAS_SSE
+    __m128 va = _mm_loadu_ps(a);
+    __m128 vb = _mm_loadu_ps(b);
+    __m128 vr = _mm_mul_ps(va, vb);
+    _mm_storeu_ps(result, vr);
+#else
+    result[0] = a[0] * b[0];
+    result[1] = a[1] * b[1];
+    result[2] = a[2] * b[2];
+    result[3] = a[3] * b[3];
+#endif
+}
+
+void SimdUtils::Divide4f(const float* a, const float* b, float* result) {
+#if PYNOVAGE_MATH_HAS_SSE
+    __m128 va = _mm_loadu_ps(a);
+    __m128 vb = _mm_loadu_ps(b);
+    __m128 vr = _mm_div_ps(va, vb);
+    _mm_storeu_ps(result, vr);
+#else
+    result[0] = a[0] / b[0];
+    result[1] = a[1] / b[1];
+    result[2] = a[2] / b[2];
+    result[3] = a[3] / b[3];
+#endif
+}
+
+float SimdUtils::DotProduct4f(const float* a, const float* b) {
+#if PYNOVAGE_MATH_HAS_SSE4_1
+    __m128 va = _mm_loadu_ps(a);
+    __m128 vb = _mm_loadu_ps(b);
+    __m128 mul = _mm_mul_ps(va, vb);
+    // First horizontal add gets us (a0*b0 + a1*b1, a2*b2 + a3*b3, ...)
+    __m128 hadd1 = _mm_hadd_ps(mul, mul);
+    // Second horizontal add sums all components
+    __m128 hadd2 = _mm_hadd_ps(hadd1, hadd1);
+    return _mm_cvtss_f32(hadd2);
+#else
+    return a[0] * b[0] + a[1] * b[1] + a[2] * b[2] + a[3] * b[3];
+#endif
+}
+
+void SimdUtils::MultiplyMatrix4x4(const float* a, const float* b, float* result) {
+#if PYNOVAGE_MATH_HAS_SSE
+    __m128 row1 = _mm_loadu_ps(&a[0]);
+    __m128 row2 = _mm_loadu_ps(&a[4]);
+    __m128 row3 = _mm_loadu_ps(&a[8]);
+    __m128 row4 = _mm_loadu_ps(&a[12]);
+    
+    for(int i = 0; i < 4; i++) {
+        // Broadcast each element of the column of b
+        __m128 bCol = _mm_set_ps(b[i+12], b[i+8], b[i+4], b[i]);
+        
+        // Multiply and add
+        __m128 r1 = _mm_mul_ps(row1, bCol);
+        __m128 r2 = _mm_mul_ps(row2, bCol);
+        __m128 r3 = _mm_mul_ps(row3, bCol);
+        __m128 r4 = _mm_mul_ps(row4, bCol);
+        
+        // Horizontal sum
+        __m128 sum12 = _mm_hadd_ps(r1, r2);
+        __m128 sum34 = _mm_hadd_ps(r3, r4);
+        __m128 sum = _mm_hadd_ps(sum12, sum34);
+        
+        // Store the results
+        _mm_storeu_ps(&result[i*4], sum);
+    }
+#else
+    // Naive implementation
+    for(int i = 0; i < 4; i++) {
+        for(int j = 0; j < 4; j++) {
+            float sum = 0;
+            for(int k = 0; k < 4; k++) {
+                sum += a[i*4 + k] * b[k*4 + j];
+            }
+            result[i*4 + j] = sum;
+        }
+    }
+#endif
+}
+
+void SimdUtils::MultiplyMatrix4x4Vec4(const float* m, const float* v, float* result) {
+#if PYNOVAGE_MATH_HAS_SSE
+    __m128 vec = _mm_loadu_ps(v);
+    __m128 row1 = _mm_loadu_ps(&m[0]);
+    __m128 row2 = _mm_loadu_ps(&m[4]);
+    __m128 row3 = _mm_loadu_ps(&m[8]);
+    __m128 row4 = _mm_loadu_ps(&m[12]);
+    
+    __m128 mul1 = _mm_mul_ps(row1, vec);
+    __m128 mul2 = _mm_mul_ps(row2, vec);
+    __m128 mul3 = _mm_mul_ps(row3, vec);
+    __m128 mul4 = _mm_mul_ps(row4, vec);
+    
+    __m128 sum12 = _mm_hadd_ps(mul1, mul2);
+    __m128 sum34 = _mm_hadd_ps(mul3, mul4);
+    __m128 sum = _mm_hadd_ps(sum12, sum34);
+    
+    _mm_storeu_ps(result, sum);
+#else
+    for(int i = 0; i < 4; i++) {
+        result[i] = m[i*4]*v[0] + m[i*4+1]*v[1] + m[i*4+2]*v[2] + m[i*4+3]*v[3];
+    }
+#endif
+}
+
+void SimdUtils::TransposeMatrix4x4(float* m) {
+#if PYNOVAGE_MATH_HAS_SSE
+    __m128 row1 = _mm_loadu_ps(&m[0]);
+    __m128 row2 = _mm_loadu_ps(&m[4]);
+    __m128 row3 = _mm_loadu_ps(&m[8]);
+    __m128 row4 = _mm_loadu_ps(&m[12]);
+    
+    _MM_TRANSPOSE4_PS(row1, row2, row3, row4);
+    
+    _mm_storeu_ps(&m[0], row1);
+    _mm_storeu_ps(&m[4], row2);
+    _mm_storeu_ps(&m[8], row3);
+    _mm_storeu_ps(&m[12], row4);
+#else
+    float tmp;
+    // Swap elements across diagonal
+    for (int i = 0; i < 4; i++) {
+        for (int j = i + 1; j < 4; j++) {
+            tmp = m[i*4 + j];
+            m[i*4 + j] = m[j*4 + i];
+            m[j*4 + i] = tmp;
+        }
+    }
+#endif
+}
+
+float SimdUtils::DeterminantMatrix4x4(const float* m) {
+    // Using Laplace expansion along first row
+    float cofactor0 = m[0] * (
+        m[5] * (m[10]*m[15] - m[11]*m[14]) -
+        m[6] * (m[9]*m[15] - m[11]*m[13]) +
+        m[7] * (m[9]*m[14] - m[10]*m[13])
+    );
+    float cofactor1 = -m[1] * (
+        m[4] * (m[10]*m[15] - m[11]*m[14]) -
+        m[6] * (m[8]*m[15] - m[11]*m[12]) +
+        m[7] * (m[8]*m[14] - m[10]*m[12])
+    );
+    float cofactor2 = m[2] * (
+        m[4] * (m[9]*m[15] - m[11]*m[13]) -
+        m[5] * (m[8]*m[15] - m[11]*m[12]) +
+        m[7] * (m[8]*m[13] - m[9]*m[12])
+    );
+    float cofactor3 = -m[3] * (
+        m[4] * (m[9]*m[14] - m[10]*m[13]) -
+        m[5] * (m[8]*m[14] - m[10]*m[12]) +
+        m[6] * (m[8]*m[13] - m[9]*m[12])
+    );
+    return cofactor0 + cofactor1 + cofactor2 + cofactor3;
+}
+
+bool SimdUtils::InvertMatrix4x4(const float* m, float* result) {
+    float det = DeterminantMatrix4x4(m);
+    if (std::fabs(det) < 1e-12f) return false;
+    float invDet = 1.0f / det;
+    
+    // Calculate cofactor matrix
+    // First row
+    result[0] = (
+        m[5] * (m[10]*m[15] - m[11]*m[14]) -
+        m[6] * (m[9]*m[15] - m[11]*m[13]) +
+        m[7] * (m[9]*m[14] - m[10]*m[13])
+    ) * invDet;
+    result[1] = -(
+        m[4] * (m[10]*m[15] - m[11]*m[14]) -
+        m[6] * (m[8]*m[15] - m[11]*m[12]) +
+        m[7] * (m[8]*m[14] - m[10]*m[12])
+    ) * invDet;
+    result[2] = (
+        m[4] * (m[9]*m[15] - m[11]*m[13]) -
+        m[5] * (m[8]*m[15] - m[11]*m[12]) +
+        m[7] * (m[8]*m[13] - m[9]*m[12])
+    ) * invDet;
+    result[3] = -(
+        m[4] * (m[9]*m[14] - m[10]*m[13]) -
+        m[5] * (m[8]*m[14] - m[10]*m[12]) +
+        m[6] * (m[8]*m[13] - m[9]*m[12])
+    ) * invDet;
+
+    // Second row
+    result[4] = -(
+        m[1] * (m[10]*m[15] - m[11]*m[14]) -
+        m[2] * (m[9]*m[15] - m[11]*m[13]) +
+        m[3] * (m[9]*m[14] - m[10]*m[13])
+    ) * invDet;
+    result[5] = (
+        m[0] * (m[10]*m[15] - m[11]*m[14]) -
+        m[2] * (m[8]*m[15] - m[11]*m[12]) +
+        m[3] * (m[8]*m[14] - m[10]*m[12])
+    ) * invDet;
+    result[6] = -(
+        m[0] * (m[9]*m[15] - m[11]*m[13]) -
+        m[1] * (m[8]*m[15] - m[11]*m[12]) +
+        m[3] * (m[8]*m[13] - m[9]*m[12])
+    ) * invDet;
+    result[7] = (
+        m[0] * (m[9]*m[14] - m[10]*m[13]) -
+        m[1] * (m[8]*m[14] - m[10]*m[12]) +
+        m[2] * (m[8]*m[13] - m[9]*m[12])
+    ) * invDet;
+
+    // Third row
+    result[8] = (
+        m[1] * (m[6]*m[15] - m[7]*m[14]) -
+        m[2] * (m[5]*m[15] - m[7]*m[13]) +
+        m[3] * (m[5]*m[14] - m[6]*m[13])
+    ) * invDet;
+    result[9] = -(
+        m[0] * (m[6]*m[15] - m[7]*m[14]) -
+        m[2] * (m[4]*m[15] - m[7]*m[12]) +
+        m[3] * (m[4]*m[14] - m[6]*m[12])
+    ) * invDet;
+    result[10] = (
+        m[0] * (m[5]*m[15] - m[7]*m[13]) -
+        m[1] * (m[4]*m[15] - m[7]*m[12]) +
+        m[3] * (m[4]*m[13] - m[5]*m[12])
+    ) * invDet;
+    result[11] = -(
+        m[0] * (m[5]*m[14] - m[6]*m[13]) -
+        m[1] * (m[4]*m[14] - m[6]*m[12]) +
+        m[2] * (m[4]*m[13] - m[5]*m[12])
+    ) * invDet;
+
+    // Fourth row
+    result[12] = -(
+        m[1] * (m[6]*m[11] - m[7]*m[10]) -
+        m[2] * (m[5]*m[11] - m[7]*m[9]) +
+        m[3] * (m[5]*m[10] - m[6]*m[9])
+    ) * invDet;
+    result[13] = (
+        m[0] * (m[6]*m[11] - m[7]*m[10]) -
+        m[2] * (m[4]*m[11] - m[7]*m[8]) +
+        m[3] * (m[4]*m[10] - m[6]*m[8])
+    ) * invDet;
+    result[14] = -(
+        m[0] * (m[5]*m[11] - m[7]*m[9]) -
+        m[1] * (m[4]*m[11] - m[7]*m[8]) +
+        m[3] * (m[4]*m[9] - m[5]*m[8])
+    ) * invDet;
+    result[15] = (
+        m[0] * (m[5]*m[10] - m[6]*m[9]) -
+        m[1] * (m[4]*m[10] - m[6]*m[8]) +
+        m[2] * (m[4]*m[9] - m[5]*m[8])
+    ) * invDet;
+
+    return true;
+}
+
 } // namespace math
 } // namespace pynovage
