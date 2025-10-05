@@ -30,20 +30,16 @@ public:
 
     // Component access by index with bounds checking
     float& operator[](int index) {
-#ifndef NDEBUG
         if (index < 0 || index >= 4) {
             throw std::out_of_range("Vector4 index out of range");
         }
-#endif
         return (&x)[index];
     }
 
     const float& operator[](int index) const {
-#ifndef NDEBUG
         if (index < 0 || index >= 4) {
             throw std::out_of_range("Vector4 index out of range");
         }
-#endif
         return (&x)[index];
     }
 
