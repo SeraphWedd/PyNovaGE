@@ -1,6 +1,12 @@
 #include <gtest/gtest.h>
 #include "vector3.hpp"
 #include <cmath>
+#include <sstream>
+#include <iomanip>
+
+#ifndef M_PI
+#define M_PI 3.14159265358979323846
+#endif
 
 using namespace pynovage::math;
 
@@ -265,4 +271,115 @@ TEST_F(Vector3Test, ProjectionOnZeroVector) {
     Vector3 result = v.project(zero);
     // Projection onto zero vector should return zero vector
     EXPECT_TRUE(result.isZero());
+}
+
+// Array access bounds checking
+TEST_F(Vector3Test, ArrayAccess) {
+    Vector3 v(1.0f, 2.0f, 3.0f);
+    EXPECT_FLOAT_EQ(v[0], 1.0f);
+    EXPECT_FLOAT_EQ(v[1], 2.0f);
+    EXPECT_FLOAT_EQ(v[2], 3.0f);
+
+#ifdef _DEBUG
+    EXPECT_THROW(v[-1], std::out_of_range);
+    EXPECT_THROW(v[3], std::out_of_range);
+#endif
+}
+
+// String conversion and stream operators
+TEST_F(Vector3Test, StringConversion) {
+    Vector3 v(1.234f, 2.345f, 3.456f);
+    std::string str = v.toString();
+    // Check format with 3 decimal places
+    EXPECT_EQ(str, "(1.234, 2.345, 3.456)");
+
+    std::stringstream ss;
+    ss << v;
+    EXPECT_EQ(ss.str(), str);
+
+    Vector3 parsed;
+    ss.clear();
+    ss.str("(4.567, 5.678, 6.789)");
+    ss >> parsed;
+    EXPECT_NEAR(parsed.x, 4.567f, 0.001f);
+    EXPECT_NEAR(parsed.y, 5.678f, 0.001f);
+    EXPECT_NEAR(parsed.z, 6.789f, 0.001f);
+}
+
+// Component-wise operations
+TEST_F(Vector3Test, ComponentWiseOperations) {
+    Vector3 v1(2.0f, 3.0f, 4.0f);
+    Vector3 v2(3.0f, 2.0f, 1.0f);
+
+    Vector3 product = v1.cwiseProduct(v2);
+    EXPECT_FLOAT_EQ(product.x, 6.0f);
+    EXPECT_FLOAT_EQ(product.y, 6.0f);
+    EXPECT_FLOAT_EQ(product.z, 4.0f);
+
+    Vector3 quotient = v1.cwiseQuotient(v2);
+    EXPECT_FLOAT_EQ(quotient.x, 2.0f/3.0f);
+    EXPECT_FLOAT_EQ(quotient.y, 1.5f);
+    EXPECT_FLOAT_EQ(quotient.z, 4.0f);
+}
+
+// Min/Max operations
+TEST_F(Vector3Test, MinMaxOperations) {
+    Vector3 v1(1.0f, 4.0f, 2.0f);
+    Vector3 v2(2.0f, 3.0f, 1.0f);
+
+    Vector3 minVec = min(v1, v2);
+    EXPECT_FLOAT_EQ(minVec.x, 1.0f);
+    EXPECT_FLOAT_EQ(minVec.y, 3.0f);
+    EXPECT_FLOAT_EQ(minVec.z, 1.0f);
+
+    Vector3 maxVec = max(v1, v2);
+    EXPECT_FLOAT_EQ(maxVec.x, 2.0f);
+    EXPECT_FLOAT_EQ(maxVec.y, 4.0f);
+    EXPECT_FLOAT_EQ(maxVec.z, 2.0f);
+}
+
+// Distance and angle calculations
+TEST_F(Vector3Test, DistanceAndAngle) {
+    Vector3 v1(1.0f, 0.0f, 0.0f);
+    Vector3 v2(2.0f, 0.0f, 0.0f);
+    Vector3 v3(0.0f, 1.0f, 0.0f);
+
+    EXPECT_FLOAT_EQ(v1.distanceTo(v2), 1.0f);
+    EXPECT_FLOAT_EQ(v1.distanceSquaredTo(v2), 1.0f);
+    EXPECT_FLOAT_EQ(v1.angleTo(v3), M_PI / 2.0f);
+
+    Vector3 v4(-1.0f, 0.0f, 0.0f);
+    EXPECT_FLOAT_EQ(v1.angleTo(v4), M_PI);
+
+    Vector3 v5(1.0f, 0.0f, 0.0f);
+    EXPECT_FLOAT_EQ(v1.angleTo(v5), 0.0f);
+}
+
+// Lerp function tests
+TEST_F(Vector3Test, LerpFunction) {
+    Vector3 v1(0.0f, 0.0f, 0.0f);
+    Vector3 v2(2.0f, 4.0f, 6.0f);
+
+    // Test new lowercase lerp
+    Vector3 result1 = Vector3::lerp(v1, v2, 0.5f);
+    EXPECT_FLOAT_EQ(result1.x, 1.0f);
+    EXPECT_FLOAT_EQ(result1.y, 2.0f);
+    EXPECT_FLOAT_EQ(result1.z, 3.0f);
+
+    // Test deprecated uppercase Lerp (should give same results)
+    Vector3 result2 = Vector3::Lerp(v1, v2, 0.5f);
+    EXPECT_FLOAT_EQ(result2.x, result1.x);
+    EXPECT_FLOAT_EQ(result2.y, result1.y);
+    EXPECT_FLOAT_EQ(result2.z, result1.z);
+
+    // Test edge cases
+    Vector3 result3 = Vector3::lerp(v1, v2, 0.0f);
+    EXPECT_FLOAT_EQ(result3.x, v1.x);
+    EXPECT_FLOAT_EQ(result3.y, v1.y);
+    EXPECT_FLOAT_EQ(result3.z, v1.z);
+
+    Vector3 result4 = Vector3::lerp(v1, v2, 1.0f);
+    EXPECT_FLOAT_EQ(result4.x, v2.x);
+    EXPECT_FLOAT_EQ(result4.y, v2.y);
+    EXPECT_FLOAT_EQ(result4.z, v2.z);
 }

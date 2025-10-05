@@ -3,6 +3,11 @@
 
 #include "simd_utils.hpp"
 #include <cmath>
+#include <stdexcept>
+#include <string>
+#include <sstream>
+#include <iomanip>
+#include <iosfwd>
 
 namespace pynovage {
 namespace math {
@@ -120,6 +125,15 @@ public:
         return *this - project(planeNormal);
     }
 
+    // Component-wise operations
+    Vector3 cwiseProduct(const Vector3& other) const {
+        return Vector3(x * other.x, y * other.y, z * other.z);
+    }
+
+    Vector3 cwiseQuotient(const Vector3& other) const {
+        return Vector3(x / other.x, y / other.y, z / other.z);
+    }
+
     // Utility functions
     bool isZero() const {
         return x == 0.0f && y == 0.0f && z == 0.0f;
@@ -127,6 +141,23 @@ public:
 
     void setZero() {
         x = y = z = w = 0.0f;
+    }
+
+    // Distance and angle functions
+    float distanceTo(const Vector3& other) const {
+        return (*this - other).length();
+    }
+
+    float distanceSquaredTo(const Vector3& other) const {
+        return (*this - other).lengthSquared();
+    }
+
+    float angleTo(const Vector3& other) const {
+        float denom = length() * other.length();
+        if (denom <= 0.0f) return 0.0f;
+        float cosTheta = dot(other) / denom;
+        cosTheta = std::min(1.0f, std::max(-1.0f, cosTheta));
+        return std::acos(cosTheta);
     }
 
     // Static utility functions
@@ -139,8 +170,13 @@ public:
     }
 
     // Linear interpolation between vectors
-    static Vector3 Lerp(const Vector3& a, const Vector3& b, float t) {
+    static Vector3 lerp(const Vector3& a, const Vector3& b, float t) {
         return a + (b - a) * t;
+    }
+
+    // Deprecated: use lowercase lerp for consistency
+    static Vector3 Lerp(const Vector3& a, const Vector3& b, float t) {
+        return lerp(a, b, t);
     }
 
     static Vector3 up() {
@@ -180,12 +216,30 @@ public:
         return Vector3(0.0f, 0.0f, 1.0f);
     }
 
+    // String conversion
+    std::string toString() const {
+        std::ostringstream ss;
+        ss << std::fixed << std::setprecision(3);
+        ss << "(" << x << ", " << y << ", " << z << ")";
+        return ss.str();
+    }
+
     // Component access
     float& operator[](int index) {
+#ifdef _DEBUG
+        if (index < 0 || index >= 3) {
+            throw std::out_of_range("Vector3 index out of range");
+        }
+#endif
         return (&x)[index];
     }
 
-    float operator[](int index) const {
+    const float& operator[](int index) const {
+#ifdef _DEBUG
+        if (index < 0 || index >= 3) {
+            throw std::out_of_range("Vector3 index out of range");
+        }
+#endif
         return (&x)[index];
     }
 
@@ -209,6 +263,27 @@ inline bool operator==(const Vector3& lhs, const Vector3& rhs) {
 
 inline bool operator!=(const Vector3& lhs, const Vector3& rhs) {
     return !(lhs == rhs);
+}
+
+// Min/Max operations
+inline Vector3 min(const Vector3& a, const Vector3& b) {
+    return Vector3(std::min(a.x, b.x), std::min(a.y, b.y), std::min(a.z, b.z));
+}
+
+inline Vector3 max(const Vector3& a, const Vector3& b) {
+    return Vector3(std::max(a.x, b.x), std::max(a.y, b.y), std::max(a.z, b.z));
+}
+
+// Stream operators
+inline std::ostream& operator<<(std::ostream& os, const Vector3& v) {
+    os << v.toString();
+    return os;
+}
+
+inline std::istream& operator>>(std::istream& is, Vector3& v) {
+    char dummy;
+    is >> dummy >> v.x >> dummy >> v.y >> dummy >> v.z >> dummy;
+    return is;
 }
 
 } // namespace math
