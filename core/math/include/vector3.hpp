@@ -259,6 +259,23 @@ public:
         return (&x)[index];
     }
 
+    // Comparison operators
+    bool operator<(const Vector3& other) const {
+        return x < other.x && y < other.y && z < other.z;
+    }
+
+    bool operator<=(const Vector3& other) const {
+        return x <= other.x && y <= other.y && z <= other.z;
+    }
+
+    bool operator>(const Vector3& other) const {
+        return x > other.x && y > other.y && z > other.z;
+    }
+
+    bool operator>=(const Vector3& other) const {
+        return x >= other.x && y >= other.y && z >= other.z;
+    }
+
     float x;
     float y;
     float z;
