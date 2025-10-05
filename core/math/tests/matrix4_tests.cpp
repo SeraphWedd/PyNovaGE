@@ -6,7 +6,7 @@ using namespace pynovage::math;
 using namespace pynovage::math::constants;
 
 TEST(Matrix4Tests, DefaultConstructor) {
-    Matrix4x4 m;
+    Matrix4 m;
     // Check identity matrix
     EXPECT_FLOAT_EQ(m.m[0][0], 1.0f);
     EXPECT_FLOAT_EQ(m.m[1][1], 1.0f);
@@ -20,7 +20,7 @@ TEST(Matrix4Tests, DefaultConstructor) {
 }
 
 TEST(Matrix4Tests, TranslationMatrix) {
-    Matrix4x4 trans = Matrix4x4::Translation(2.0f, 3.0f, 4.0f);
+    Matrix4 trans = Matrix4::translation(2.0f, 3.0f, 4.0f);
     Vector3 point(1.0f, 1.0f, 1.0f);
     Vector3 result = trans.transformPoint(point);
     EXPECT_FLOAT_EQ(result.x, 3.0f);  // 1 + 2
@@ -29,7 +29,7 @@ TEST(Matrix4Tests, TranslationMatrix) {
 }
 
 TEST(Matrix4Tests, ScaleMatrix) {
-    Matrix4x4 scale = Matrix4x4::Scale(2.0f, 3.0f, 4.0f);
+    Matrix4 scale = Matrix4::scale(2.0f, 3.0f, 4.0f);
     Vector3 point(1.0f, 1.0f, 1.0f);
     Vector3 result = scale.transformPoint(point);
     EXPECT_FLOAT_EQ(result.x, 2.0f);
@@ -39,7 +39,7 @@ TEST(Matrix4Tests, ScaleMatrix) {
 
 TEST(Matrix4Tests, RotationMatrix) {
     // Test 90-degree rotation around Y axis
-    Matrix4x4 rot = Matrix4x4::RotationY(constants::half_pi);
+    Matrix4 rot = Matrix4::rotationY(constants::half_pi);
     Vector3 point(1.0f, 0.0f, 0.0f);
     Vector3 result = rot.transformPoint(point);
     EXPECT_NEAR(result.x, 0.0f, 1e-6f);
@@ -48,7 +48,7 @@ TEST(Matrix4Tests, RotationMatrix) {
 }
 
 TEST(Matrix4Tests, MatrixVectorMultiplication) {
-    Matrix4x4 mat = Matrix4x4::Translation(1.0f, 2.0f, 3.0f);
+    Matrix4 mat = Matrix4::translation(1.0f, 2.0f, 3.0f);
     Vector4 point(1.0f, 1.0f, 1.0f, 1.0f);
     Vector4 result = mat * point;
     EXPECT_FLOAT_EQ(result.x, 2.0f);
@@ -58,8 +58,8 @@ TEST(Matrix4Tests, MatrixVectorMultiplication) {
 }
 
 TEST(Matrix4Tests, CompoundMultiplication) {
-    Matrix4x4 mat1 = Matrix4x4::Translation(1.0f, 0.0f, 0.0f);
-    Matrix4x4 mat2 = Matrix4x4::Translation(0.0f, 1.0f, 0.0f);
+    Matrix4 mat1 = Matrix4::translation(1.0f, 0.0f, 0.0f);
+    Matrix4 mat2 = Matrix4::translation(0.0f, 1.0f, 0.0f);
     mat1 *= mat2;
 
     Vector4 point(0.0f, 0.0f, 0.0f, 1.0f);
@@ -71,9 +71,9 @@ TEST(Matrix4Tests, CompoundMultiplication) {
 }
 
 TEST(Matrix4Tests, Comparison) {
-    Matrix4x4 mat1;
-    Matrix4x4 mat2;
-    Matrix4x4 mat3 = Matrix4x4::Translation(1.0f, 0.0f, 0.0f);
+    Matrix4 mat1;
+    Matrix4 mat2;
+    Matrix4 mat3 = Matrix4::translation(1.0f, 0.0f, 0.0f);
 
     EXPECT_TRUE(mat1 == mat2);
     EXPECT_FALSE(mat1 != mat2);
@@ -82,7 +82,7 @@ TEST(Matrix4Tests, Comparison) {
 }
 
 TEST(Matrix4Tests, ArraySubscript) {
-    Matrix4x4 mat;
+    Matrix4 mat;
     mat[0][0] = 2.0f;
     mat[1][1] = 3.0f;
 
@@ -96,7 +96,7 @@ TEST(Matrix4Tests, LookAt) {
     Vector3 target(0.0f, 0.0f, 0.0f);
     Vector3 up(0.0f, 1.0f, 0.0f);
 
-    Matrix4x4 view = Matrix4x4::LookAt(eye, target, up);
+    Matrix4 view = Matrix4::lookAt(eye, target, up);
     
     // Eye should transform to origin in view space
     Vector4 eye_h(eye.x, eye.y, eye.z, 1.0f);
@@ -112,7 +112,7 @@ TEST(Matrix4Tests, Perspective) {
     float near = 0.1f;
     float far = 100.0f;
 
-    Matrix4x4 proj = Matrix4x4::Perspective(fov, aspect, near, far);
+    Matrix4 proj = Matrix4::perspective(fov, aspect, near, far);
 
     // Test that w' = -z for points (OpenGL-style)
     Vector4 any(0.0f, 0.0f, 2.0f, 1.0f);
@@ -121,7 +121,7 @@ TEST(Matrix4Tests, Perspective) {
 }
 
 TEST(Matrix4Tests, Orthographic) {
-    Matrix4x4 ortho = Matrix4x4::Orthographic(-1.0f, 1.0f, -1.0f, 1.0f, 0.1f, 100.0f);
+    Matrix4 ortho = Matrix4::orthographic(-1.0f, 1.0f, -1.0f, 1.0f, 0.1f, 100.0f);
 
     // Test center point
     Vector4 center(0.0f, 0.0f, 0.0f, 1.0f);
@@ -134,7 +134,7 @@ TEST(Matrix4Tests, RotationAxis) {
     Vector3 axis(1.0f, 0.0f, 0.0f);
     float angle = half_pi;
 
-    Matrix4x4 rot = Matrix4x4::RotationAxis(axis, angle);
+    Matrix4 rot = Matrix4::rotationAxis(axis, angle);
     Vector4 point(0.0f, 1.0f, 0.0f, 1.0f);
 
     Vector4 result = rot * point;
@@ -144,7 +144,7 @@ EXPECT_NEAR(result.z, 1.0f, 1e-6f);
 
 TEST(Matrix4Tests, EulerAngles) {
     // 90 degrees around Y axis should transform (0,0,1) to (1,0,0)
-    Matrix4x4 rot = Matrix4x4::FromEulerAngles(half_pi, 0.0f, 0.0f);
+    Matrix4 rot = Matrix4::fromEulerAngles(half_pi, 0.0f, 0.0f);
     Vector4 forward(0.0f, 0.0f, 1.0f, 0.0f);
 
     Vector4 result = rot * forward;
@@ -153,7 +153,7 @@ TEST(Matrix4Tests, EulerAngles) {
 }
 
 TEST(Matrix4Tests, StringFormatting) {
-    Matrix4x4 mat = Matrix4x4::Translation(1.0f, 2.0f, 3.0f);
+    Matrix4 mat = Matrix4::translation(1.0f, 2.0f, 3.0f);
     std::string str = mat.toString();
     
     // Just verify basic formatting structure
@@ -163,7 +163,7 @@ TEST(Matrix4Tests, StringFormatting) {
 }
 
 TEST(Matrix4Tests, StreamOperator) {
-    Matrix4x4 mat = Matrix4x4::Identity();
+    Matrix4 mat = Matrix4::identity();
     std::stringstream ss;
     ss << mat;
     
@@ -172,8 +172,8 @@ TEST(Matrix4Tests, StreamOperator) {
 }
 
 TEST(Matrix4Tests, InverseIdentity) {
-    Matrix4x4 identity;
-    Matrix4x4 inverse;
+    Matrix4 identity;
+    Matrix4 inverse;
     EXPECT_TRUE(identity.getInverse(inverse));
     
     // Inverse of identity should be identity
@@ -185,8 +185,8 @@ TEST(Matrix4Tests, InverseIdentity) {
 }
 
 TEST(Matrix4Tests, InverseTranslation) {
-    Matrix4x4 trans = Matrix4x4::Translation(2.0f, 3.0f, 4.0f);
-    Matrix4x4 inverse;
+    Matrix4 trans = Matrix4::translation(2.0f, 3.0f, 4.0f);
+    Matrix4 inverse;
     EXPECT_TRUE(trans.getInverse(inverse));
     
     // Test that inverse translation negates the components
@@ -195,8 +195,8 @@ TEST(Matrix4Tests, InverseTranslation) {
     EXPECT_NEAR(inverse[2][3], -4.0f, 1e-6f);
     
     // Test that trans * inverse = identity
-    Matrix4x4 result = trans * inverse;
-    Matrix4x4 identity;
+    Matrix4 result = trans * inverse;
+    Matrix4 identity;
     for (int i = 0; i < 4; ++i) {
         for (int j = 0; j < 4; ++j) {
             EXPECT_NEAR(result[i][j], identity[i][j], 1e-6f);
@@ -207,12 +207,12 @@ TEST(Matrix4Tests, InverseTranslation) {
 TEST(Matrix4Tests, InverseRotation) {
     // Rotation by 45 degrees around Y axis
     float angle = constants::pi / 4.0f;
-    Matrix4x4 rot = Matrix4x4::RotationY(angle);
-    Matrix4x4 inverse;
+    Matrix4 rot = Matrix4::rotationY(angle);
+    Matrix4 inverse;
     EXPECT_TRUE(rot.getInverse(inverse));
     
     // Inverse rotation should be equivalent to negative angle
-    Matrix4x4 negRot = Matrix4x4::RotationY(-angle);
+    Matrix4 negRot = Matrix4::rotationY(-angle);
     for (int i = 0; i < 4; ++i) {
         for (int j = 0; j < 4; ++j) {
             EXPECT_NEAR(inverse[i][j], negRot[i][j], 1e-6f);
@@ -221,8 +221,8 @@ TEST(Matrix4Tests, InverseRotation) {
 }
 
 TEST(Matrix4Tests, InverseScale) {
-    Matrix4x4 scale = Matrix4x4::Scale(2.0f, 3.0f, 4.0f);
-    Matrix4x4 inverse;
+    Matrix4 scale = Matrix4::scale(2.0f, 3.0f, 4.0f);
+    Matrix4 inverse;
     EXPECT_TRUE(scale.getInverse(inverse));
     
     // Inverse scale should be reciprocal
@@ -233,20 +233,20 @@ TEST(Matrix4Tests, InverseScale) {
 
 TEST(Matrix4Tests, NonInvertibleMatrix) {
     // Create a singular matrix (non-invertible)
-    Matrix4x4 singular(
+    Matrix4 singular(
         1.0f, 2.0f, 3.0f, 4.0f,
         2.0f, 4.0f, 6.0f, 8.0f,  // Second row is 2 * first row
         0.0f, 0.0f, 0.0f, 0.0f,
         0.0f, 0.0f, 0.0f, 1.0f
     );
-    Matrix4x4 inverse;
+    Matrix4 inverse;
     EXPECT_FALSE(singular.getInverse(inverse));
 }
 
 TEST(Matrix4Tests, TransformCompositionOrder) {
     // Test that transformations are applied in the correct order
-    Matrix4x4 translate = Matrix4x4::Translation(1.0f, 0.0f, 0.0f);
-    Matrix4x4 rotate = Matrix4x4::RotationY(constants::half_pi);
+    Matrix4 translate = Matrix4::translation(1.0f, 0.0f, 0.0f);
+    Matrix4 rotate = Matrix4::rotationY(constants::half_pi);
     
     Vector4 point(0.0f, 0.0f, 0.0f, 1.0f);
     
@@ -273,7 +273,7 @@ TEST(Matrix4Tests, ProjectionMatrixProperties) {
     float near = 0.1f;
     float far = 100.0f;
     
-    Matrix4x4 proj = Matrix4x4::Perspective(fov, aspect, near, far);
+    Matrix4 proj = Matrix4::perspective(fov, aspect, near, far);
     
     // Test near plane mapping
     Vector4 nearCenter(0.0f, 0.0f, -near, 1.0f);
@@ -304,7 +304,7 @@ TEST(Matrix4Tests, OrthographicMatrixProperties) {
     float near = 0.1f;
     float far = 100.0f;
     
-    Matrix4x4 ortho = Matrix4x4::Orthographic(left, right, bottom, top, near, far);
+    Matrix4 ortho = Matrix4::orthographic(left, right, bottom, top, near, far);
     
     // Test that corners map correctly
     Vector4 nearTopRight(right, top, -near, 1.0f);
@@ -324,13 +324,13 @@ TEST(Matrix4Tests, LookAtEdgeCases) {
     Vector3 up(0.0f, 1.0f, 0.0f);
     
     // Look down +Z
-    Matrix4x4 lookZ = Matrix4x4::LookAt(eye, Vector3(0.0f, 0.0f, 1.0f), up);
+    Matrix4 lookZ = Matrix4::lookAt(eye, Vector3(0.0f, 0.0f, 1.0f), up);
     Vector4 forward(0.0f, 0.0f, 1.0f, 0.0f);
     Vector4 result = lookZ * forward;
     EXPECT_NEAR(result.z, 1.0f, 1e-6f);
     
     // Look down +X
-    Matrix4x4 lookX = Matrix4x4::LookAt(eye, Vector3(1.0f, 0.0f, 0.0f), up);
+    Matrix4 lookX = Matrix4::lookAt(eye, Vector3(1.0f, 0.0f, 0.0f), up);
     Vector4 right(1.0f, 0.0f, 0.0f, 0.0f);
     result = lookX * right;
     EXPECT_NEAR(result.z, 1.0f, 1e-6f);
@@ -339,7 +339,7 @@ TEST(Matrix4Tests, LookAtEdgeCases) {
     Vector3 eyeUp(0.0f, 0.0f, 0.0f);
     Vector3 targetUp(0.0f, 1.0f, 0.0f);
     Vector3 alternateUp(1.0f, 0.0f, 0.0f);
-    Matrix4x4 lookUp = Matrix4x4::LookAt(eyeUp, targetUp, alternateUp);
+    Matrix4 lookUp = Matrix4::lookAt(eyeUp, targetUp, alternateUp);
     Vector4 up4(0.0f, 1.0f, 0.0f, 0.0f);
     result = lookUp * up4;
     EXPECT_NEAR(result.z, 1.0f, 1e-6f);
@@ -348,7 +348,7 @@ TEST(Matrix4Tests, LookAtEdgeCases) {
 TEST(Matrix4Tests, NumericalStability) {
     // Test numerical stability with very small rotations
     float smallAngle = 1e-5f;
-    Matrix4x4 smallRot = Matrix4x4::RotationY(smallAngle);
+    Matrix4 smallRot = Matrix4::rotationY(smallAngle);
     Vector4 right(1.0f, 0.0f, 0.0f, 0.0f);
     Vector4 result = smallRot * right;
     EXPECT_NEAR(result.x, std::cos(smallAngle), 1e-6f);
@@ -356,10 +356,10 @@ EXPECT_NEAR(result.z, -std::sin(smallAngle), 1e-6f);
     
     // Test stability with very large translations
     float largeTranslation = 1e6f;
-    Matrix4x4 largeTrans = Matrix4x4::Translation(largeTranslation, 0.0f, 0.0f);
-    Matrix4x4 inverse;
+    Matrix4 largeTrans = Matrix4::translation(largeTranslation, 0.0f, 0.0f);
+    Matrix4 inverse;
     EXPECT_TRUE(largeTrans.getInverse(inverse));
-    Matrix4x4 identity = largeTrans * inverse;
+    Matrix4 identity = largeTrans * inverse;
     for (int i = 0; i < 4; ++i) {
         for (int j = 0; j < 4; ++j) {
             float expected = (i == j) ? 1.0f : 0.0f;
@@ -375,9 +375,9 @@ TEST(Matrix4Tests, MatrixDecomposition) {
     float angle = constants::quarter_pi;
     Quaternion rot(Vector3(0.0f, 1.0f, 0.0f), angle);
 
-    Matrix4x4 transform = Matrix4x4::Translation(trans.x, trans.y, trans.z) *
-                         Matrix4x4::FromQuaternion(rot) *
-                         Matrix4x4::Scale(scale.x, scale.y, scale.z);
+    Matrix4 transform = Matrix4::translation(trans.x, trans.y, trans.z) *
+                         Matrix4::fromQuaternion(rot) *
+                         Matrix4::scale(scale.x, scale.y, scale.z);
 
     // Test translation extraction
     Vector3 extractedTrans = transform.extractTranslation();
@@ -401,7 +401,7 @@ TEST(Matrix4Tests, MatrixDecomposition) {
 
 TEST(Matrix4Tests, BasisVectors) {
     // Create a 90-degree Y-rotation matrix
-    Matrix4x4 rot = Matrix4x4::RotationY(constants::half_pi);
+    Matrix4 rot = Matrix4::rotationY(constants::half_pi);
 
     // Check basis vectors
     Vector3 right = rot.right();
@@ -425,7 +425,7 @@ TEST(Matrix4Tests, InfinitePerspective) {
     float aspect = 16.0f/9.0f;
     float near = 0.1f;
 
-    Matrix4x4 proj = Matrix4x4::PerspectiveInfinite(fov, aspect, near);
+    Matrix4 proj = Matrix4::perspectiveInfinite(fov, aspect, near);
 
     // Test near plane point
     Vector4 nearPoint(0.0f, 0.0f, -near, 1.0f);
@@ -442,7 +442,7 @@ TEST(Matrix4Tests, InfinitePerspective) {
 
 TEST(Matrix4Tests, GimbalLock) {
     // Test extreme pitch causes gimbal lock
-    Matrix4x4 lookUp = Matrix4x4::RotationX(-constants::half_pi);
+    Matrix4 lookUp = Matrix4::rotationX(-constants::half_pi);
     float yaw, pitch, roll;
     lookUp.extractEulerAngles(yaw, pitch, roll);
 
@@ -467,16 +467,16 @@ TEST(Matrix4Tests, MatrixInterpolation) {
     Vector3 scaleB(2.0f, 3.0f, 4.0f);
     Quaternion rotB(Vector3(0.0f, 1.0f, 0.0f), constants::half_pi);
 
-    Matrix4x4 a = Matrix4x4::Translation(transA.x, transA.y, transA.z) *
-                   Matrix4x4::FromQuaternion(rotA) *
-                   Matrix4x4::Scale(scaleA.x, scaleA.y, scaleA.z);
+    Matrix4 a = Matrix4::translation(transA.x, transA.y, transA.z) *
+                   Matrix4::fromQuaternion(rotA) *
+                   Matrix4::scale(scaleA.x, scaleA.y, scaleA.z);
 
-    Matrix4x4 b = Matrix4x4::Translation(transB.x, transB.y, transB.z) *
-                   Matrix4x4::FromQuaternion(rotB) *
-                   Matrix4x4::Scale(scaleB.x, scaleB.y, scaleB.z);
+    Matrix4 b = Matrix4::translation(transB.x, transB.y, transB.z) *
+                   Matrix4::fromQuaternion(rotB) *
+                   Matrix4::scale(scaleB.x, scaleB.y, scaleB.z);
 
     // Test interpolation at t = 0.5
-    Matrix4x4 mid = Matrix4x4::Lerp(a, b, 0.5f);
+    Matrix4 mid = Matrix4::lerp(a, b, 0.5f);
 
     // Extract and verify components
     Vector3 transMid = mid.extractTranslation();
@@ -503,8 +503,8 @@ TEST(Matrix4Tests, MatrixInterpolation) {
 
 TEST(Matrix4Tests, TransformationIdentities) {
     // Test that rotation of 2π equals identity
-    Matrix4x4 fullRotation = Matrix4x4::RotationY(constants::two_pi);
-    Matrix4x4 identity;
+    Matrix4 fullRotation = Matrix4::rotationY(constants::two_pi);
+    Matrix4 identity;
     for (int i = 0; i < 4; ++i) {
         for (int j = 0; j < 4; ++j) {
             EXPECT_NEAR(fullRotation[i][j], identity[i][j], 1e-5f);
@@ -512,7 +512,7 @@ TEST(Matrix4Tests, TransformationIdentities) {
     }
     
     // Test that scale by 1 equals identity
-    Matrix4x4 unityScale = Matrix4x4::Scale(1.0f, 1.0f, 1.0f);
+    Matrix4 unityScale = Matrix4::scale(1.0f, 1.0f, 1.0f);
     for (int i = 0; i < 4; ++i) {
         for (int j = 0; j < 4; ++j) {
             EXPECT_NEAR(unityScale[i][j], identity[i][j], 1e-6f);
@@ -520,7 +520,7 @@ TEST(Matrix4Tests, TransformationIdentities) {
     }
     
     // Test that zero translation equals identity
-    Matrix4x4 zeroTranslation = Matrix4x4::Translation(0.0f, 0.0f, 0.0f);
+    Matrix4 zeroTranslation = Matrix4::translation(0.0f, 0.0f, 0.0f);
     for (int i = 0; i < 4; ++i) {
         for (int j = 0; j < 4; ++j) {
             EXPECT_NEAR(zeroTranslation[i][j], identity[i][j], 1e-6f);
