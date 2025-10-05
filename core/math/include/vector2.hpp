@@ -224,6 +224,23 @@ public:
         return (&x)[index];
     }
 
+    // Comparison operators
+    bool operator<(const Vector2& other) const {
+        return x < other.x && y < other.y;
+    }
+
+    bool operator<=(const Vector2& other) const {
+        return x <= other.x && y <= other.y;
+    }
+
+    bool operator>(const Vector2& other) const {
+        return x > other.x && y > other.y;
+    }
+
+    bool operator>=(const Vector2& other) const {
+        return x >= other.x && y >= other.y;
+    }
+
     // Component access
     float x;
     float y;
