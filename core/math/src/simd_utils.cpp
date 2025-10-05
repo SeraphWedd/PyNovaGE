@@ -419,67 +419,27 @@ float SimdUtils::DotProduct4f(const float* a, const float* b) {
 }
 
 void SimdUtils::MultiplyMatrix4x4(const float* a, const float* b, float* result) {
-#if PYNOVAGE_MATH_HAS_SSE
-    __m128 row1 = _mm_loadu_ps(&a[0]);
-    __m128 row2 = _mm_loadu_ps(&a[4]);
-    __m128 row3 = _mm_loadu_ps(&a[8]);
-    __m128 row4 = _mm_loadu_ps(&a[12]);
-    
-    for(int i = 0; i < 4; i++) {
-        // Broadcast each element of the column of b
-        __m128 bCol = _mm_set_ps(b[i+12], b[i+8], b[i+4], b[i]);
-        
-        // Multiply and add
-        __m128 r1 = _mm_mul_ps(row1, bCol);
-        __m128 r2 = _mm_mul_ps(row2, bCol);
-        __m128 r3 = _mm_mul_ps(row3, bCol);
-        __m128 r4 = _mm_mul_ps(row4, bCol);
-        
-        // Horizontal sum
-        __m128 sum12 = _mm_hadd_ps(r1, r2);
-        __m128 sum34 = _mm_hadd_ps(r3, r4);
-        __m128 sum = _mm_hadd_ps(sum12, sum34);
-        
-        // Store the results
-        _mm_storeu_ps(&result[i*4], sum);
-    }
-#else
-    // Naive implementation
-    for(int i = 0; i < 4; i++) {
-        for(int j = 0; j < 4; j++) {
-            float sum = 0;
-            for(int k = 0; k < 4; k++) {
+    // Correct row-major matrix multiply: result[i][j] = sum_k a[i][k] * b[k][j]
+    for (int i = 0; i < 4; ++i) {
+        for (int j = 0; j < 4; ++j) {
+            float sum = 0.0f;
+            for (int k = 0; k < 4; ++k) {
                 sum += a[i*4 + k] * b[k*4 + j];
             }
             result[i*4 + j] = sum;
         }
     }
-#endif
 }
 
 void SimdUtils::MultiplyMatrix4x4Vec4(const float* m, const float* v, float* result) {
-#if PYNOVAGE_MATH_HAS_SSE
-    __m128 vec = _mm_loadu_ps(v);
-    __m128 row1 = _mm_loadu_ps(&m[0]);
-    __m128 row2 = _mm_loadu_ps(&m[4]);
-    __m128 row3 = _mm_loadu_ps(&m[8]);
-    __m128 row4 = _mm_loadu_ps(&m[12]);
-    
-    __m128 mul1 = _mm_mul_ps(row1, vec);
-    __m128 mul2 = _mm_mul_ps(row2, vec);
-    __m128 mul3 = _mm_mul_ps(row3, vec);
-    __m128 mul4 = _mm_mul_ps(row4, vec);
-    
-    __m128 sum12 = _mm_hadd_ps(mul1, mul2);
-    __m128 sum34 = _mm_hadd_ps(mul3, mul4);
-    __m128 sum = _mm_hadd_ps(sum12, sum34);
-    
-    _mm_storeu_ps(result, sum);
-#else
+    // Correct row-major matrix multiply: result[i] = sum_k m[i][k] * v[k]
     for(int i = 0; i < 4; i++) {
-        result[i] = m[i*4]*v[0] + m[i*4+1]*v[1] + m[i*4+2]*v[2] + m[i*4+3]*v[3];
+        float sum = 0.0f;
+        for(int k = 0; k < 4; k++) {
+            sum += m[i*4 + k] * v[k];
+        }
+        result[i] = sum;
     }
-#endif
 }
 
 void SimdUtils::TransposeMatrix4x4(float* m) {

@@ -6,6 +6,10 @@
 #include "vector3.hpp"
 #include "math_constants.hpp"
 #include <cmath>
+#include <string>
+#include <sstream>
+#include <iomanip>
+#include <ostream>
 
 namespace pynovage {
 namespace math {
@@ -24,6 +28,24 @@ class Matrix4x4 {
 public:
     // Data storage (row-major order for easier SIMD operations)
     alignas(16) float m[4][4];
+
+    // Array subscript operators
+    float* operator[](int row) { return m[row]; }
+    const float* operator[](int row) const { return m[row]; }
+
+    // Comparison operators
+    bool operator==(const Matrix4x4& other) const {
+        for(int i = 0; i < 4; i++) {
+            for(int j = 0; j < 4; j++) {
+                if(m[i][j] != other.m[i][j]) return false;
+            }
+        }
+        return true;
+    }
+
+    bool operator!=(const Matrix4x4& other) const {
+        return !(*this == other);
+    }
 
     /**
      * @brief Default constructor, creates identity matrix
@@ -54,6 +76,12 @@ public:
      * @brief Assignment operator
      */
     Matrix4x4& operator=(const Matrix4x4& other) = default;
+
+    // Compound assignment operators
+    Matrix4x4& operator*=(const Matrix4x4& other) {
+        *this = *this * other;
+        return *this;
+    }
 
     /**
      * @brief Sets this matrix to identity
@@ -235,7 +263,123 @@ public:
             reinterpret_cast<float*>(result.m)
         );
     }
+
+    // String formatting
+    std::string toString() const {
+        std::ostringstream ss;
+        ss << std::fixed << std::setprecision(3);
+        for (int i = 0; i < 4; ++i) {
+            ss << "[";
+            for (int j = 0; j < 4; ++j) {
+                ss << m[i][j];
+                if (j < 3) ss << ", ";
+            }
+            ss << "]";
+            if (i < 3) ss << "\n";
+        }
+        return ss.str();
+    }
+
+    // Additional static factory methods
+    /**
+     * @brief Creates a view matrix looking from 'eye' towards 'target'
+     * @param eye Camera position
+     * @param target Point to look at
+     * @param up Up vector
+     */
+    static Matrix4x4 LookAt(const Vector3& eye, const Vector3& target, const Vector3& up) {
+        Vector3 zaxis = (target - eye).normalized();  // Forward
+        Vector3 xaxis = up.cross(zaxis).normalized(); // Right
+        Vector3 yaxis = zaxis.cross(xaxis);          // Up
+
+        Matrix4x4 rotation(
+            xaxis.x, xaxis.y, xaxis.z, 0.0f,
+            yaxis.x, yaxis.y, yaxis.z, 0.0f,
+            zaxis.x, zaxis.y, zaxis.z, 0.0f,
+            0.0f,    0.0f,    0.0f,    1.0f
+        );
+
+        Matrix4x4 translation = Translation(-eye.x, -eye.y, -eye.z);
+        return rotation * translation;
+    }
+
+    /**
+     * @brief Creates a perspective projection matrix
+     * @param fovY Vertical field of view in radians
+     * @param aspect Aspect ratio (width/height)
+     * @param near Near clipping plane
+     * @param far Far clipping plane
+     */
+    static Matrix4x4 Perspective(float fovY, float aspect, float near, float far) {
+        using namespace constants;
+        float tanHalfFovY = std::tan(fovY / 2.0f);
+        float f = 1.0f / tanHalfFovY;
+        float nf = 1.0f / (near - far);
+
+        return Matrix4x4(
+            f/aspect,   0.0f,       0.0f,                         0.0f,
+            0.0f,       f,          0.0f,                         0.0f,
+            0.0f,       0.0f,       (far+near)*nf,                (2.0f*far*near)*nf,
+            0.0f,       0.0f,       -1.0f,                        0.0f
+        );
+    }
+
+    /**
+     * @brief Creates an orthographic projection matrix
+     * @param left Left clipping plane
+     * @param right Right clipping plane
+     * @param bottom Bottom clipping plane
+     * @param top Top clipping plane
+     * @param near Near clipping plane
+     * @param far Far clipping plane
+     */
+    static Matrix4x4 Orthographic(float left, float right, float bottom, float top, float near, float far) {
+        float rml = right - left;
+        float tmb = top - bottom;
+        float fmn = far - near;
+
+        return Matrix4x4(
+            2.0f/rml,   0.0f,       0.0f,        -(right+left)/rml,
+            0.0f,       2.0f/tmb,   0.0f,        -(top+bottom)/tmb,
+            0.0f,       0.0f,       -2.0f/fmn,   -(far+near)/fmn,
+            0.0f,       0.0f,       0.0f,        1.0f
+        );
+    }
+
+    /**
+     * @brief Creates a rotation matrix from axis and angle
+     * @param axis Rotation axis (should be normalized)
+     * @param angle Rotation angle in radians
+     */
+    static Matrix4x4 RotationAxis(const Vector3& axis, float angle) {
+        float c = std::cos(angle);
+        float s = std::sin(angle);
+        float t = 1.0f - c;
+
+        return Matrix4x4(
+            t*axis.x*axis.x + c,      t*axis.x*axis.y - s*axis.z, t*axis.x*axis.z + s*axis.y, 0.0f,
+            t*axis.x*axis.y + s*axis.z, t*axis.y*axis.y + c,      t*axis.y*axis.z - s*axis.x, 0.0f,
+            t*axis.x*axis.z - s*axis.y, t*axis.y*axis.z + s*axis.x, t*axis.z*axis.z + c,      0.0f,
+            0.0f,                      0.0f,                      0.0f,                      1.0f
+        );
+    }
+
+    /**
+     * @brief Creates a rotation matrix from Euler angles (YXZ order)
+     * @param yaw Rotation around Y axis (radians)
+     * @param pitch Rotation around X axis (radians)
+     * @param roll Rotation around Z axis (radians)
+     */
+    static Matrix4x4 FromEulerAngles(float yaw, float pitch, float roll) {
+        return RotationY(yaw) * RotationX(pitch) * RotationZ(roll);
+    }
 };
+
+// Stream operators
+inline std::ostream& operator<<(std::ostream& os, const Matrix4x4& m) {
+    os << m.toString();
+    return os;
+}
 
 } // namespace math
 } // namespace pynovage
