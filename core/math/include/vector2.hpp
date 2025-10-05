@@ -161,11 +161,15 @@ public:
 
     // Component-wise operations
     Vector2 cwiseProduct(const Vector2& other) const {
-        return Vector2(x * other.x, y * other.y);
+        Vector2 result;
+        SimdUtils::Multiply2f(&x, &other.x, &result.x);
+        return result;
     }
 
     Vector2 cwiseQuotient(const Vector2& other) const {
-        return Vector2(x / other.x, y / other.y);
+        Vector2 result;
+        SimdUtils::Divide2f(&x, &other.x, &result.x);
+        return result;
     }
 
     // String conversion

@@ -160,11 +160,15 @@ public:
 
     // Component-wise operations
     Vector3 cwiseProduct(const Vector3& other) const {
-        return Vector3(x * other.x, y * other.y, z * other.z);
+        Vector3 result;
+        SimdUtils::Multiply3f(&x, &other.x, &result.x);
+        return result;
     }
 
     Vector3 cwiseQuotient(const Vector3& other) const {
-        return Vector3(x / other.x, y / other.y, z / other.z);
+        Vector3 result;
+        SimdUtils::Divide3f(&x, &other.x, &result.x);
+        return result;
     }
 
     // Utility functions
