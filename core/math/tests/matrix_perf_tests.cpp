@@ -61,10 +61,10 @@ static void BM_Matrix2_VectorMultiplication(benchmark::State& state) {
     matrices.reserve(Count);
     vectors.reserve(Count);
     
-    for (size_t i = 0; i < Count; ++i) {
-        matrices.emplace_back(random_floats[i*6], random_floats[i*6 + 1],
-                            random_floats[i*6 + 2], random_floats[i*6 + 3]);
-        vectors.emplace_back(random_floats[i*6 + 4], random_floats[i*6 + 5]);
+    for (size_t i = 0; i < (Count * 6); i += 6) {
+        matrices.emplace_back(random_floats[i], random_floats[i + 1],
+                            random_floats[i + 2], random_floats[i + 3]);
+        vectors.emplace_back(random_floats[i + 4], random_floats[i + 5]);
     }
     
     size_t index = 0;
@@ -268,12 +268,13 @@ static void BM_Matrix4_Sequential_Multiplication(benchmark::State& state) {
     std::vector<Matrix4> results(MatrixCount);
     
     auto random_floats = GenerateRandomFloats(MatrixCount * 16);
-    for (size_t i = 0; i < (MatrixCount * 16); i += 16) {
-        matrices[i/16] = Matrix4(
-            random_floats[i],    random_floats[i+1],  random_floats[i+2],  random_floats[i+3],
-            random_floats[i+4],  random_floats[i+5],  random_floats[i+6],  random_floats[i+7],
-            random_floats[i+8],  random_floats[i+9],  random_floats[i+10], random_floats[i+11],
-            random_floats[i+12], random_floats[i+13], random_floats[i+14], random_floats[i+15]
+    for (size_t i = 0; i < MatrixCount; ++i) {
+        const size_t offset = i * 16;
+        matrices[i] = Matrix4(
+            random_floats[offset],    random_floats[offset+1],  random_floats[offset+2],  random_floats[offset+3],
+            random_floats[offset+4],  random_floats[offset+5],  random_floats[offset+6],  random_floats[offset+7],
+            random_floats[offset+8],  random_floats[offset+9],  random_floats[offset+10], random_floats[offset+11],
+            random_floats[offset+12], random_floats[offset+13], random_floats[offset+14], random_floats[offset+15]
         );
     }
     
@@ -293,12 +294,13 @@ static void BM_Matrix4_Random_Multiplication(benchmark::State& state) {
     std::vector<size_t> indices(MatrixCount);
     
     auto random_floats = GenerateRandomFloats(MatrixCount * 16);
-    for (size_t i = 0; i < (MatrixCount * 16); i += 16) {
-        matrices[i/16] = Matrix4(
-            random_floats[i],    random_floats[i+1],  random_floats[i+2],  random_floats[i+3],
-            random_floats[i+4],  random_floats[i+5],  random_floats[i+6],  random_floats[i+7],
-            random_floats[i+8],  random_floats[i+9],  random_floats[i+10], random_floats[i+11],
-            random_floats[i+12], random_floats[i+13], random_floats[i+14], random_floats[i+15]
+    for (size_t i = 0; i < MatrixCount; ++i) {
+        const size_t offset = i * 16;
+        matrices[i] = Matrix4(
+            random_floats[offset],    random_floats[offset+1],  random_floats[offset+2],  random_floats[offset+3],
+            random_floats[offset+4],  random_floats[offset+5],  random_floats[offset+6],  random_floats[offset+7],
+            random_floats[offset+8],  random_floats[offset+9],  random_floats[offset+10], random_floats[offset+11],
+            random_floats[offset+12], random_floats[offset+13], random_floats[offset+14], random_floats[offset+15]
         );
         indices[i] = i;
     }
