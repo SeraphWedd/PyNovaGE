@@ -226,19 +226,36 @@ public:
 
     // Comparison operators
     bool operator<(const Vector2& other) const {
+        // For mixed components, we want this to be false
+        // Only return true if ALL components are less
         return x < other.x && y < other.y;
     }
 
     bool operator<=(const Vector2& other) const {
+        // For mixed components, we want this to be false
+        // Only return true if ALL components are less or equal
         return x <= other.x && y <= other.y;
     }
 
     bool operator>(const Vector2& other) const {
+        // For mixed components, we want this to be false
+        // Only return true if ALL components are greater
         return x > other.x && y > other.y;
     }
 
     bool operator>=(const Vector2& other) const {
+        // For mixed components, we want this to be false
+        // Only return true if ALL components are greater or equal
         return x >= other.x && y >= other.y;
+    }
+
+    // Equality comparison
+    bool operator==(const Vector2& other) const {
+        return x == other.x && y == other.y;
+    }
+
+    bool operator!=(const Vector2& other) const {
+        return !(*this == other);
     }
 
     // Component access
@@ -251,14 +268,6 @@ inline Vector2 operator*(float scalar, const Vector2& vec) {
     return vec * scalar;
 }
 
-// Comparison operators
-inline bool operator==(const Vector2& lhs, const Vector2& rhs) {
-    return lhs.x == rhs.x && lhs.y == rhs.y;
-}
-
-inline bool operator!=(const Vector2& lhs, const Vector2& rhs) {
-    return !(lhs == rhs);
-}
 
 // Min/Max operations
 inline math::Vector2 min(const math::Vector2& a, const math::Vector2& b) {

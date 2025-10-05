@@ -261,19 +261,36 @@ public:
 
     // Comparison operators
     bool operator<(const Vector3& other) const {
+        // For mixed components, we want this to be false
+        // Only return true if ALL components are less
         return x < other.x && y < other.y && z < other.z;
     }
 
     bool operator<=(const Vector3& other) const {
+        // For mixed components, we want this to be false
+        // Only return true if ALL components are less or equal
         return x <= other.x && y <= other.y && z <= other.z;
     }
 
     bool operator>(const Vector3& other) const {
+        // For mixed components, we want this to be false
+        // Only return true if ALL components are greater
         return x > other.x && y > other.y && z > other.z;
     }
 
     bool operator>=(const Vector3& other) const {
+        // For mixed components, we want this to be false
+        // Only return true if ALL components are greater or equal
         return x >= other.x && y >= other.y && z >= other.z;
+    }
+
+    // Equality comparison
+    bool operator==(const Vector3& other) const {
+        return x == other.x && y == other.y && z == other.z;
+    }
+
+    bool operator!=(const Vector3& other) const {
+        return !(*this == other);
     }
 
     float x;
@@ -289,14 +306,6 @@ inline Vector3 operator*(float scalar, const Vector3& vec) {
     return vec * scalar;
 }
 
-// Comparison operators
-inline bool operator==(const Vector3& lhs, const Vector3& rhs) {
-    return lhs.x == rhs.x && lhs.y == rhs.y && lhs.z == rhs.z;
-}
-
-inline bool operator!=(const Vector3& lhs, const Vector3& rhs) {
-    return !(lhs == rhs);
-}
 
 // Min/Max operations
 inline Vector3 min(const Vector3& a, const Vector3& b) {
