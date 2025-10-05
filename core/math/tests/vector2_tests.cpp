@@ -1,6 +1,9 @@
 #include <gtest/gtest.h>
 #include "vector2.hpp"
+#include "math_constants.hpp"
 #include <cmath>
+#include <sstream>
+#include <stdexcept>
 
 using namespace pynovage::math;
 
@@ -172,4 +175,130 @@ TEST_F(Vector2Test, LargeValues) {
     Vector2 large(1e6f, 2e6f);
     Vector2 normalized = large.normalized();
     EXPECT_NEAR(normalized.length(), 1.0f, epsilon);
+}
+
+// New functionality tests
+TEST_F(Vector2Test, ArrayAccess) {
+    Vector2 v(1.0f, 2.0f);
+    EXPECT_FLOAT_EQ(v[0], 1.0f);
+    EXPECT_FLOAT_EQ(v[1], 2.0f);
+
+    // Test mutability
+    v[0] = 3.0f;
+    v[1] = 4.0f;
+    EXPECT_FLOAT_EQ(v.x, 3.0f);
+    EXPECT_FLOAT_EQ(v.y, 4.0f);
+
+#ifdef _DEBUG
+    // Test bounds checking
+    EXPECT_THROW(v[-1], std::out_of_range);
+    EXPECT_THROW(v[2], std::out_of_range);
+#endif
+}
+
+TEST_F(Vector2Test, ComparisonOperators) {
+    Vector2 a(1.0f, 2.0f);
+    Vector2 b(1.0f, 2.0f);
+    Vector2 c(2.0f, 1.0f);
+
+    EXPECT_TRUE(a == b);
+    EXPECT_FALSE(a == c);
+    EXPECT_FALSE(a != b);
+    EXPECT_TRUE(a != c);
+}
+
+TEST_F(Vector2Test, StringConversion) {
+    Vector2 v(1.234f, -5.678f);
+    std::string str = v.toString();
+    EXPECT_EQ(str, "(1.234, -5.678)");
+
+    // Test stream operators
+    std::stringstream ss;
+    ss << v;
+    EXPECT_EQ(ss.str(), "(1.234, -5.678)");
+
+    Vector2 parsed;
+    ss.str("(3.456, -7.890)");
+    ss >> parsed;
+    EXPECT_FLOAT_EQ(parsed.x, 3.456f);
+    EXPECT_FLOAT_EQ(parsed.y, -7.890f);
+}
+
+TEST_F(Vector2Test, LerpFunction) {
+    Vector2 a(0.0f, 0.0f);
+    Vector2 b(2.0f, 4.0f);
+
+    Vector2 mid = Vector2::lerp(a, b, 0.5f);
+    EXPECT_FLOAT_EQ(mid.x, 1.0f);
+    EXPECT_FLOAT_EQ(mid.y, 2.0f);
+
+    Vector2 start = Vector2::lerp(a, b, 0.0f);
+    EXPECT_FLOAT_EQ(start.x, a.x);
+    EXPECT_FLOAT_EQ(start.y, a.y);
+
+    Vector2 end = Vector2::lerp(a, b, 1.0f);
+    EXPECT_FLOAT_EQ(end.x, b.x);
+    EXPECT_FLOAT_EQ(end.y, b.y);
+}
+
+TEST_F(Vector2Test, DistanceAndAngle) {
+    Vector2 a(1.0f, 0.0f);
+    Vector2 b(2.0f, 2.0f);
+
+    EXPECT_FLOAT_EQ(a.distanceTo(b), std::sqrt(5.0f));
+    EXPECT_FLOAT_EQ(a.distanceSquaredTo(b), 5.0f);
+
+    // Test angle between vectors
+    Vector2 right(1.0f, 0.0f);
+    Vector2 up(0.0f, 1.0f);
+    EXPECT_NEAR(right.angleTo(up), constants::half_pi, epsilon);
+    
+    // Test angle with self (should be 0)
+    EXPECT_NEAR(right.angleTo(right), 0.0f, epsilon);
+}
+
+TEST_F(Vector2Test, ComponentWiseOperations) {
+    Vector2 a(2.0f, 3.0f);
+    Vector2 b(4.0f, 2.0f);
+
+    Vector2 prod = a.cwiseProduct(b);
+    EXPECT_FLOAT_EQ(prod.x, 8.0f);
+    EXPECT_FLOAT_EQ(prod.y, 6.0f);
+
+    Vector2 quot = a.cwiseQuotient(b);
+    EXPECT_FLOAT_EQ(quot.x, 0.5f);
+    EXPECT_FLOAT_EQ(quot.y, 1.5f);
+
+    // Test min/max
+    Vector2 minVec = min(a, b);
+    EXPECT_FLOAT_EQ(minVec.x, 2.0f);
+    EXPECT_FLOAT_EQ(minVec.y, 2.0f);
+
+    Vector2 maxVec = max(a, b);
+    EXPECT_FLOAT_EQ(maxVec.x, 4.0f);
+    EXPECT_FLOAT_EQ(maxVec.y, 3.0f);
+}
+
+TEST_F(Vector2Test, DirectionalConstants) {
+    Vector2 left = Vector2::left();
+    EXPECT_FLOAT_EQ(left.x, -1.0f);
+    EXPECT_FLOAT_EQ(left.y, 0.0f);
+
+    Vector2 right = Vector2::right();
+    EXPECT_FLOAT_EQ(right.x, 1.0f);
+    EXPECT_FLOAT_EQ(right.y, 0.0f);
+
+    Vector2 up = Vector2::up();
+    EXPECT_FLOAT_EQ(up.x, 0.0f);
+    EXPECT_FLOAT_EQ(up.y, 1.0f);
+
+    Vector2 down = Vector2::down();
+    EXPECT_FLOAT_EQ(down.x, 0.0f);
+    EXPECT_FLOAT_EQ(down.y, -1.0f);
+
+    // Test relationships using unary negation
+    EXPECT_FLOAT_EQ((-right).x, left.x);
+    EXPECT_FLOAT_EQ((-right).y, left.y);
+    EXPECT_FLOAT_EQ((-up).x, down.x);
+    EXPECT_FLOAT_EQ((-up).y, down.y);
 }
