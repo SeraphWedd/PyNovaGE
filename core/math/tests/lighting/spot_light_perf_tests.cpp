@@ -4,5 +4,3 @@
 using namespace pynovage::math::lighting;
 
 // Performance benchmarks will go here
-
-BENCHMARK_MAIN();

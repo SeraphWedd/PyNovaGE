@@ -13,6 +13,10 @@ add_library(pynovage_math
     src/geometry/high_speed_collision.cpp
     src/geometry/collision_response.cpp
     src/geometry/broad_phase.cpp
+    src/lighting/attenuation.cpp
+    src/lighting/point_light.cpp
+    src/lighting/directional_light.cpp
+    src/lighting/spot_light.cpp
 )
 
 # Add include directories
@@ -73,6 +77,10 @@ add_executable(math_tests
     tests/geometry/high_speed_collision_tests.cpp
     tests/geometry/collision_response_tests.cpp
     tests/geometry/broad_phase_tests.cpp
+    tests/lighting/attenuation_tests.cpp
+    tests/lighting/point_light_tests.cpp
+    tests/lighting/directional_light_tests.cpp
+    tests/lighting/spot_light_tests.cpp
 )
 
 target_link_libraries(math_tests
@@ -99,6 +107,9 @@ add_executable(math_benchmarks
     tests/geometry/continuous_collision_perf_tests.cpp
     tests/geometry/collision_response_perf_tests.cpp
     tests/geometry/broad_phase_perf_tests.cpp
+    tests/lighting/point_light_perf_tests.cpp
+    tests/lighting/directional_light_perf_tests.cpp
+    tests/lighting/spot_light_perf_tests.cpp
 )
 
 target_link_libraries(math_benchmarks
