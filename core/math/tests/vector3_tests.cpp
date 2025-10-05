@@ -327,12 +327,12 @@ TEST_F(Vector3Test, MinMaxOperations) {
     Vector3 v1(1.0f, 4.0f, 2.0f);
     Vector3 v2(2.0f, 3.0f, 1.0f);
 
-    Vector3 minVec = min(v1, v2);
+    Vector3 minVec = Vector3::min(v1, v2);
     EXPECT_FLOAT_EQ(minVec.x, 1.0f);
     EXPECT_FLOAT_EQ(minVec.y, 3.0f);
     EXPECT_FLOAT_EQ(minVec.z, 1.0f);
 
-    Vector3 maxVec = max(v1, v2);
+    Vector3 maxVec = Vector3::max(v1, v2);
     EXPECT_FLOAT_EQ(maxVec.x, 2.0f);
     EXPECT_FLOAT_EQ(maxVec.y, 4.0f);
     EXPECT_FLOAT_EQ(maxVec.z, 2.0f);
