@@ -190,6 +190,27 @@ public:
         return !(*this == other);
     }
 
+    // Comparison operators (component-wise)
+    bool operator<(const Vector4& other) const {
+        // True only if ALL components are less
+        return x < other.x && y < other.y && z < other.z && w < other.w;
+    }
+
+    bool operator<=(const Vector4& other) const {
+        // True only if ALL components are less or equal
+        return x <= other.x && y <= other.y && z <= other.z && w <= other.w;
+    }
+
+    bool operator>(const Vector4& other) const {
+        // True only if ALL components are greater
+        return x > other.x && y > other.y && z > other.z && w > other.w;
+    }
+
+    bool operator>=(const Vector4& other) const {
+        // True only if ALL components are greater or equal
+        return x >= other.x && y >= other.y && z >= other.z && w >= other.w;
+    }
+
     // Linear interpolation
     static Vector4 lerp(const Vector4& a, const Vector4& b, float t) {
         return a + (b - a) * t;

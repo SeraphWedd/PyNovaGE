@@ -101,14 +101,46 @@ TEST(Vector4Tests, ComponentWiseOperations) {
 }
 
 TEST(Vector4Tests, Comparisons) {
+    // Create test vectors for comparison tests
     Vector4 a(1.0f, 2.0f, 3.0f, 4.0f);
-    Vector4 b(1.0f, 2.0f, 3.0f, 4.0f);
-    Vector4 c(1.0f, 2.0f, 3.0f, 5.0f);
+    Vector4 b(1.0f, 2.0f, 3.0f, 4.0f);  // Equal to a
+    Vector4 c(3.0f, 1.0f, 2.0f, 5.0f);  // Mixed components (3>1, 1<2, 2<3, 5>4)
+    Vector4 d(2.0f, 3.0f, 4.0f, 5.0f);  // All components greater than a
+    Vector4 e(0.0f, 1.0f, 2.0f, 3.0f);  // All components less than a
 
-    EXPECT_TRUE(a == b);
-    EXPECT_FALSE(a != b);
-    EXPECT_FALSE(a == c);
-    EXPECT_TRUE(a != c);
+    // Equality
+    EXPECT_TRUE(a == b);    // Equal vectors
+    EXPECT_FALSE(a != b);   // Equal vectors
+    EXPECT_FALSE(a == c);   // Different vectors
+    EXPECT_TRUE(a != c);    // Different vectors
+
+    // Less than (true only if ALL components are less)
+    EXPECT_FALSE(a < b);    // Equal components
+    EXPECT_FALSE(c < d);    // Mixed components (2>1, 1<3)
+    EXPECT_TRUE(e < a);     // All components less
+    EXPECT_FALSE(a < e);    // All components greater
+    EXPECT_TRUE(a < d);     // All components less
+
+    // Less than or equal (true if ALL components are less or equal)
+    EXPECT_TRUE(a <= b);    // Equal components
+    EXPECT_TRUE(e <= a);    // All components less
+    EXPECT_FALSE(a <= e);   // All components greater
+    EXPECT_FALSE(c <= d);   // Mixed components
+    EXPECT_TRUE(a <= d);    // All components less or equal
+
+    // Greater than (true only if ALL components are greater)
+    EXPECT_FALSE(a > b);    // Equal components
+    EXPECT_FALSE(c > d);    // Mixed components
+    EXPECT_FALSE(e > a);    // All components less
+    EXPECT_TRUE(a > e);     // All components greater
+    EXPECT_TRUE(d > a);     // All components greater
+
+    // Greater than or equal (true if ALL components are greater or equal)
+    EXPECT_TRUE(a >= b);    // Equal components
+    EXPECT_FALSE(e >= a);   // All components less
+    EXPECT_TRUE(a >= e);    // All components greater
+    EXPECT_FALSE(c >= d);   // Mixed components
+    EXPECT_TRUE(d >= a);    // All components greater or equal
 }
 
 TEST(Vector4Tests, Lerp) {
