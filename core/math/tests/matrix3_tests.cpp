@@ -9,24 +9,24 @@ using namespace pynovage::math::constants;
 class Matrix3Test : public ::testing::Test {
 protected:
     void SetUp() override {
-        identity = Matrix3x3();
+        identity = Matrix3();
         
-        rotX90 = Matrix3x3::RotationX(half_pi);
-        rotY90 = Matrix3x3::RotationY(half_pi);
-        rotZ90 = Matrix3x3::RotationZ(half_pi);
+        rotX90 = Matrix3::rotationX(half_pi);
+        rotY90 = Matrix3::rotationY(half_pi);
+        rotZ90 = Matrix3::rotationZ(half_pi);
         
-        scale2 = Matrix3x3::Scale(2.0f, 2.0f, 2.0f);
+        scale2 = Matrix3::scale(2.0f, 2.0f, 2.0f);
     }
 
-    Matrix3x3 identity;
-    Matrix3x3 rotX90;
-    Matrix3x3 rotY90;
-    Matrix3x3 rotZ90;
-    Matrix3x3 scale2;
+    Matrix3 identity;
+    Matrix3 rotX90;
+    Matrix3 rotY90;
+    Matrix3 rotZ90;
+    Matrix3 scale2;
 };
 
-TEST_F(Matrix3Test, DefaultConstructor) {
-    Matrix3x3 m;
+TEST_F(Matrix3Test, DefaultConstruction) {
+    Matrix3 m;
     EXPECT_FLOAT_EQ(m.m[0][0], 1.0f);
     EXPECT_FLOAT_EQ(m.m[0][1], 0.0f);
     EXPECT_FLOAT_EQ(m.m[0][2], 0.0f);
@@ -38,24 +38,24 @@ TEST_F(Matrix3Test, DefaultConstructor) {
     EXPECT_FLOAT_EQ(m.m[2][2], 1.0f);
 }
 
-TEST_F(Matrix3Test, ComponentConstructor) {
-    Matrix3x3 m(1.0f, 2.0f, 3.0f,
-                4.0f, 5.0f, 6.0f,
-                7.0f, 8.0f, 9.0f);
+TEST_F(Matrix3Test, ValueConstruction) {
+    Matrix3 m1(1.0f, 2.0f, 3.0f,
+                 4.0f, 5.0f, 6.0f,
+                 7.0f, 8.0f, 9.0f);
     
-    EXPECT_FLOAT_EQ(m.m[0][0], 1.0f);
-    EXPECT_FLOAT_EQ(m.m[0][1], 2.0f);
-    EXPECT_FLOAT_EQ(m.m[0][2], 3.0f);
-    EXPECT_FLOAT_EQ(m.m[1][0], 4.0f);
-    EXPECT_FLOAT_EQ(m.m[1][1], 5.0f);
-    EXPECT_FLOAT_EQ(m.m[1][2], 6.0f);
-    EXPECT_FLOAT_EQ(m.m[2][0], 7.0f);
-    EXPECT_FLOAT_EQ(m.m[2][1], 8.0f);
-    EXPECT_FLOAT_EQ(m.m[2][2], 9.0f);
+    EXPECT_FLOAT_EQ(m1.m[0][0], 1.0f);
+    EXPECT_FLOAT_EQ(m1.m[0][1], 2.0f);
+    EXPECT_FLOAT_EQ(m1.m[0][2], 3.0f);
+    EXPECT_FLOAT_EQ(m1.m[1][0], 4.0f);
+    EXPECT_FLOAT_EQ(m1.m[1][1], 5.0f);
+    EXPECT_FLOAT_EQ(m1.m[1][2], 6.0f);
+    EXPECT_FLOAT_EQ(m1.m[2][0], 7.0f);
+    EXPECT_FLOAT_EQ(m1.m[2][1], 8.0f);
+    EXPECT_FLOAT_EQ(m1.m[2][2], 9.0f);
 }
 
 TEST_F(Matrix3Test, Identity) {
-    Matrix3x3 m = Matrix3x3::Identity();
+    Matrix3 m = Matrix3::identity();
     EXPECT_EQ(m, identity);
 }
 
@@ -92,100 +92,101 @@ TEST_F(Matrix3Test, Rotation) {
 
 TEST_F(Matrix3Test, Multiplication) {
     // Test matrix * matrix
-    Matrix3x3 result = rotZ90 * rotX90;
+    Matrix3 result = rotZ90 * rotX90;
     EXPECT_EQ(result * identity, result);
     EXPECT_EQ(identity * result, result);
 
     // Test matrix * scalar
-    Matrix3x3 scaled = identity * 2.0f;
+    Matrix3 scaled = identity * 2.0f;
     EXPECT_FLOAT_EQ(scaled.m[0][0], 2.0f);
     EXPECT_FLOAT_EQ(scaled.m[1][1], 2.0f);
     EXPECT_FLOAT_EQ(scaled.m[2][2], 2.0f);
 }
 
 TEST_F(Matrix3Test, Addition) {
-    Matrix3x3 m1(1.0f, 0.0f, 0.0f,
+    Matrix3 m1(1.0f, 0.0f, 0.0f,
                  0.0f, 1.0f, 0.0f,
                  0.0f, 0.0f, 1.0f);
     
-    Matrix3x3 m2(2.0f, 0.0f, 0.0f,
+    Matrix3 m2(2.0f, 0.0f, 0.0f,
                  0.0f, 2.0f, 0.0f,
                  0.0f, 0.0f, 2.0f);
     
-    Matrix3x3 sum = m1 + m2;
+    Matrix3 sum = m1 + m2;
     EXPECT_FLOAT_EQ(sum.m[0][0], 3.0f);
     EXPECT_FLOAT_EQ(sum.m[1][1], 3.0f);
     EXPECT_FLOAT_EQ(sum.m[2][2], 3.0f);
 }
 
 TEST_F(Matrix3Test, Subtraction) {
-    Matrix3x3 m1(2.0f, 0.0f, 0.0f,
+    Matrix3 m1(2.0f, 0.0f, 0.0f,
                  0.0f, 2.0f, 0.0f,
                  0.0f, 0.0f, 2.0f);
     
-    Matrix3x3 m2(1.0f, 0.0f, 0.0f,
+    Matrix3 m2(1.0f, 0.0f, 0.0f,
                  0.0f, 1.0f, 0.0f,
                  0.0f, 0.0f, 1.0f);
     
-    Matrix3x3 diff = m1 - m2;
+    Matrix3 diff = m1 - m2;
     EXPECT_FLOAT_EQ(diff.m[0][0], 1.0f);
     EXPECT_FLOAT_EQ(diff.m[1][1], 1.0f);
     EXPECT_FLOAT_EQ(diff.m[2][2], 1.0f);
 }
 
 TEST_F(Matrix3Test, Transpose) {
-    Matrix3x3 m(1.0f, 2.0f, 3.0f,
+    Matrix3 m(1.0f, 2.0f, 3.0f,
                 4.0f, 5.0f, 6.0f,
                 7.0f, 8.0f, 9.0f);
     
-    Matrix3x3 mt = m.Transposed();
+    Matrix3 mt = m.transposed();
     EXPECT_FLOAT_EQ(mt.m[0][1], m.m[1][0]);
     EXPECT_FLOAT_EQ(mt.m[0][2], m.m[2][0]);
     EXPECT_FLOAT_EQ(mt.m[1][2], m.m[2][1]);
     
-    m.Transpose();
+    m.transpose();
     EXPECT_EQ(m, mt);
 }
 
 TEST_F(Matrix3Test, Determinant) {
-    Matrix3x3 m(1.0f, 2.0f, 3.0f,
+    Matrix3 m(1.0f, 2.0f, 3.0f,
                 4.0f, 5.0f, 6.0f,
                 7.0f, 8.0f, 9.0f);
     
     // For this matrix, det = 0
-    EXPECT_NEAR(m.Determinant(), 0.0f, 1e-6f);
+    EXPECT_NEAR(m.determinant(), 0.0f, 1e-6f);
     
-    Matrix3x3 invertible(2.0f, -1.0f, 0.0f,
+    Matrix3 invertible(2.0f, -1.0f, 0.0f,
                         -1.0f, 2.0f, -1.0f,
                         0.0f, -1.0f, 2.0f);
     
     // This matrix has det = 4
-    EXPECT_NEAR(invertible.Determinant(), 4.0f, 1e-6f);
+    EXPECT_NEAR(invertible.determinant(), 4.0f, 1e-6f);
 }
 
 TEST_F(Matrix3Test, Inverse) {
-    Matrix3x3 m(2.0f, -1.0f, 0.0f,
-                -1.0f, 2.0f, -1.0f,
-                0.0f, -1.0f, 2.0f);
+    Matrix3 m1(2.0f, -1.0f, 0.0f,
+                 -1.0f, 2.0f, -1.0f,
+                 0.0f, -1.0f, 2.0f);
     
-    Matrix3x3 inv;
-    EXPECT_TRUE(m.GetInverse(inv));
+    Matrix3 m2;
+    Matrix3 inv;
+    EXPECT_TRUE(m1.getInverse(inv));
     
-    Matrix3x3 result = m * inv;
+    Matrix3 result = m1 * inv;
     EXPECT_EQ(result, identity);
     
     // Test non-invertible matrix
-    Matrix3x3 singular(1.0f, 2.0f, 3.0f,
+    Matrix3 singular(1.0f, 2.0f, 3.0f,
                       4.0f, 5.0f, 6.0f,
                       7.0f, 8.0f, 9.0f);
-    EXPECT_FALSE(singular.GetInverse(inv));
+    EXPECT_FALSE(singular.getInverse(inv));
 }
 
 TEST_F(Matrix3Test, AxisAngle) {
     Vector3 axis(1.0f, 0.0f, 0.0f);
     float angle = half_pi;
     
-    Matrix3x3 rot = Matrix3x3::FromAxisAngle(axis, angle);
+    Matrix3 rot = Matrix3::fromAxisAngle(axis, angle);
     Vector3 v(0.0f, 1.0f, 0.0f);
     Vector3 rotated = rot * v;
     

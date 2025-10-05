@@ -161,12 +161,12 @@ public:
 class OBB {
 public:
     OBB() : center(), halfExtents(1.0f, 1.0f, 1.0f), orientation() {}
-    OBB(const Vector3& center_, const Vector3& halfExtents_, const Matrix3x3& orientation_)
+    OBB(const Vector3& center_, const Vector3& halfExtents_, const Matrix3& orientation_)
         : center(center_), halfExtents(halfExtents_), orientation(orientation_) {}
 
     Vector3 center;
     Vector3 halfExtents;
-    Matrix3x3 orientation;
+    Matrix3 orientation;
 };
 
 /**

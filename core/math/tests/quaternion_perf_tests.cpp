@@ -23,7 +23,7 @@ static void BM_Matrix3Creation(benchmark::State& state) {
     float angle = half_pi;
     
     for (auto _ : state) {
-        benchmark::DoNotOptimize(Matrix3x3::FromAxisAngle(axis, angle));
+        benchmark::DoNotOptimize(Matrix3::fromAxisAngle(axis, angle));
     }
 }
 BENCHMARK(BM_Matrix3Creation);
@@ -40,9 +40,9 @@ static void BM_QuaternionComposition(benchmark::State& state) {
 BENCHMARK(BM_QuaternionComposition);
 
 static void BM_Matrix3Composition(benchmark::State& state) {
-    Matrix3x3 m1 = Matrix3x3::FromAxisAngle(Vector3(1.0f, 0.0f, 0.0f), half_pi);
-    Matrix3x3 m2 = Matrix3x3::FromAxisAngle(Vector3(0.0f, 1.0f, 0.0f), quarter_pi);
-    
+    Matrix3 m1 = Matrix3::fromAxisAngle(Vector3(1.0f, 0.0f, 0.0f), half_pi);
+    Matrix3 m2 = Matrix3::fromAxisAngle(Vector3(0.0f, 1.0f, 0.0f), quarter_pi);
+    Matrix3 m3;
     for (auto _ : state) {
         benchmark::DoNotOptimize(m1 * m2);
     }
@@ -61,7 +61,7 @@ static void BM_QuaternionVectorRotation(benchmark::State& state) {
 BENCHMARK(BM_QuaternionVectorRotation);
 
 static void BM_Matrix3VectorRotation(benchmark::State& state) {
-    Matrix3x3 m = Matrix3x3::FromAxisAngle(Vector3(1.0f, 0.0f, 0.0f), half_pi);
+    Matrix3 m = Matrix3::fromAxisAngle(Vector3(1.0f, 0.0f, 0.0f), half_pi);
     Vector3 v(1.0f, 1.0f, 1.0f);
     
     for (auto _ : state) {
@@ -85,13 +85,13 @@ static void BM_QuaternionMultipleRotations(benchmark::State& state) {
 BENCHMARK(BM_QuaternionMultipleRotations);
 
 static void BM_Matrix3MultipleRotations(benchmark::State& state) {
-    Matrix3x3 mx = Matrix3x3::FromAxisAngle(Vector3(1.0f, 0.0f, 0.0f), quarter_pi);
-    Matrix3x3 my = Matrix3x3::FromAxisAngle(Vector3(0.0f, 1.0f, 0.0f), half_pi);
-    Matrix3x3 mz = Matrix3x3::FromAxisAngle(Vector3(0.0f, 0.0f, 1.0f), quarter_pi);
+    Matrix3 mx = Matrix3::fromAxisAngle(Vector3(1.0f, 0.0f, 0.0f), quarter_pi);
+    Matrix3 my = Matrix3::fromAxisAngle(Vector3(0.0f, 1.0f, 0.0f), half_pi);
+    Matrix3 mz = Matrix3::fromAxisAngle(Vector3(0.0f, 0.0f, 1.0f), quarter_pi);
     Vector3 v(1.0f, 1.0f, 1.0f);
     
     for (auto _ : state) {
-        Matrix3x3 combined = mz * my * mx;
+        Matrix3 combined = mz * my * mx;
         benchmark::DoNotOptimize(combined * v);
     }
 }
@@ -110,8 +110,8 @@ BENCHMARK(BM_QuaternionMemoryUsage);
 
 static void BM_Matrix3MemoryUsage(benchmark::State& state) {
     for (auto _ : state) {
-        // Matrix3x3 uses 9 floats = 36 bytes
-        Matrix3x3 m;
+        // Matrix3 uses 9 floats = 36 bytes
+        Matrix3 m;
         benchmark::DoNotOptimize(m);
     }
 }
@@ -152,7 +152,7 @@ BENCHMARK(BM_QuaternionNormalization);
 
 static void BM_Matrix3Orthogonalization(benchmark::State& state) {
     // Create a slightly non-orthogonal matrix
-    Matrix3x3 m(
+    Matrix3 m(
         1.1f, 0.1f, 0.2f,
         0.1f, 1.2f, 0.1f,
         0.2f, 0.1f, 1.1f
@@ -168,7 +168,7 @@ static void BM_Matrix3Orthogonalization(benchmark::State& state) {
         y = (y - x * x.dot(y)).normalized();
         z = (z - x * x.dot(z) - y * y.dot(z)).normalized();
         
-        benchmark::DoNotOptimize(Matrix3x3(
+        benchmark::DoNotOptimize(Matrix3(
             x.x, x.y, x.z,
             y.x, y.y, y.z,
             z.x, z.y, z.z
