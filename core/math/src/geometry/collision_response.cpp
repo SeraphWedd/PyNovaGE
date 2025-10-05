@@ -2,7 +2,7 @@
 #include "../../include/math_constants.hpp"
 #include "../../include/matrix3.hpp"
 
-using pynovage::math::Matrix3x3;
+using pynovage::math::Matrix3;
 
 namespace pynovage {
 namespace math {
@@ -18,8 +18,8 @@ RigidBodyProperties RigidBodyProperties::forSphere(float radius, const MaterialP
     
     // For a solid sphere, inertia tensor is diagonal with I = 2/5 * m * r^2
     float inertia = (2.0f / 5.0f) * props.mass * radius * radius;
-    props.inertia_tensor = Matrix3x3::Identity() * inertia;
-    props.inverse_inertia_tensor = Matrix3x3::Identity() * (1.0f / inertia);
+props.inertia_tensor = Matrix3::identity() * inertia;
+props.inverse_inertia_tensor = Matrix3::identity() * (1.0f / inertia);
     
     return props;
 }
@@ -42,14 +42,14 @@ RigidBodyProperties RigidBodyProperties::forBox(const Vector3& dimensions, const
     float iy = props.mass / 12.0f * (x2 + z2);
     float iz = props.mass / 12.0f * (x2 + y2);
     
-    props.inertia_tensor = Matrix3x3(
+props.inertia_tensor = Matrix3(
         ix, 0.0f, 0.0f,
         0.0f, iy, 0.0f,
         0.0f, 0.0f, iz
     );
     
     // Inverse tensor (just reciprocal for diagonal matrix)
-    props.inverse_inertia_tensor = Matrix3x3(
+props.inverse_inertia_tensor = Matrix3(
         1.0f/ix, 0.0f, 0.0f,
         0.0f, 1.0f/iy, 0.0f,
         0.0f, 0.0f, 1.0f/iz

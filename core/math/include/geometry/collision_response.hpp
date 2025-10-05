@@ -25,8 +25,8 @@ struct MaterialProperties {
  */
 struct RigidBodyProperties {
     float mass = 1.0f;                     // Mass of the body
-    Matrix3x3 inertia_tensor;              // Inertia tensor (for rotational dynamics)
-    Matrix3x3 inverse_inertia_tensor;      // Inverse of inertia tensor
+    Matrix3 inertia_tensor;              // Inertia tensor (for rotational dynamics)
+    Matrix3 inverse_inertia_tensor;      // Inverse of inertia tensor
     MaterialProperties material;           // Material properties
 
     // Velocities

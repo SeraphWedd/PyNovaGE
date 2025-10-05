@@ -17,7 +17,7 @@ namespace math {
  * - Linear transformations
  * - And more...
  */
-class Matrix3x3 {
+class Matrix3 {
 public:
     // Data storage (row-major order for easier SIMD operations)
     alignas(16) float m[3][3];
@@ -25,7 +25,7 @@ public:
     /**
      * @brief Default constructor, creates identity matrix
      */
-    Matrix3x3() {
+    Matrix3() {
         m[0][0] = 1.0f; m[0][1] = 0.0f; m[0][2] = 0.0f;
         m[1][0] = 0.0f; m[1][1] = 1.0f; m[1][2] = 0.0f;
         m[2][0] = 0.0f; m[2][1] = 0.0f; m[2][2] = 1.0f;
@@ -34,7 +34,7 @@ public:
     /**
      * @brief Constructs matrix from 9 values in row-major order
      */
-    Matrix3x3(float m00, float m01, float m02,
+    Matrix3(float m00, float m01, float m02,
               float m10, float m11, float m12,
               float m20, float m21, float m22) {
         m[0][0] = m00; m[0][1] = m01; m[0][2] = m02;
@@ -45,25 +45,25 @@ public:
     /**
      * @brief Copy constructor
      */
-    Matrix3x3(const Matrix3x3& other) = default;
+    Matrix3(const Matrix3& other) = default;
 
     /**
      * @brief Assignment operator
      */
-    Matrix3x3& operator=(const Matrix3x3& other) = default;
+    Matrix3& operator=(const Matrix3& other) = default;
 
     /**
      * @brief Returns the identity matrix
      */
-    static Matrix3x3 Identity() {
-        return Matrix3x3();
+    static Matrix3 identity() {
+        return Matrix3();
     }
 
     /**
      * @brief Creates a scaling matrix
      */
-    static Matrix3x3 Scale(float sx, float sy, float sz) {
-        return Matrix3x3(
+static Matrix3 scale(float sx, float sy, float sz) {
+return Matrix3(
             sx,  0.0f, 0.0f,
             0.0f, sy,   0.0f,
             0.0f, 0.0f, sz
@@ -74,10 +74,10 @@ public:
      * @brief Creates a rotation matrix around X axis
      * @param angle Rotation angle in radians
      */
-    static Matrix3x3 RotationX(float angle) {
+static Matrix3 rotationX(float angle) {
         float c = std::cos(angle);
         float s = std::sin(angle);
-        return Matrix3x3(
+return Matrix3(
             1.0f, 0.0f, 0.0f,
             0.0f, c,    -s,
             0.0f, s,    c
@@ -88,10 +88,10 @@ public:
      * @brief Creates a rotation matrix around Y axis
      * @param angle Rotation angle in radians
      */
-    static Matrix3x3 RotationY(float angle) {
+static Matrix3 rotationY(float angle) {
         float c = std::cos(angle);
         float s = std::sin(angle);
-        return Matrix3x3(
+return Matrix3(
             c,    0.0f, -s,
             0.0f, 1.0f, 0.0f,
             s,    0.0f, c
@@ -102,10 +102,10 @@ public:
      * @brief Creates a rotation matrix around Z axis
      * @param angle Rotation angle in radians
      */
-    static Matrix3x3 RotationZ(float angle) {
+static Matrix3 rotationZ(float angle) {
         float c = std::cos(angle);
         float s = std::sin(angle);
-        return Matrix3x3(
+return Matrix3(
             c,    -s,   0.0f,
             s,    c,    0.0f,
             0.0f, 0.0f, 1.0f
@@ -115,9 +115,9 @@ public:
     /**
      * @brief Matrix multiplication operator
      */
-    Matrix3x3 operator*(const Matrix3x3& other) const {
-        Matrix3x3 result;
-        SimdUtils::MultiplyMatrix3x3(
+Matrix3 operator*(const Matrix3& other) const {
+Matrix3 result;
+SimdUtils::MultiplyMatrix3(
             reinterpret_cast<const float*>(m),
             reinterpret_cast<const float*>(other.m),
             reinterpret_cast<float*>(result.m)
@@ -130,7 +130,7 @@ public:
      */
     Vector3 operator*(const Vector3& v) const {
         Vector3 result;
-        SimdUtils::MultiplyMatrix3x3Vec3(
+SimdUtils::MultiplyMatrix3Vec3(
             reinterpret_cast<const float*>(m),
             reinterpret_cast<const float*>(&v),
             reinterpret_cast<float*>(&result)
@@ -141,8 +141,8 @@ public:
     /**
      * @brief Matrix addition operator
      */
-    Matrix3x3 operator+(const Matrix3x3& other) const {
-        Matrix3x3 result;
+Matrix3 operator+(const Matrix3& other) const {
+Matrix3 result;
         for (int i = 0; i < 3; ++i) {
             for (int j = 0; j < 3; ++j) {
                 result.m[i][j] = m[i][j] + other.m[i][j];
@@ -154,8 +154,8 @@ public:
     /**
      * @brief Matrix subtraction operator
      */
-    Matrix3x3 operator-(const Matrix3x3& other) const {
-        Matrix3x3 result;
+Matrix3 operator-(const Matrix3& other) const {
+Matrix3 result;
         for (int i = 0; i < 3; ++i) {
             for (int j = 0; j < 3; ++j) {
                 result.m[i][j] = m[i][j] - other.m[i][j];
@@ -167,8 +167,8 @@ public:
     /**
      * @brief Matrix-scalar multiplication operator
      */
-    Matrix3x3 operator*(float scalar) const {
-        Matrix3x3 result;
+Matrix3 operator*(float scalar) const {
+Matrix3 result;
         for (int i = 0; i < 3; ++i) {
             for (int j = 0; j < 3; ++j) {
                 result.m[i][j] = m[i][j] * scalar;
@@ -180,7 +180,7 @@ public:
     /**
      * @brief Equality operator
      */
-    bool operator==(const Matrix3x3& other) const {
+bool operator==(const Matrix3& other) const {
         const float epsilon = 1e-6f;
         for (int i = 0; i < 3; ++i) {
             for (int j = 0; j < 3; ++j) {
@@ -195,39 +195,39 @@ public:
     /**
      * @brief Inequality operator
      */
-    bool operator!=(const Matrix3x3& other) const {
+bool operator!=(const Matrix3& other) const {
         return !(*this == other);
     }
 
     /**
      * @brief Transposes the matrix in-place
      */
-    void Transpose() {
-        SimdUtils::TransposeMatrix3x3(reinterpret_cast<float*>(m));
+void transpose() {
+SimdUtils::TransposeMatrix3(reinterpret_cast<float*>(m));
     }
 
     /**
      * @brief Returns the transposed matrix
      */
-    Matrix3x3 Transposed() const {
-        Matrix3x3 result(*this);
-        result.Transpose();
+Matrix3 transposed() const {
+Matrix3 result(*this);
+result.transpose();
         return result;
     }
 
     /**
      * @brief Calculates the determinant of the matrix
      */
-    float Determinant() const {
-        return SimdUtils::DeterminantMatrix3x3(reinterpret_cast<const float*>(m));
+float determinant() const {
+return SimdUtils::DeterminantMatrix3(reinterpret_cast<const float*>(m));
     }
 
     /**
      * @brief Inverts the matrix if possible
      * @return true if matrix was invertible, false otherwise
      */
-    bool Invert() {
-        return SimdUtils::InvertMatrix3x3(
+bool invert() {
+return SimdUtils::InvertMatrix3(
             reinterpret_cast<const float*>(m),
             reinterpret_cast<float*>(m)
         );
@@ -238,8 +238,8 @@ public:
      * @param[out] result The inverse matrix
      * @return true if matrix was invertible, false otherwise
      */
-    bool GetInverse(Matrix3x3& result) const {
-        return SimdUtils::InvertMatrix3x3(
+bool getInverse(Matrix3& result) const {
+return SimdUtils::InvertMatrix3(
             reinterpret_cast<const float*>(m),
             reinterpret_cast<float*>(result.m)
         );
@@ -250,7 +250,7 @@ public:
      * @param axis Rotation axis (must be normalized)
      * @param angle Rotation angle in radians
      */
-    static Matrix3x3 FromAxisAngle(const Vector3& axis, float angle) {
+static Matrix3 fromAxisAngle(const Vector3& axis, float angle) {
         float c = std::cos(angle);
         float s = std::sin(angle);
         float t = 1.0f - c;
@@ -259,7 +259,7 @@ public:
         float y = axis.y;
         float z = axis.z;
 
-        return Matrix3x3(
+return Matrix3(
             t*x*x + c,   t*x*y - s*z, t*x*z + s*y,
             t*x*y + s*z, t*y*y + c,   t*y*z - s*x,
             t*x*z - s*y, t*y*z + s*x, t*z*z + c
