@@ -90,7 +90,7 @@ static void BM_Matrix2_Inverse(benchmark::State& state) {
             m = Matrix2(random_floats[i], random_floats[i + 1],
                        random_floats[i + 2], random_floats[i + 3]);
             det = m.determinant();
-        } while (std::abs(det) < 1e-6f);
+        } while (std::abs(det) < 1e-12f); // Match SimdUtils::InvertMatrix2x2 epsilon
         matrices.push_back(m);
     }
     
