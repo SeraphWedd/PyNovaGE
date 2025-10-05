@@ -493,99 +493,144 @@ float SimdUtils::DeterminantMatrix4x4(const float* m) {
     return cofactor0 + cofactor1 + cofactor2 + cofactor3;
 }
 
+namespace {
+// Helper function to check if a matrix is purely a translation matrix
+bool IsTranslationMatrix(const float* m) {
+    return m[0] == 1.0f && m[1] == 0.0f && m[2] == 0.0f &&
+           m[4] == 0.0f && m[5] == 1.0f && m[6] == 0.0f &&
+           m[8] == 0.0f && m[9] == 0.0f && m[10] == 1.0f &&
+           m[15] == 1.0f;
+}
+
+// Helper function to check if a matrix is purely a scale matrix
+bool IsScaleMatrix(const float* m) {
+    return m[1] == 0.0f && m[2] == 0.0f && m[3] == 0.0f &&
+           m[4] == 0.0f && m[6] == 0.0f && m[7] == 0.0f &&
+           m[8] == 0.0f && m[9] == 0.0f && m[11] == 0.0f &&
+           m[12] == 0.0f && m[13] == 0.0f && m[14] == 0.0f && m[15] == 1.0f;
+}
+
+// Helper function to check if a matrix is orthonormal rotation
+bool IsRotationMatrix(const float* m) {
+    // Check orthogonality of first three rows/columns
+    float dot01 = m[0]*m[4] + m[1]*m[5] + m[2]*m[6];
+    float dot02 = m[0]*m[8] + m[1]*m[9] + m[2]*m[10];
+    float dot12 = m[4]*m[8] + m[5]*m[9] + m[6]*m[10];
+    
+    if (std::fabs(dot01) > 1e-6f || std::fabs(dot02) > 1e-6f || std::fabs(dot12) > 1e-6f)
+        return false;
+
+    // Check unit length
+    float len0 = m[0]*m[0] + m[1]*m[1] + m[2]*m[2];
+    float len1 = m[4]*m[4] + m[5]*m[5] + m[6]*m[6];
+    float len2 = m[8]*m[8] + m[9]*m[9] + m[10]*m[10];
+    
+    if (std::fabs(len0 - 1.0f) > 1e-6f || std::fabs(len1 - 1.0f) > 1e-6f || std::fabs(len2 - 1.0f) > 1e-6f)
+        return false;
+
+    // Check last row/column is [0,0,0,1]
+    return m[3] == 0.0f && m[7] == 0.0f && m[11] == 0.0f &&
+           m[12] == 0.0f && m[13] == 0.0f && m[14] == 0.0f && m[15] == 1.0f;
+}
+
+// Helper function to invert a translation matrix
+bool InvertTranslationMatrix(const float* m, float* result) {
+    // Copy upper 3x3
+    for (int i = 0; i < 11; ++i) {
+        result[i] = m[i];
+    }
+    // Negate translation components
+    result[3] = -m[3];
+    result[7] = -m[7];
+    result[11] = -m[11];
+    // Copy last row
+    result[12] = m[12];
+    result[13] = m[13];
+    result[14] = m[14];
+    result[15] = m[15];
+    return true;
+}
+
+// Helper function to invert a scale matrix
+bool InvertScaleMatrix(const float* m, float* result) {
+    float sx = m[0];
+    float sy = m[5];
+    float sz = m[10];
+    
+    if (std::fabs(sx) < 1e-12f || std::fabs(sy) < 1e-12f || std::fabs(sz) < 1e-12f)
+        return false;
+
+    // Initialize to zero
+    for (int i = 0; i < 16; ++i)
+        result[i] = 0.0f;
+
+    // Reciprocal of scale factors
+    result[0] = 1.0f / sx;
+    result[5] = 1.0f / sy;
+    result[10] = 1.0f / sz;
+    result[15] = 1.0f;
+    
+    return true;
+}
+
+// Helper function to invert a rotation matrix (transpose of upper 3x3)
+bool InvertRotationMatrix(const float* m, float* result) {
+    // Transpose the 3x3 rotation part
+    result[0] = m[0]; result[1] = m[4]; result[2] = m[8];
+    result[4] = m[1]; result[5] = m[5]; result[6] = m[9];
+    result[8] = m[2]; result[9] = m[6]; result[10] = m[10];
+    
+    // Set translation and bottom row
+    result[3] = 0.0f;
+    result[7] = 0.0f;
+    result[11] = 0.0f;
+    result[12] = 0.0f;
+    result[13] = 0.0f;
+    result[14] = 0.0f;
+    result[15] = 1.0f;
+    
+    return true;
+}
+} // anonymous namespace
+
 bool SimdUtils::InvertMatrix4x4(const float* m, float* result) {
+    // Check for special case matrices first
+    if (IsTranslationMatrix(m))
+        return InvertTranslationMatrix(m, result);
+    if (IsRotationMatrix(m))
+        return InvertRotationMatrix(m, result);
+    if (IsScaleMatrix(m))
+        return InvertScaleMatrix(m, result);
+
+    // General case using adjugate matrix and determinant
     float det = DeterminantMatrix4x4(m);
     if (std::fabs(det) < 1e-12f) return false;
     float invDet = 1.0f / det;
-    
+
     // Calculate cofactor matrix
     // First row
-    result[0] = (
-        m[5] * (m[10]*m[15] - m[11]*m[14]) -
-        m[6] * (m[9]*m[15] - m[11]*m[13]) +
-        m[7] * (m[9]*m[14] - m[10]*m[13])
-    ) * invDet;
-    result[1] = -(
-        m[4] * (m[10]*m[15] - m[11]*m[14]) -
-        m[6] * (m[8]*m[15] - m[11]*m[12]) +
-        m[7] * (m[8]*m[14] - m[10]*m[12])
-    ) * invDet;
-    result[2] = (
-        m[4] * (m[9]*m[15] - m[11]*m[13]) -
-        m[5] * (m[8]*m[15] - m[11]*m[12]) +
-        m[7] * (m[8]*m[13] - m[9]*m[12])
-    ) * invDet;
-    result[3] = -(
-        m[4] * (m[9]*m[14] - m[10]*m[13]) -
-        m[5] * (m[8]*m[14] - m[10]*m[12]) +
-        m[6] * (m[8]*m[13] - m[9]*m[12])
-    ) * invDet;
+    result[0] = invDet * (m[5]*(m[10]*m[15] - m[11]*m[14]) - m[6]*(m[9]*m[15] - m[11]*m[13]) + m[7]*(m[9]*m[14] - m[10]*m[13]));
+    result[1] = -invDet * (m[1]*(m[10]*m[15] - m[11]*m[14]) - m[2]*(m[9]*m[15] - m[11]*m[13]) + m[3]*(m[9]*m[14] - m[10]*m[13]));
+    result[2] = invDet * (m[1]*(m[6]*m[15] - m[7]*m[14]) - m[2]*(m[5]*m[15] - m[7]*m[13]) + m[3]*(m[5]*m[14] - m[6]*m[13]));
+    result[3] = -invDet * (m[1]*(m[6]*m[11] - m[7]*m[10]) - m[2]*(m[5]*m[11] - m[7]*m[9]) + m[3]*(m[5]*m[10] - m[6]*m[9]));
 
     // Second row
-    result[4] = -(
-        m[1] * (m[10]*m[15] - m[11]*m[14]) -
-        m[2] * (m[9]*m[15] - m[11]*m[13]) +
-        m[3] * (m[9]*m[14] - m[10]*m[13])
-    ) * invDet;
-    result[5] = (
-        m[0] * (m[10]*m[15] - m[11]*m[14]) -
-        m[2] * (m[8]*m[15] - m[11]*m[12]) +
-        m[3] * (m[8]*m[14] - m[10]*m[12])
-    ) * invDet;
-    result[6] = -(
-        m[0] * (m[9]*m[15] - m[11]*m[13]) -
-        m[1] * (m[8]*m[15] - m[11]*m[12]) +
-        m[3] * (m[8]*m[13] - m[9]*m[12])
-    ) * invDet;
-    result[7] = (
-        m[0] * (m[9]*m[14] - m[10]*m[13]) -
-        m[1] * (m[8]*m[14] - m[10]*m[12]) +
-        m[2] * (m[8]*m[13] - m[9]*m[12])
-    ) * invDet;
+    result[4] = -invDet * (m[4]*(m[10]*m[15] - m[11]*m[14]) - m[6]*(m[8]*m[15] - m[11]*m[12]) + m[7]*(m[8]*m[14] - m[10]*m[12]));
+    result[5] = invDet * (m[0]*(m[10]*m[15] - m[11]*m[14]) - m[2]*(m[8]*m[15] - m[11]*m[12]) + m[3]*(m[8]*m[14] - m[10]*m[12]));
+    result[6] = -invDet * (m[0]*(m[6]*m[15] - m[7]*m[14]) - m[2]*(m[4]*m[15] - m[7]*m[12]) + m[3]*(m[4]*m[14] - m[6]*m[12]));
+    result[7] = invDet * (m[0]*(m[6]*m[11] - m[7]*m[10]) - m[2]*(m[4]*m[11] - m[7]*m[8]) + m[3]*(m[4]*m[10] - m[6]*m[8]));
 
     // Third row
-    result[8] = (
-        m[1] * (m[6]*m[15] - m[7]*m[14]) -
-        m[2] * (m[5]*m[15] - m[7]*m[13]) +
-        m[3] * (m[5]*m[14] - m[6]*m[13])
-    ) * invDet;
-    result[9] = -(
-        m[0] * (m[6]*m[15] - m[7]*m[14]) -
-        m[2] * (m[4]*m[15] - m[7]*m[12]) +
-        m[3] * (m[4]*m[14] - m[6]*m[12])
-    ) * invDet;
-    result[10] = (
-        m[0] * (m[5]*m[15] - m[7]*m[13]) -
-        m[1] * (m[4]*m[15] - m[7]*m[12]) +
-        m[3] * (m[4]*m[13] - m[5]*m[12])
-    ) * invDet;
-    result[11] = -(
-        m[0] * (m[5]*m[14] - m[6]*m[13]) -
-        m[1] * (m[4]*m[14] - m[6]*m[12]) +
-        m[2] * (m[4]*m[13] - m[5]*m[12])
-    ) * invDet;
+    result[8] = invDet * (m[4]*(m[9]*m[15] - m[11]*m[13]) - m[5]*(m[8]*m[15] - m[11]*m[12]) + m[7]*(m[8]*m[13] - m[9]*m[12]));
+    result[9] = -invDet * (m[0]*(m[9]*m[15] - m[11]*m[13]) - m[1]*(m[8]*m[15] - m[11]*m[12]) + m[3]*(m[8]*m[13] - m[9]*m[12]));
+    result[10] = invDet * (m[0]*(m[5]*m[15] - m[7]*m[13]) - m[1]*(m[4]*m[15] - m[7]*m[12]) + m[3]*(m[4]*m[13] - m[5]*m[12]));
+    result[11] = -invDet * (m[0]*(m[5]*m[11] - m[7]*m[9]) - m[1]*(m[4]*m[11] - m[7]*m[8]) + m[3]*(m[4]*m[9] - m[5]*m[8]));
 
     // Fourth row
-    result[12] = -(
-        m[1] * (m[6]*m[11] - m[7]*m[10]) -
-        m[2] * (m[5]*m[11] - m[7]*m[9]) +
-        m[3] * (m[5]*m[10] - m[6]*m[9])
-    ) * invDet;
-    result[13] = (
-        m[0] * (m[6]*m[11] - m[7]*m[10]) -
-        m[2] * (m[4]*m[11] - m[7]*m[8]) +
-        m[3] * (m[4]*m[10] - m[6]*m[8])
-    ) * invDet;
-    result[14] = -(
-        m[0] * (m[5]*m[11] - m[7]*m[9]) -
-        m[1] * (m[4]*m[11] - m[7]*m[8]) +
-        m[3] * (m[4]*m[9] - m[5]*m[8])
-    ) * invDet;
-    result[15] = (
-        m[0] * (m[5]*m[10] - m[6]*m[9]) -
-        m[1] * (m[4]*m[10] - m[6]*m[8]) +
-        m[2] * (m[4]*m[9] - m[5]*m[8])
-    ) * invDet;
+    result[12] = -invDet * (m[4]*(m[9]*m[14] - m[10]*m[13]) - m[5]*(m[8]*m[14] - m[10]*m[12]) + m[6]*(m[8]*m[13] - m[9]*m[12]));
+    result[13] = invDet * (m[0]*(m[9]*m[14] - m[10]*m[13]) - m[1]*(m[8]*m[14] - m[10]*m[12]) + m[2]*(m[8]*m[13] - m[9]*m[12]));
+    result[14] = -invDet * (m[0]*(m[5]*m[14] - m[6]*m[13]) - m[1]*(m[4]*m[14] - m[6]*m[12]) + m[2]*(m[4]*m[13] - m[5]*m[12]));
+    result[15] = invDet * (m[0]*(m[5]*m[10] - m[6]*m[9]) - m[1]*(m[4]*m[10] - m[6]*m[8]) + m[2]*(m[4]*m[9] - m[5]*m[8]));
 
     return true;
 }
