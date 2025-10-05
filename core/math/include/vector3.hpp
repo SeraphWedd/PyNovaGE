@@ -153,6 +153,11 @@ public:
         return *this - project(planeNormal);
     }
 
+    // Reject this vector from another vector (perpendicular component)
+    Vector3 rejectFrom(const Vector3& other) const {
+        return *this - projectOnto(other);
+    }
+
     // Component-wise operations
     Vector3 cwiseProduct(const Vector3& other) const {
         return Vector3(x * other.x, y * other.y, z * other.z);
