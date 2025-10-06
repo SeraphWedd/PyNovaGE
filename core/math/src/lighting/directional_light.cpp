@@ -4,7 +4,8 @@ namespace pynovage {
 namespace math {
 namespace lighting {
 
-// Implementation will go here
+// All methods are currently inline in the header
+// Any future non-inline implementations will go here
 
 } // namespace lighting
 } // namespace math

@@ -417,6 +417,48 @@ public:
     }
 
     /**
+     * @brief Creates a perspective projection matrix with reversed Z depth mapping
+     * @details Maps near plane to Z=1 and far plane to Z=0 for better depth precision
+     * @param fovY Vertical field of view in radians
+     * @param aspect Aspect ratio (width/height)
+     * @param near Near clipping plane
+     * @param far Far clipping plane
+     */
+    static Matrix4 perspectiveReversedZ(float fovY, float aspect, float near, float far) {
+        float f = 1.0f / std::tan(fovY * 0.5f);
+        float nf = near - far;
+        
+        return Matrix4(
+            f/aspect,   0.0f,       0.0f,                0.0f,
+            0.0f,       f,          0.0f,                0.0f,
+            0.0f,       0.0f,       near/nf,             (far*near)/nf,
+            0.0f,       0.0f,       1.0f,                0.0f
+        );
+    }
+
+    /**
+     * @brief Creates an orthographic projection matrix mapping to [0,1] NDC depth range
+     * @param left Left clipping plane
+     * @param right Right clipping plane
+     * @param bottom Bottom clipping plane
+     * @param top Top clipping plane
+     * @param near Near clipping plane
+     * @param far Far clipping plane
+     */
+    static Matrix4 orthographicZeroOne(float left, float right, float bottom, float top, float near, float far) {
+        float rml = right - left;
+        float tmb = top - bottom;
+        float fmn = far - near;
+
+        return Matrix4(
+            2.0f/rml,   0.0f,       0.0f,        -(right+left)/rml,
+            0.0f,       2.0f/tmb,   0.0f,        -(top+bottom)/tmb,
+            0.0f,       0.0f,       1.0f/fmn,    -near/fmn,
+            0.0f,       0.0f,       0.0f,        1.0f
+        );
+    }
+
+    /**
      * @brief Extracts the translation components from the matrix
      */
     Vector3 extractTranslation() const {
