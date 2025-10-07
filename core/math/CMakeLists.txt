@@ -120,6 +120,7 @@ add_executable(math_benchmarks
     tests/lighting/point_light_perf_tests.cpp
     tests/lighting/directional_light_perf_tests.cpp
     tests/lighting/spot_light_perf_tests.cpp
+    tests/lighting/attenuation_perf_tests.cpp
 )
 
 target_link_libraries(math_benchmarks
