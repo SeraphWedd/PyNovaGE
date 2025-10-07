@@ -199,3 +199,99 @@ TEST(ShadowMapTests, ProjectionMatrixRanges) {
         EXPECT_NEAR(projMat[2][2], -depthScale, 1e-3f);
     }
 }
+
+TEST(ShadowMapTests, EdgeCases) {
+    // Test very small near plane
+    ShadowMap map1(ShadowMapType::Standard);
+    map1.updateProjectionMatrix(1e-6f, 100.0f);
+    auto proj1 = map1.getProjectionMatrix();
+    EXPECT_GT(std::fabs(proj1[2][2]), 0.0f);
+    
+    // Test very large far plane
+    ShadowMap map2(ShadowMapType::Standard);
+    map2.updateProjectionMatrix(0.1f, 1e6f);
+    auto proj2 = map2.getProjectionMatrix();
+    EXPECT_GT(std::fabs(proj2[2][2]), 0.0f);
+    
+    // Test degenerate light direction (aligned with up)
+    ShadowMap map3(ShadowMapType::Standard);
+    Vector3 lightPos(0.0f, 0.0f, 0.0f);
+    Vector3 lightDir(0.0f, 1.0f, 0.0f); // Aligned with world up
+    map3.updateViewMatrix(lightPos, lightDir);
+    auto view3 = map3.getViewMatrix();
+    EXPECT_NE(view3, Matrix4::identity());
+    
+    // Test zero FOV for spot light
+    ShadowMap map4(ShadowMapType::Standard);
+    map4.updateProjectionMatrix(0.1f, 100.0f, 0.0f);
+    auto proj4 = map4.getProjectionMatrix();
+    EXPECT_NE(proj4, Matrix4::identity());
+    
+    // Test negative FOV handling
+    ShadowMap map5(ShadowMapType::Standard);
+    map5.updateProjectionMatrix(0.1f, 100.0f, -45.0f);
+    auto proj5 = map5.getProjectionMatrix();
+    EXPECT_GT(std::fabs(proj5[0][0]), 0.0f);
+    EXPECT_GT(std::fabs(proj5[1][1]), 0.0f);
+}
+
+TEST(ShadowMapTests, CascadeDetails) {
+    ShadowMap map(ShadowMapType::Cascade);
+    Vector3 lightDir(0.0f, -1.0f, 0.0f);
+    
+    // Test each cascade's view matrix maintains light direction
+    for (uint32_t i = 0; i < 4; ++i) {
+        Vector3 cascadeCenter(0.0f, 100.0f * (i + 1), 0.0f);
+        map.updateViewMatrix(cascadeCenter + lightDir * 100.0f, lightDir);
+        
+        const auto& viewMat = map.getViewMatrix();
+        
+        // Test point at cascade center
+        Vector3 transformedCenter = viewMat.transformPoint(cascadeCenter);
+        Vector3 transformedPoint = viewMat.transformPoint(cascadeCenter + lightDir);
+        Vector3 viewSpaceDir = (transformedPoint - transformedCenter).normalized();
+        
+        // Direction should map to -Z
+        EXPECT_NEAR(viewSpaceDir.z, -1.0f, 1e-3f);
+        
+        // Center point should be reasonable
+        EXPECT_GT(std::fabs(transformedCenter.z), 0.0f);
+    }
+}
+
+TEST(ShadowMapTests, ProjectionProperties) {
+    // Test directional light projection
+    ShadowMap dirMap(ShadowMapType::Standard);
+    dirMap.updateProjectionMatrix(0.1f, 100.0f);
+    const auto& dirProj = dirMap.getProjectionMatrix();
+    
+    // Should be symmetric
+    EXPECT_FLOAT_EQ(dirProj[0][0], dirProj[1][1]);
+    
+    // Should be orthographic
+    EXPECT_FLOAT_EQ(dirProj[3][3], 1.0f);
+    
+    // Test spot light projection
+    ShadowMap spotMap(ShadowMapType::Standard);
+    spotMap.updateProjectionMatrix(0.1f, 100.0f, 45.0f);
+    const auto& spotProj = spotMap.getProjectionMatrix();
+    
+    // Should be perspective
+    EXPECT_FLOAT_EQ(spotProj[3][3], 0.0f);
+    EXPECT_GT(std::fabs(spotProj[2][3]), 0.0f);
+    
+    // Should be symmetric (aspect ratio 1.0)
+    EXPECT_FLOAT_EQ(spotProj[0][0], spotProj[1][1]);
+    
+    // Test point light projection (cubemap face)
+    ShadowMap pointMap(ShadowMapType::Cube);
+    pointMap.updateProjectionMatrix(0.1f, 100.0f, 90.0f);
+    const auto& pointProj = pointMap.getProjectionMatrix();
+    
+    // Should be perspective
+    EXPECT_FLOAT_EQ(pointProj[3][3], 0.0f);
+    EXPECT_GT(std::fabs(pointProj[2][3]), 0.0f);
+    
+    // Should be square (90-degree FOV, aspect ratio 1.0)
+    EXPECT_FLOAT_EQ(pointProj[0][0], pointProj[1][1]);
+}
