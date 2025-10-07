@@ -1,7 +1,7 @@
-#include "math/quaternion.hpp"
-#include "math/matrix3.hpp"
-#include "math/vector3.hpp"
-#include "math/math_constants.hpp"
+#include "quaternion.hpp"
+#include "matrix3.hpp"
+#include "vector3.hpp"
+#include "math_constants.hpp"
 #include <benchmark/benchmark.h>
 
 using namespace pynovage::math;
