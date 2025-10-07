@@ -182,7 +182,7 @@ Track A: Performance Foundation    Track B: Engine Core           Track C: High-
 
 ##### 1.2.5 Light & Shadow Math [Partial ✓]
 - Light attenuation calculations [✓]
-- Shadow volume computations [ ]
+- Shadow mapping implementation [ ]
 - Light space transforms [✓]
 - Volumetric lighting calculations [ ]
 - Area light mathematics [ ]
