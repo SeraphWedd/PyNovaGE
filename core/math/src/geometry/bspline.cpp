@@ -115,7 +115,13 @@ void BSpline::computeBasisFunctions(int span, float t, std::vector<float>& basis
 
         // Compute basis functions of degree j
         for (int r = 0; r < j; ++r) {
-            float temp = basisFuncs[r] / (right[r + 1] + left[j - r]);
+            float denom = (right[r + 1] + left[j - r]);
+            float temp = 0.0f;
+            if (std::fabs(denom) > 1e-12f) {
+                temp = basisFuncs[r] / denom;
+            } else {
+                temp = 0.0f; // occurs at knots with multiplicity; contributes nothing
+            }
             basisFuncs[r] = saved + right[r + 1] * temp;
             saved = left[j - r] * temp;
         }
@@ -200,31 +206,101 @@ bool BSpline::insertKnot(float t) {
 }
 
 bool BSpline::elevateDegree() {
-    // Create new arrays for elevated degree curve
-    std::vector<Vector3> newPoints(controlPoints_.size() + 1);
-    std::vector<float> newKnots(knots_.size() + 1);
-
-    // Compute new control points
-    for (size_t i = 0; i < controlPoints_.size(); ++i) {
-        float alpha = static_cast<float>(i) / (controlPoints_.size() + degree_ + 1);
-        newPoints[i] = controlPoints_[i] * (1.0f - alpha) +
-                      (i < controlPoints_.size() - 1 ? controlPoints_[i + 1] * alpha : controlPoints_[i] * alpha);
-    }
-    newPoints.back() = controlPoints_.back();
-
-    // Update knot vector
-    float knotStep = 1.0f / (newKnots.size() - 1);
-    for (size_t i = 0; i < newKnots.size(); ++i) {
-        newKnots[i] = i * knotStep;
+    if (degree_ < 1) {
+        return false;
     }
 
-    // Update member variables
+    const float eps = 1e-6f;
+
+    const int p = degree_;
+    const size_t num_ctrl = controlPoints_.size();
+    if (num_ctrl < static_cast<size_t>(p + 1)) return false;
+
+    // Each segment gets one additional control point
+    std::vector<Vector3> elevated_ctrl;
+    elevated_ctrl.reserve(num_ctrl + 1);
+
+    // First point always stays the same
+    elevated_ctrl.push_back(controlPoints_[0]);
+
+    // Elevate internal control points using deBoor weights
+    for (size_t i = 1; i < num_ctrl - 1; ++i) {
+        float alpha = static_cast<float>(i) / static_cast<float>(p + 1);
+        Vector3 elevated = alpha * controlPoints_[i - 1] + (1.0f - alpha) * controlPoints_[i];
+        elevated_ctrl.push_back(elevated);
+
+        // Additional control point for interior multiplicity
+        if (i < num_ctrl - 2) {
+            alpha = static_cast<float>(i + 1) / static_cast<float>(p + 1);
+            elevated = alpha * controlPoints_[i] + (1.0f - alpha) * controlPoints_[i + 1];
+            elevated_ctrl.push_back(elevated);
+        }
+    }
+
+    // Last point also stays the same
+    elevated_ctrl.push_back(controlPoints_.back());
+
+    // New knot vector has p+2 zeros at start, p+2 ones at end
+    std::vector<float> newKnots;
+    newKnots.reserve(elevated_ctrl.size() + p + 2);
+
+    // Leading zeros
+    for (int i = 0; i <= p + 1; ++i) {
+        newKnots.push_back(0.0f);
+    }
+
+    // Interior knots - just add extra copies at each existing interior knot
+    float prev = 0.0f;
+    for (size_t i = p + 1; i < knots_.size() - p - 1; ++i) {
+        float u = knots_[i];
+        if (std::fabs(u - prev) > eps && std::fabs(u - 1.0f) > eps) {
+            newKnots.push_back(u);
+            prev = u;
+        }
+    }
+
+    // Trailing ones
+    for (int i = 0; i <= p + 1; ++i) {
+        newKnots.push_back(1.0f);
+    }
+
+    // 3) Build new knot vector for degree p' = p+1
+    const int p_new = p + 1;
+    std::vector<float> newKnots;
+    newKnots.reserve(knots_.size() + segments); // approximate
+
+    // Start knots: p_new+1 zeros
+    for (int i = 0; i <= p_new; ++i) newKnots.push_back(0.0f);
+
+    // Interior unique knot values from the fully clamped (Bézier) configuration
+    // Recompute interior unique values from current knots_
+    std::vector<float> interior_after;
+    if (knots_.size() > static_cast<size_t>(2 * (p + 1))) {
+        float prev = knots_[p + 1];
+        for (size_t i = p + 2; i < knots_.size() - p - 1; ++i) {
+            float u = knots_[i];
+            if (std::fabs(u - prev) > eps) {
+                interior_after.push_back(u);
+                prev = u;
+            }
+        }
+    }
+    // For each interior unique knot, add multiplicity p_new
+    for (float u : interior_after) {
+        for (int i = 0; i < p_new; ++i) newKnots.push_back(u);
+    }
+
+    // End knots: p_new+1 ones
+    for (int i = 0; i <= p_new; ++i) newKnots.push_back(1.0f);
+
+    // 4) Update member variables
     ++degree_;
-    controlPoints_ = std::move(newPoints);
+    controlPoints_ = std::move(elevated_ctrl);
     knots_ = std::move(newKnots);
 
     return true;
 }
+
 
 BSpline BSpline::derivative() const {
     if (degree_ < 1) {
