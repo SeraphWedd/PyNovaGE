@@ -34,15 +34,25 @@ BSpline::BSpline(const std::vector<Vector3>& controlPoints, int degree,
 
 void BSpline::createUniformKnots() {
     // For a B-spline of degree p with n+1 control points,
-    // we need n+p+2 knots
-    size_t n = controlPoints_.size() - 1;
-    size_t numKnots = n + degree_ + 2;
+    // we need m+1 knots where m = n+p+1 (so n+p+2 total knots)
+    size_t n = controlPoints_.size() - 1;  // number of spans between control points
+    size_t numKnots = n + degree_ + 2;     // total number of knots needed
     knots_.resize(numKnots);
 
-    // Fill knot vector with uniform spacing
-    float step = 1.0f / (numKnots - 1);
-    for (size_t i = 0; i < numKnots; ++i) {
-        knots_[i] = i * step;
+    // Create a clamped knot vector (repeated knots at ends)
+    // This ensures the curve passes through endpoints
+    for (size_t i = 0; i <= degree_; ++i) {
+        knots_[i] = 0.0f;                     // p+1 zeros at start
+        knots_[numKnots-1-i] = 1.0f;          // p+1 ones at end
+    }
+    
+    // Fill interior knots with uniform spacing
+    size_t numInterior = numKnots - 2*(degree_ + 1);
+    if (numInterior > 0) {
+        float step = 1.0f / (numInterior + 1);
+        for (size_t i = 0; i < numInterior; ++i) {
+            knots_[degree_ + 1 + i] = (i + 1) * step;
+        }
     }
 }
 

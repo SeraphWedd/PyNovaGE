@@ -39,7 +39,7 @@ TEST_F(BSplineTest, Getters) {
     EXPECT_EQ(spline->getControlPoints().size(), controlPoints.size());
     
     // Verify knot vector size: n + p + 2 (where n is number of control points - 1)
-    size_t expectedKnots = controlPoints.size() + degree;
+    size_t expectedKnots = (controlPoints.size() - 1) + degree + 2;
     EXPECT_EQ(spline->getKnots().size(), expectedKnots);
 }
 
