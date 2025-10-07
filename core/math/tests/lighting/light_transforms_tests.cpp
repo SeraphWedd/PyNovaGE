@@ -4,7 +4,12 @@
 
 namespace pynovage {
 namespace math {
-namespace {
+namespace lighting {
+
+using math::Vector3;
+using math::Vector4;
+using math::Matrix4;
+using math::constants::half_pi;
 
 // Helper function to compare matrices with floating point tolerance
 bool matrixNear(const Matrix4& m1, const Matrix4& m2, float epsilon = 1e-5f) {
@@ -100,7 +105,7 @@ TEST(LightTransformTest, DirectionalLightProjection) {
 
 TEST(LightTransformTest, PointLightProjection) {
     PointLight light;
-    light.position = Vector3(0.0f);
+    light.position = Vector3(0.0f, 0.0f, 0.0f);
     light.attenuation.range = 100.0f;
     float near = 0.1f;
     
@@ -125,9 +130,9 @@ TEST(LightTransformTest, PointLightProjection) {
 
 TEST(LightTransformTest, SpotLightProjection) {
     SpotLight light;
-    light.position = Vector3(0.0f);
+    light.position = Vector3(0.0f, 0.0f, 0.0f);
     light.direction = Vector3(0.0f, 0.0f, 1.0f);
-    light.outerAngle = constants::half_pi * 0.5f; // 45 degrees
+    light.outerAngle = half_pi * 0.5f; // 45 degrees
     light.attenuation.range = 100.0f;
     float near = 0.1f;
     
@@ -153,7 +158,7 @@ TEST(LightTransformTest, SpotLightProjection) {
 TEST(LightTransformTest, DirectionalLightTransform) {
     DirectionalLight light;
     light.direction = Vector3(0.0f, -1.0f, 0.0f);
-    Vector3 center(0.0f);
+    Vector3 center(0.0f, 0.0f, 0.0f);
     float radius = 10.0f;
     float near = 0.1f;
     float far = 100.0f;
@@ -163,7 +168,7 @@ TEST(LightTransformTest, DirectionalLightTransform) {
     );
     
     // Test that combined transform correctly maps points
-    Vector4 worldPoint(5.0f, 0.0f, 5.0f, 1.0f);
+Vector4 worldPoint(5.0f, 0.0f, 5.0f, 1.0f);
     Vector4 lightSpace = transform * worldPoint;
     lightSpace /= lightSpace.w;
     
@@ -212,7 +217,7 @@ TEST(LightTransformTest, DirectionalLightNormalBias) {
 
 TEST(LightTransformTest, PointLightNormalBias) {
     PointLight light;
-    light.position = Vector3(0.0f);
+    light.position = Vector3(0.0f, 0.0f, 0.0f);
     float normalBias = 0.005f;
     
     Matrix4 bias = LightSpaceTransform::createNormalBiasMatrix(light, normalBias);
@@ -230,7 +235,7 @@ TEST(LightTransformTest, PointLightNormalBias) {
 
 TEST(LightTransformTest, SpotLightNormalBias) {
     SpotLight light;
-    light.position = Vector3(0.0f);
+    light.position = Vector3(0.0f, 0.0f, 0.0f);
     light.direction = Vector3(0.0f, 0.0f, 1.0f); // pointing forward
     float normalBias = 0.005f;
     
@@ -260,10 +265,12 @@ TEST(LightTransformTest, DepthBias) {
     Vector4 biasedFar = bias * farPoint;
     
     // Depth should be offset by constant bias plus slope-scaled amount
-    EXPECT_NEAR(biasedNear.z, nearPoint.z + depthBias + slopeScale * nearPoint.z, 1e-5f);
-    EXPECT_NEAR(biasedFar.z, farPoint.z + depthBias + slopeScale * farPoint.z, 1e-5f);
+    // Using 2e-5 tolerance to account for floating point rounding differences
+    // between z*(1+s) + b and z + b + s*z
+    EXPECT_NEAR(biasedNear.z, nearPoint.z + depthBias + slopeScale * nearPoint.z, 2e-5f);
+    EXPECT_NEAR(biasedFar.z, farPoint.z + depthBias + slopeScale * farPoint.z, 2e-5f);
 }
 
-} // namespace
+} // namespace lighting
 } // namespace math
 } // namespace pynovage

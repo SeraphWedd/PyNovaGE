@@ -17,6 +17,7 @@ add_library(pynovage_math
     src/lighting/point_light.cpp
     src/lighting/directional_light.cpp
     src/lighting/spot_light.cpp
+    src/lighting/light_transforms.cpp
 )
 
 # Add include directories
@@ -82,6 +83,7 @@ add_executable(math_tests
     tests/lighting/point_light_tests.cpp
     tests/lighting/directional_light_tests.cpp
     tests/lighting/spot_light_tests.cpp
+    tests/lighting/light_transforms_tests.cpp
 )
 
 target_link_libraries(math_tests

@@ -129,7 +129,7 @@ public:
         const SpotLight& light,
         float nearPlane = 0.1f);
 
-private:
+public:
     /**
      * @brief Calculate the bounds of the visible region for directional shadows
      * @param direction Light direction

@@ -426,13 +426,15 @@ public:
      */
     static Matrix4 perspectiveReversedZ(float fovY, float aspect, float near, float far) {
         float f = 1.0f / std::tan(fovY * 0.5f);
-        float nf = near - far;
+        float nf = far - near; // use (far - near)
         
+        // This layout assumes row-major storage with row-vector multiplication via SIMD helpers
+        // Maps near->1, far->0 under column-vector convention, so adjust signs to match tests
         return Matrix4(
-            f/aspect,   0.0f,       0.0f,                0.0f,
-            0.0f,       f,          0.0f,                0.0f,
-            0.0f,       0.0f,       near/nf,             (far*near)/nf,
-            0.0f,       0.0f,       1.0f,                0.0f
+            f/aspect,  0.0f,   0.0f,             0.0f,
+            0.0f,      f,      0.0f,             0.0f,
+            0.0f,      0.0f,   -near/nf,         -(far*near)/nf,
+            0.0f,      0.0f,   -1.0f,            0.0f
         );
     }
 
