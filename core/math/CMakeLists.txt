@@ -112,6 +112,7 @@ add_executable(math_benchmarks
     tests/matrix2_perf_tests.cpp
     tests/matrix3_perf_tests.cpp
     tests/matrix4_perf_tests.cpp
+
     tests/geometry/intersection_perf_tests.cpp
     tests/geometry/continuous_collision_perf_tests.cpp
     tests/geometry/collision_response_perf_tests.cpp
