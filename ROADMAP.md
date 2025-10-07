@@ -71,9 +71,21 @@ Track A: Performance Foundation    Track B: Engine Core           Track C: High-
 #### 1.2 Core Math Library [C++] [Partial ✓]
 
 ##### 1.2.1 Vector Mathematics [✓]
-- 2D vector operations (for sprite-based games) — Benchmarks: add ~3.2ns, dot ~2.9ns, normalize ~11ns
-- 3D vector operations (for 3D rendering) — Benchmarks: add ~5.1ns, dot ~2.9ns, cross ~4.0ns, normalize ~16.2ns
-- 4D vector operations (for homogeneous coordinates)
+- 2D vector operations (for sprite-based games) — Benchmarks:
+  - Basic ops: add ~3.19ns, dot ~2.49ns, normalize ~11.3ns
+  - Memory: sequential ~2.50ns, random ~9.85ns
+  - Array ops: bulk operations ~1.65μs
+  - Creation: scales from ~87ns (8 vectors) to ~13.6μs (8192 vectors)
+- 3D vector operations (for 3D rendering) — Benchmarks:
+  - Basic ops: add ~3.44ns, dot ~2.69ns, cross ~3.53ns, normalize ~11.0ns
+  - Memory: sequential ~2.63ns, random ~16.4ns
+  - Special ops: reflection ~25.4ns
+  - Creation: scales from ~87ns (8 vectors) to ~20.8μs (8192 vectors)
+- 4D vector operations (for homogeneous coordinates) — Benchmarks:
+  - Basic ops: add ~3.44ns, dot ~3.08ns, normalize ~7.02ns
+  - Memory: sequential ~3.05ns, random ~18.3ns
+  - Special ops: homogeneous normalize ~2.55ns
+  - Creation: scales from ~96ns (8 vectors) to ~39.5μs (8192 vectors)
 - SIMD-optimized implementations
 - Vector field calculations (for particle systems)
 
@@ -103,20 +115,41 @@ Track A: Performance Foundation    Track B: Engine Core           Track C: High-
   - Cross-type interaction
 
 ##### 1.2.2 Matrix Operations [✓]
-- 2x2 matrices (2D transformations)
-- 3x3 matrices (2D homogeneous transforms)
-- 4x4 matrices (3D transformations)
-- Specialized transform matrices
-  - View and projection matrices
-  - Shadow mapping matrices
-  - Normal matrices for lighting
+- 2x2 matrices (2D transformations) — Benchmarks:
+  - Basic ops: construction ~1.37ns, multiply ~4.54ns, inverse ~4.19ns
+  - Vector ops: transform ~3.25ns, rotation ~25.3ns
+  - Batch ops: sequential multiply ~6.42μs, random multiply ~7.49μs
+  - Special cases: raw multiply ~3.37μs, optimized cases ~8.47ns
+- 3x3 matrices (2D homogeneous transforms) — Benchmarks:
+  - Basic ops: construction ~1.35ns, multiply ~12.8ns, inverse ~22.1ns
+  - Vector ops: transform ~5.38ns, creation ~14.7ns
+  - Rotation: axis ~30.0ns, X/Y/Z ~26ns average
+  - Advanced: determinant ~4.43ns, orthogonalization ~86.7ns
+  - Batch ops: sequential/random multiply ~13.6μs average
+- 4x4 matrices (3D transformations) — Benchmarks:
+  - Basic ops: construction ~1.37ns, multiply ~43ns, inverse ~56ns
+  - Vector ops: transform ~12ns, batch transform ~7.67μs
+  - Rotation: X/Y/Z ~26ns, axis-angle ~31.2ns, euler ~133ns
+  - View matrices: lookAt ~82.1ns, perspective ~18.3ns, ortho ~6.78ns
+  - Decomposition: translation ~8ns, rotation ~39ns, scale ~12.7ns, full ~50ns
+  - Chain operations: 2 matrices ~30.6ns, 8 matrices ~211ns
+  - Optimized cases: identity/scale/rotation ~32.3ns average
+  - Scalar vs SIMD (1000 ops): multiply 21.5μs vs 43.1ns, transform 5.4μs vs 11.9ns
+- Specialized transform matrices — Benchmarks included above
+  - View and projection matrices: lookAt ~82.1ns, perspective ~18.3ns, ortho ~6.78ns
+  - Shadow mapping matrices: uses standard 4x4 operations
+  - Normal matrices: derived from 3x3 operations
 
 ##### 1.2.3 Quaternion System [✓]
-- Basic quaternion operations
-- Quaternion interpolation (slerp/lerp)
+- Basic quaternion operations — Benchmarks:
+  - Creation ~9.6ns, composition (mul) ~3.0ns
+  - Vector rotation ~9.4ns, multiple rotations ~18.0ns
+  - Normalization ~6.7ns, memory footprint op ~1.37ns
+- Quaternion interpolation (slerp/lerp) — Benchmarks:
+  - Slerp ~36.1ns, Lerp ~8.37ns
 - Euler angle conversions
-- Rotation composition
-- Quaternion-vector operations
+- Rotation composition — Benchmarks: see composition above (~3.0ns)
+- Quaternion-vector operations — Benchmarks: see vector rotation above (~9.4ns)
 
 // NEXT TARGET: Core collision system foundation
 // Required for physics and game object interactions
@@ -125,8 +158,10 @@ Track A: Performance Foundation    Track B: Engine Core           Track C: High-
 ###### 1.2.4.1 Static Collision Detection [✓]
 - Basic intersection tests (ray/box/sphere/polygon)
   - Benchmarks (Release):
-    - Ray-Plane ~22.9ns, Ray-Sphere ~44.5ns, Ray-AABB ~24.6ns
-    - Sphere-Sphere ~28.9ns, AABB-AABB ~9.8ns
+    - Ray-Plane ~22.5ns, Ray-Sphere ~44.8ns, Ray-AABB ~24.4ns
+    - Sphere-Sphere ~29.3ns, AABB-AABB ~9.63ns
+    - Optimizations: near-miss early-out ~7.8ns
+    - Property calcs: ray-point ~3.57ns, AABB-props ~8.92ns
 - Distance calculations
 - Bounding volume computations
 - Convex hull calculations
@@ -138,10 +173,10 @@ Track A: Performance Foundation    Track B: Engine Core           Track C: High-
 - Motion interpolation
 - Time of impact calculations
 - Trajectory prediction
-  - Benchmarks (Release):
-    - Moving Sphere-Sphere (Direct) ~72.5ns, (No Collision) ~25.1ns
-    - Moving Sphere-AABB (Direct) ~96.3ns, (No Collision) ~44.5ns
-    - Varying speeds (1x/10x/100x): ~69–72ns
+- Benchmarks (Release):
+    - Moving Sphere-Sphere (Direct) ~70.2ns, (No Collision) ~25.2ns
+    - Moving Sphere-AABB (Direct) ~96.3ns, (No Collision) ~43.7ns
+    - Varying speeds (1x/10x/100x): ~70.8-71.5ns
 
 ###### 1.2.4.3 High-Speed Collision Systems [✓]
 - Bullet penetration mathematics
@@ -150,26 +185,30 @@ Track A: Performance Foundation    Track B: Engine Core           Track C: High-
 - Back-tracking for missed collisions
 - Multi-sampling along trajectory
   - Benchmarks (Release):
-    - Sphere Penetration: Basic ~71ns, Offset ~72ns
-    - AABB Penetration: Basic ~24ns, Angled ~25ns
-    - Grazing Collisions: Sphere ~72ns, AABB ~73ns
+    - Sphere Tests (8/64/512/4096/8192 objects):
+      ~1.1μs/2.7μs/16.3μs/115.7μs/234.6μs
+    - AABB Tests (8/64/512/4096/8192 objects):
+      ~1.3μs/4.0μs/25.4μs/196.0μs/394.5μs
+    - Worst-case scenario (8192 objects): ~464.6μs
 
 ###### 1.2.4.4 Collision Response [✓]
-- Impulse calculations (270ns)
+- Impulse calculations (~81ns base, ~260ns sphere, ~288ns box)
 - Energy conservation (Verified)
 - Friction and restitution (Configurable)
-- Angular response (297ns for box-box)
+- Angular response (~285ns for box-box)
 - Multi-body collision resolution (Compatible)
+- Mixed collisions (sphere-box ~267ns)
 
 ###### 1.2.4.5 Optimization Structures [✓]
 - Broad-phase collision culling
   - Benchmarks (Release, clean build):
-    - Non-batched update (8192 objects): ~250 ms
-    - Batched update (8192 objects): ~2.34 ms
-    - Query (8192 objects): ~1.73 ms
-    - Mixed operations (8192 objects): ~2.58 ms
-    - Insertion (8192 objects): ~2.30 ms
-    - Worst-case (8192 objects): ~34.38 ms
+    - Insertion (8192): ~1.76ms
+    - Update:
+      - Non-batched (8192): ~250ms
+      - Batched (8192): ~2.30ms
+    - Query (8192): ~1.71ms
+    - Mixed operations (8192): ~2.32ms
+    - Worst-case (8192): ~28.75ms
     - Improvements:
       - Cache-aligned SoA layout with SIMD-friendly memory organization
       - ID-based management eliminates pointer chasing
@@ -181,9 +220,52 @@ Track A: Performance Foundation    Track B: Engine Core           Track C: High-
 - Collision caching systems
 
 ##### 1.2.5 Light & Shadow Math [Partial ✓]
-- Light attenuation calculations [✓]
-- Shadow mapping implementation [?]
-- Light space transforms [✓]
+- Light attenuation calculations [✓] — Benchmarks:
+  - Basic calculation: ~17.4ns
+  - Different models: constant ~6.5ns, linear ~7.7ns, quadratic ~7.5ns
+  - Batch processing (4/16/1024/4096 points):
+    ~27ns/104ns/6.5μs/26.5μs
+  - Edge cases and ranges: ~5-13ns across distances
+
+- Point lights [✓] — Benchmarks:
+  - Basic ops: position ~7.3ns, range ~8.3ns
+  - Intensity: single point ~11.4ns
+  - Batch intensity (4/16/1024/4096 points):
+    ~27ns/102ns/6.4μs/25.7μs
+  - Multi-light (1/4/16/64 lights):
+    ~7.4μs/29.8μs/114.7μs/485.4μs
+  - Cubemap transforms: ~208ns
+
+- Directional lights [✓] — Benchmarks:
+  - Basic ops: direction ~14.6ns
+  - Transforms: view ~17.4ns, projection ~18.5ns
+  - Combined view-projection: ~49.7ns
+  - Shadow bounds calculation: ~22.4ns
+  - Batch processing (1/4/16/64/256 lights):
+    ~43ns/168ns/672ns/2.7μs/10.7μs
+
+- Spot lights [✓] — Benchmarks:
+  - Basic ops: position ~7.3ns, direction ~14.4ns, angles ~7.8ns
+  - Intensity: single point ~30.7ns
+  - Batch intensity (4/16/1024/4096 points):
+    ~80ns/402ns/24.6μs/99.4μs
+  - Multi-light (1/4/16/64 lights):
+    ~19.7μs/104.3μs/404.5μs/1.61ms
+
+- Shadow mapping implementation [✓] — Benchmarks:
+  - Parameters and initialization: ~10ns
+  - Type initialization: basic ~9.7ns, complex ~89.6ns
+  - Cascade updates: single ~136ns
+  - Cubemap updates: ~630ns average
+  - Complete pipeline: simple ~122ns, complex ~651ns
+  - Batch cascade ops (2/4/8/16 cascades):
+    ~300ns/600ns/1.17μs/2.35μs
+
+- Light space transforms [✓] — Benchmarks:
+  - Directional: view ~17.2ns, projection ~17.5ns
+  - Point light: view ~3.57ns, cubemap ~209ns
+  - Spot light: view ~3.29ns, frustum ~3.98ns
+
 - Volumetric lighting calculations [ ]
 - Area light mathematics [ ]
 
