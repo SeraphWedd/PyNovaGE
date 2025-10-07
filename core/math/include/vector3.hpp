@@ -88,6 +88,10 @@ public:
         return result;
     }
 
+    Vector3 operator-() const {
+        return Vector3(-x, -y, -z);
+    }
+
     Vector3 operator*(float scalar) const {
         Vector3 result;
         float scalars[4] = {scalar, scalar, scalar, 0.0f};
