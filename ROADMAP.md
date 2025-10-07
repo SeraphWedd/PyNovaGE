@@ -219,7 +219,7 @@ Track A: Performance Foundation    Track B: Engine Core           Track C: High-
 - Dynamic AABB trees
 - Collision caching systems
 
-##### 1.2.5 Light & Shadow Math [Partial ✓]
+##### 1.2.5 Light & Shadow Math [✓]
 - Light attenuation calculations [✓] — Benchmarks:
   - Basic calculation: ~17.4ns
   - Different models: constant ~6.5ns, linear ~7.7ns, quadratic ~7.5ns
@@ -252,7 +252,7 @@ Track A: Performance Foundation    Track B: Engine Core           Track C: High-
   - Multi-light (1/4/16/64 lights):
     ~19.7μs/104.3μs/404.5μs/1.61ms
 
-- Shadow mapping implementation [✓] — Benchmarks:
+- Shadow mapping implementation [✓]
   - Parameters and initialization: ~10ns
   - Type initialization: basic ~9.7ns, complex ~89.6ns
   - Cascade updates: single ~136ns
@@ -266,8 +266,33 @@ Track A: Performance Foundation    Track B: Engine Core           Track C: High-
   - Point light: view ~3.57ns, cubemap ~209ns
   - Spot light: view ~3.29ns, frustum ~3.98ns
 
-- Volumetric lighting calculations [ ]
-- Area light mathematics [ ]
+- Volumetric lighting calculations [✓] — Benchmarks:
+  - Basic ops: phase function ~5ns
+  - Shadow calculations: ~455-477ns (adaptive)
+  - Single-light scattering: 
+    - Light steps (8/64/512/4096/8192): 3.7µs/24.2µs/24.4µs/24.2µs/23.9µs
+    - Adaptive sampling matches non-adaptive (smart step sizing)
+  - Dense medium effects:
+    - Light steps (8/64/512/4096/8192): 5.5µs/8.4µs/8.2µs/8.3µs/8.4µs
+  - Multi-light performance:
+    - 1 light: ~24.4µs
+    - 8 lights: ~192.6µs
+    - 64 lights: ~1.54ms
+- Area light mathematics [✓] — Benchmarks:
+  - Basic ops: visibility check ~19.3ns
+  - Rectangular lights (64 samples):
+    - Single point: ~9.6µs
+    - Scaling (8/64/512/4096/8192 samples):
+      ~0.7µs/9.6µs/71.2µs/631.5µs/1.20ms
+  - Disk lights (64 samples):
+    - Single point: ~10.5µs
+    - Scaling (8/64/512/4096/8192 samples):
+      ~0.8µs/10.5µs/77.3µs/676.3µs/1.32ms
+  - Custom shape lights (64 samples):
+    - Single point: ~12.0µs
+    - Scaling (8/64/512/4096/8192 samples):
+      ~1.5µs/12.0µs/95.3µs/750.7µs/1.52ms
+  - Roughness invariant: ~9.4-9.8µs across 0-1 range
 
 ##### 1.2.6 Interpolation & Curves [ ]
 - Bezier curves
