@@ -144,13 +144,18 @@ public:
      * @param farPlane Far plane distance
      * @param fieldOfView Field of view in radians (for spot lights)
      */
-    void updateProjectionMatrix(float nearPlane, float farPlane, float fieldOfView = 90.0f) {
+void updateProjectionMatrix(float nearPlane, float farPlane, float fieldOfView = 90.0f) {
         if (type_ == ShadowMapType::Standard || type_ == ShadowMapType::Cascade) {
-            // Orthographic for directional lights
-            float size = 50.0f; // Size of the orthographic frustum
-            projMatrix_ = Matrix4::orthographic(-size, size, -size, size, nearPlane, farPlane);
+            // Check if we're a spot light (fieldOfView != 90)
+            if (std::fabs(fieldOfView - 90.0f) > 1e-4f) {
+                projMatrix_ = Matrix4::perspective(fieldOfView, 1.0f, nearPlane, farPlane);
+            } else {
+                // Orthographic for directional lights
+                float size = 50.0f; // Size of the orthographic frustum
+                projMatrix_ = Matrix4::orthographic(-size, size, -size, size, nearPlane, farPlane);
+            }
         } else {
-            // Perspective for point/spot lights
+            // Perspective for point lights
             projMatrix_ = Matrix4::perspective(fieldOfView, 1.0f, nearPlane, farPlane);
         }
     }
@@ -190,31 +195,42 @@ private:
      */
     void updateCubeViewMatrices(const Vector3& lightPos) {
         // Define the 6 view directions and up vectors for cube faces
+        // Looking in each face's direction from the light position
+        // Each entry represents where we're looking TO from the light
         static const Vector3 directions[6] = {
-            Vector3(1.0f, 0.0f, 0.0f),   // +X
-            Vector3(-1.0f, 0.0f, 0.0f),  // -X
-            Vector3(0.0f, 1.0f, 0.0f),   // +Y
-            Vector3(0.0f, -1.0f, 0.0f),  // -Y
-            Vector3(0.0f, 0.0f, 1.0f),   // +Z
-            Vector3(0.0f, 0.0f, -1.0f)   // -Z
+            Vector3(1.0f, 0.0f, 0.0f),    // Looking right (+X)
+            Vector3(-1.0f, 0.0f, 0.0f),   // Looking left (-X)
+            Vector3(0.0f, 1.0f, 0.0f),    // Looking up (+Y)
+            Vector3(0.0f, -1.0f, 0.0f),   // Looking down (-Y)
+            Vector3(0.0f, 0.0f, 1.0f),    // Looking forward (+Z)
+            Vector3(0.0f, 0.0f, -1.0f)    // Looking back (-Z)
         };
-        
+
+        // Up vectors for each view to maintain correct orientation
+        // These are the world-space up vectors that maintain proper orientation
         static const Vector3 ups[6] = {
-            Vector3(0.0f, -1.0f, 0.0f),  // +X
-            Vector3(0.0f, -1.0f, 0.0f),  // -X
-            Vector3(0.0f, 0.0f, 1.0f),   // +Y
-            Vector3(0.0f, 0.0f, -1.0f),  // -Y
-            Vector3(0.0f, -1.0f, 0.0f),  // +Z
-            Vector3(0.0f, -1.0f, 0.0f)   // -Z
+            Vector3(0.0f, 1.0f, 0.0f),    // +X face: Y is up
+            Vector3(0.0f, 1.0f, 0.0f),    // -X face: Y is up
+            Vector3(0.0f, 0.0f, -1.0f),   // +Y face: -Z is up (looking up)
+            Vector3(0.0f, 0.0f, 1.0f),    // -Y face: +Z is up (looking down)
+            Vector3(0.0f, 1.0f, 0.0f),    // +Z face: Y is up
+            Vector3(0.0f, 1.0f, 0.0f)     // -Z face: Y is up
         };
 
         // Update view matrix for each face
         for (int i = 0; i < 6; ++i) {
-            cubeViewMatrices_[i] = Matrix4::lookAt(
-                lightPos,
-                lightPos + directions[i],
-                ups[i]
-            );
+            // We want to look towards -Z in view space, so negate the direction
+            Vector3 forward = -directions[i].normalized();
+            Vector3 right = ups[i].cross(forward).normalized();
+            Vector3 up = forward.cross(right).normalized();
+            
+            // Construct view matrix (column-major)
+            cubeViewMatrices_[i] = Matrix4(
+                right.x,   right.y,   right.z,   0.0f,
+                up.x,      up.y,      up.z,      0.0f,
+                forward.x, forward.y, forward.z, 0.0f,
+                0.0f,      0.0f,      0.0f,      1.0f
+            ) * Matrix4::translation(-lightPos.x, -lightPos.y, -lightPos.z);
         }
     }
 
