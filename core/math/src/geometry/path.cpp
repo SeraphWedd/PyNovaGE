@@ -89,17 +89,21 @@ Vector3 Path::getTangent(float t) const {
     ensurePathExists();
     t = std::max(0.0f, std::min(1.0f, t));
     
-    // Get base tangent
+    // Base tangent calculation
     Vector3 tangent;
+    
     switch (type_) {
         case PathType::CatmullRom:
-            return catmullPath_->derivative(t);
+            tangent = catmullPath_->derivative(t);
+            break;
             
         case PathType::Bezier:
-            return bezierPath_->derivative().evaluate(t);
+            tangent = bezierPath_->derivative().evaluate(t);
+            break;
             
         case PathType::BSpline:
-            return bsplinePath_->derivative().evaluate(t);
+            tangent = bsplinePath_->derivative().evaluate(t);
+            break;
             
         case PathType::Linear: {
             if (points_.size() < 2) return Vector3::unitX();
@@ -108,28 +112,39 @@ Vector3 Path::getTangent(float t) const {
             size_t i = static_cast<size_t>(scaledT);
             
             if (i >= points_.size() - 1) {
-                if (closed_) {
-                    return (points_.front() - points_.back()).normalized();
-                }
-                return (points_.back() - points_[points_.size() - 2]).normalized();
+                tangent = closed_ ? 
+                    (points_[0] - points_[points_.size() - 1]) :
+                    (points_[points_.size() - 1] - points_[points_.size() - 2]);
+            } else {
+                tangent = points_[i + 1] - points_[i];
             }
-            
-            return (points_[i + 1] - points_[i]).normalized();
+            break;
         }
             
         default:
             throw std::runtime_error("Unknown path type");
     }
     
-    // Handle closed path wrapping
-    if (closed_ && t > 0.99f) {
-        // Near the end of a closed path, blend with start direction
-        float blend = (t - 0.99f) / 0.01f;  // Blend over last 1% of path
-        Vector3 startDir = (points_.front() - points_.back()).normalized();
-        return (tangent * (1.0f - blend) + startDir * blend).normalized();
+    // For closed paths, ensure smooth transition at end
+    if (closed_ && t > 0.95f) {
+        // Get vectors to start point
+        Vector3 toStart = (points_[0] - points_.back()).normalized();
+        
+        // Blend over the last 5% of the path
+        float blend = (t - 0.95f) / 0.05f;
+        tangent = (tangent.normalized() * (1.0f - blend) + toStart * blend);
     }
     
-    return tangent;
+    // Ensure tangent points in the correct direction
+    Vector3 normalizedTangent = tangent.normalized();
+    if (closed_ && t > 0.95f) {
+        Vector3 toStart = (points_[0] - points_.back()).normalized();
+        if (normalizedTangent.dot(toStart) < 0.0f) {
+            normalizedTangent = -normalizedTangent;
+        }
+    }
+    
+    return normalizedTangent;
 }
 
 Vector3 Path::getNormal(float t, const Vector3& up) const {
@@ -160,7 +175,7 @@ Vector3 Path::getBinormal(float t, const Vector3& up) const {
 std::tuple<Vector3, Vector3, Vector3, Vector3> 
 Path::getFrame(float t, const Vector3& up) const {
     Vector3 position = getPosition(t);
-    Vector3 tangent = getTangent(t).normalized();  // Ensure normalized
+    Vector3 tangent = getTangent(t);
     Vector3 normal = getNormal(t, up);
     Vector3 binormal = tangent.cross(normal).normalized();
     return std::make_tuple(position, tangent, normal, binormal);
@@ -212,13 +227,6 @@ void Path::setTension(float tension) {
     }
     if (tension_ != tension) {
         tension_ = tension;
-
-        // Apply scaled tension
-        if (catmullPath_) {
-            float scaledTension = tension_ * 2.0f;  // Scale for more intuitive control
-            catmullPath_->setTension(scaledTension);
-        }
-
         rebuildPath();
     }
 }
@@ -257,22 +265,22 @@ void Path::rebuildPath() {
     
     std::vector<Vector3> pathPoints = points_;
     
-    // Handle closed paths by adding wrapping points
+    // Handle closed paths
     if (closed_ && points_.size() > 2) {
         if (type_ == PathType::CatmullRom) {
-            // For Catmull-Rom, we need extra points for proper end conditions
-            pathPoints.insert(pathPoints.begin(), points_.back());
-            pathPoints.push_back(points_.front());
-            pathPoints.push_back(points_[1]);
+            // For Catmull-Rom, we need extra points for proper closure
+            // Add the second-to-last point at the start and second point at the end
+            pathPoints.insert(pathPoints.begin(), pathPoints[pathPoints.size()-2]);
+            pathPoints.push_back(pathPoints[1]);
         } else {
             // For other types, just connect back to start
-            pathPoints.push_back(points_.front());
+            pathPoints.push_back(pathPoints[0]);
         }
     } else if (type_ == PathType::CatmullRom) {
         // For open Catmull-Rom, extend end points
         Vector3 startTangent = points_[1] - points_[0];
         Vector3 endTangent = points_.back() - points_[points_.size() - 2];
-        pathPoints.insert(pathPoints.begin(), points_.front() - startTangent);
+        pathPoints.insert(pathPoints.begin(), points_[0] - startTangent);
         pathPoints.push_back(points_.back() + endTangent);
     }
     
