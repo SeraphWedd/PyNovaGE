@@ -57,11 +57,8 @@ public:
         auto it = objectMap_.find(id);
         
         if (it != objectMap_.end()) {
-            // Remove from spatial structure but keep in map
-            auto obj = std::move(it->second);
+            // Reinsert using the same object pointer; keep ownership in map
             removeFromNode(root_.get(), object);
-            
-            // Reinsert into spatial structure
             insertIntoNode(root_.get(), object);
         }
     }
@@ -122,7 +119,7 @@ private:
         AABB2D() = default;
         explicit AABB2D(const AABB& aabb) {
             center = Vector2(aabb.center().x, aabb.center().z);
-            extent = Vector2(aabb.dimensions().x, aabb.dimensions().z);
+            extent = Vector2(aabb.dimensions().x * 0.5f, aabb.dimensions().z * 0.5f);  // Store half-dimensions
         }
         
         void extend(const AABB2D& other) {
@@ -207,7 +204,7 @@ private:
             obj3dBounds.min.y, obj3dBounds.max.y);
         
         if (containsAABB(childBounds3D, obj3dBounds)) {
-            insertIntoNode(node->children[index].get(), std::move(object));
+            insertIntoNode(node->children[index].get(), object);
         } else {
             node->objects.push_back(object);
         }
@@ -237,25 +234,7 @@ private:
                   std::vector<const SpatialObject<T>*>& results) const {
         if (!node) return;
         
-        // For point queries, determine Y bounds from the query point
-        float minY = -std::numeric_limits<float>::max();
-        float maxY = std::numeric_limits<float>::max();
-        
-        if (auto* pointQuery = dynamic_cast<const PointQuery<T>*>(&query)) {
-            const Vector3& point = pointQuery->getPoint();
-            minY = point.y - config_.minNodeSize;
-            maxY = point.y + config_.minNodeSize;
-        } else if (auto* volumeQuery = dynamic_cast<const VolumeQuery<T>*>(&query)) {
-            const AABB& bounds = volumeQuery->getBounds();
-            minY = bounds.min.y;
-            maxY = bounds.max.y;
-        }
-        
-        // Convert 2D bounds to 3D for query
-        AABB bounds3D = node->bounds.to3D(minY, maxY);
-        
-        if (!query.shouldTraverseNode(bounds3D)) return;
-        
+        // Traverse without over-filtering by Y; objects themselves will be filtered
         for (const auto* obj : node->objects) {
             if (query.shouldAcceptObject(*obj)) {
                 results.push_back(obj);

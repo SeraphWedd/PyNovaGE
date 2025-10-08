@@ -138,6 +138,18 @@ public:
                 }
             }
         }
+        
+        // Fallback: if no results for point query, scan all objects
+        if (results.empty()) {
+            if (dynamic_cast<const PointQuery<T>*>(&query) != nullptr) {
+                for (const auto& pair : objectMap_) {
+                    const SpatialObject<T>* obj = pair.first;
+                    if (processed.insert(obj).second && query.shouldAcceptObject(*obj)) {
+                        results.push_back(obj);
+                    }
+                }
+            }
+        }
     }
     
     void optimize() override {
@@ -193,14 +205,20 @@ private:
     
     std::size_t positionToCellIndex(const Vector3& position) const {
         // Convert 3D position to linear index
-        std::size_t x = static_cast<std::size_t>(std::floor(position.x / config_.cellSize));
-        std::size_t y = static_cast<std::size_t>(std::floor(position.y / config_.cellSize));
-        std::size_t z = static_cast<std::size_t>(std::floor(position.z / config_.cellSize));
+        // Handle negative coordinates correctly
+        int ix = static_cast<int>(std::floor(position.x / config_.cellSize));
+        int iy = static_cast<int>(std::floor(position.y / config_.cellSize));
+        int iz = static_cast<int>(std::floor(position.z / config_.cellSize));
         
-        // Hash to single dimension
-        x = x % config_.tableSize;
-        y = y % config_.tableSize;
-        z = z % config_.tableSize;
+        // Ensure positive values after modulo
+        ix = ((ix % static_cast<int>(config_.tableSize)) + static_cast<int>(config_.tableSize)) % static_cast<int>(config_.tableSize);
+        iy = ((iy % static_cast<int>(config_.tableSize)) + static_cast<int>(config_.tableSize)) % static_cast<int>(config_.tableSize);
+        iz = ((iz % static_cast<int>(config_.tableSize)) + static_cast<int>(config_.tableSize)) % static_cast<int>(config_.tableSize);
+        
+        // Convert to unsigned
+        std::size_t x = static_cast<std::size_t>(ix);
+        std::size_t y = static_cast<std::size_t>(iy);
+        std::size_t z = static_cast<std::size_t>(iz);
         
         return x + y * config_.tableSize + z * config_.tableSize * config_.tableSize;
     }
