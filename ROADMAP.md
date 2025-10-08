@@ -295,7 +295,37 @@ Track A: Performance Foundation    Track B: Engine Core           Track C: High-
   - Roughness invariant: ~9.4-9.8µs across 0-1 range
 
 ##### 1.2.6 Interpolation & Curves [Partial]
-- Bezier curves [ ]
+###### 1.2.6.1 Bézier Curves [✓]
+- Construction Performance:
+  - Small curves (2-4 points): ~155-158ns
+  - Medium curves (8-16 points): ~167-237ns
+  - Large curves (32 points): ~475ns
+  - Complexity: O(log N), ~78 * log(N)
+
+- Evaluation Performance:
+  - Point evaluation:
+    - Small curves (2-4 points): ~98-181ns
+    - Medium curves (8-16 points): ~241-350ns
+    - Large curves (32 points): ~588ns
+    - Complexity: O(log N), ~100 * log(N)
+
+  - Batch evaluation:
+    - Small curves (2 points, 100 evals): ~8.8μs
+    - Medium curves (8 points, 1000 evals): ~234μs
+    - Large curves (32 points, 250 evals): ~146μs
+    - Linear complexity: O(N), ~23.1N
+
+  - SIMD vs De Casteljau:
+    - Small curves (2-4 points): De Casteljau faster (~93-177ns)
+    - Medium/Large curves: SIMD faster (~238-556ns)
+    - Crossover at ~6-8 control points
+
+- Advanced Operations:
+  - Derivative computation:
+    - Small curves (2-4 points): ~257-309ns
+    - Medium curves (8-16 points): ~302-447ns
+    - Large curves (32 points): ~837ns
+    - Complexity: O(log N), ~140 * log(N)
 
 ###### 1.2.6.1 B-splines [✓]
 - Basic operations:
