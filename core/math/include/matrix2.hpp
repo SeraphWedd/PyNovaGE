@@ -24,8 +24,12 @@ namespace math {
  */
 class Matrix2 {
 public:
-    // Data storage (row-major order for easier SIMD operations)
-    alignas(16) float m[4];
+    // Data storage (row-major order with SIMD-aligned layout)
+    union {
+        alignas(16) float m[4];      // Direct array access
+        struct { float m00, m01,      // First row
+                      m10, m11; };    // Second row
+    };
 
     /**
      * @brief Default constructor, creates identity matrix
@@ -55,9 +59,104 @@ public:
         float s = std::sin(radians);
         return Matrix2(c, -s, s, c);
     }
-    static Matrix2 scale(float sx, float sy) { return Matrix2(sx,0, 0,sy); }
+    static Matrix2 scale(float sx, float sy) {
+        return Matrix2(sx, 0.0f, 0.0f, sy);
+    }
+    
+    /**
+     * @brief Performs batch matrix multiplication of multiple 2x2 matrices
+     * @param matrices Array of 2x2 matrices to multiply
+     * @param count Number of matrices in the array
+     * @return Product of all matrices in order
+     */
+    static Matrix2 batchMultiply(const Matrix2* matrices, size_t count) {
+        if (count == 0) return Matrix2::identity();
+        if (count == 1) return matrices[0];
+        
+        Matrix2 result = matrices[0];
+        for (size_t i = 1; i < count; ++i) {
+            result = result * matrices[i];
+        }
+        return result;
+    }
+    
+    /**
+     * @brief Extracts the scale components from the matrix
+     * @return Vector2 containing scale for x and y axes
+     */
+    Vector2 extractScale() const {
+        return Vector2(
+            std::sqrt(m00 * m00 + m10 * m10),  // x scale
+            std::sqrt(m01 * m01 + m11 * m11)   // y scale
+        );
+    }
+    
+    /**
+     * @brief Extracts the rotation angle from the matrix
+     * @return Rotation angle in radians
+     */
+    float extractRotation() const {
+        Vector2 scale = extractScale();
+        float invScaleX = 1.0f / scale.x;
+        float invScaleY = 1.0f / scale.y;
+        
+        // Remove scale to get pure rotation
+        float cos_theta = m00 * invScaleX;
+        float sin_theta = m10 * invScaleX;
+        
+        return std::atan2(sin_theta, cos_theta);
+    }
+    
+    /**
+     * @brief Linear interpolation between two matrices
+     * @param a First matrix
+     * @param b Second matrix
+     * @param t Interpolation factor (0-1)
+     */
+    static Matrix2 lerp(const Matrix2& a, const Matrix2& b, float t) {
+        // Extract components
+        Vector2 scaleA = a.extractScale();
+        float rotA = a.extractRotation();
+        
+        Vector2 scaleB = b.extractScale();
+        float rotB = b.extractRotation();
+        
+        // Interpolate scale and rotation
+        Vector2 scale = Vector2::lerp(scaleA, scaleB, t);
+        float rot = rotA + t * (rotB - rotA);
+        
+        // Reconstruct matrix
+        return Matrix2::scale(scale.x, scale.y) * Matrix2::rotation(rot);
+    }
 
-    void setIdentity() { m[0]=1; m[1]=0; m[2]=0; m[3]=1; }
+    void setIdentity() {
+        m00 = 1.0f; m01 = 0.0f;
+        m10 = 0.0f; m11 = 1.0f;
+    }
+
+    // Component-wise addition
+    Matrix2 operator+(const Matrix2& other) const {
+        Matrix2 result;
+        SimdUtils::Add4f(m, other.m, result.m);
+        return result;
+    }
+
+    Matrix2& operator+=(const Matrix2& other) {
+        SimdUtils::Add4f(m, other.m, m);
+        return *this;
+    }
+
+    // Component-wise subtraction
+    Matrix2 operator-(const Matrix2& other) const {
+        Matrix2 result;
+        SimdUtils::Subtract4f(m, other.m, result.m);
+        return result;
+    }
+
+    Matrix2& operator-=(const Matrix2& other) {
+        SimdUtils::Subtract4f(m, other.m, m);
+        return *this;
+    }
 
     Matrix2 operator*(const Matrix2& other) const {
         Matrix2 r;
@@ -111,36 +210,28 @@ public:
         return !(*this == other);
     }
 
-    // Matrix-scalar operations
+    // Matrix-scalar operations using SIMD
     Matrix2 operator*(float scalar) const {
         Matrix2 result;
-        for (int i = 0; i < 4; ++i) {
-            result.m[i] = m[i] * scalar;
-        }
+        SimdUtils::Multiply4fScalar(m, scalar, result.m);
         return result;
     }
 
     Matrix2& operator*=(float scalar) {
-        for (int i = 0; i < 4; ++i) {
-            m[i] *= scalar;
-        }
+        SimdUtils::Multiply4fScalar(m, scalar, m);
         return *this;
     }
 
-    // Component-wise operations
+    // Component-wise operations using SIMD
     Matrix2 cwiseProduct(const Matrix2& other) const {
         Matrix2 result;
-        for (int i = 0; i < 4; ++i) {
-            result.m[i] = m[i] * other.m[i];
-        }
+        SimdUtils::Multiply4f(m, other.m, result.m);
         return result;
     }
 
     Matrix2 cwiseQuotient(const Matrix2& other) const {
         Matrix2 result;
-        for (int i = 0; i < 4; ++i) {
-            result.m[i] = m[i] / other.m[i];
-        }
+        SimdUtils::Divide4f(m, other.m, result.m);
         return result;
     }
 

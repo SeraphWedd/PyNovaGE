@@ -91,7 +91,19 @@ public:
 Plane() : normal(0.0f, 1.0f, 0.0f), distance(0.0f) {}
     
     Plane(const Vector3& normal_, float distance_)
-        : normal(normal_.normalized()), distance(distance_) {}
+        : normal(normal_), distance(distance_) {
+        // Ensure plane is in normalized form: |normal| = 1 and distance scaled accordingly
+        float len = normal.length();
+        if (len > 0.0f && std::abs(len - 1.0f) > 1e-6f) {
+            float invLen = 1.0f / len;
+            normal *= invLen;
+            distance *= invLen;
+        } else if (len == 0.0f) {
+            // Degenerate normal; default to Y-up plane at origin
+            normal = Vector3(0.0f, 1.0f, 0.0f);
+            distance = 0.0f;
+        }
+    }
     
     /**
      * @brief Constructs a plane from a point and normal
@@ -149,6 +161,13 @@ AABB() : min(0.0f, 0.0f, 0.0f), max(0.0f, 0.0f, 0.0f) {}
      */
     Vector3 dimensions() const {
         return max - min;
+    }
+
+    /**
+     * @brief Returns the half-extents (half width, height, depth) of the AABB
+     */
+    Vector3 halfExtents() const {
+        return (max - min) * 0.5f;
     }
 
     /**

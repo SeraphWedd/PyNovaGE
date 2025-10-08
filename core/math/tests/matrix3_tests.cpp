@@ -27,31 +27,31 @@ protected:
 
 TEST_F(Matrix3Test, DefaultConstruction) {
     Matrix3 m;
-    EXPECT_FLOAT_EQ(m.m[0][0], 1.0f);
-    EXPECT_FLOAT_EQ(m.m[0][1], 0.0f);
-    EXPECT_FLOAT_EQ(m.m[0][2], 0.0f);
-    EXPECT_FLOAT_EQ(m.m[1][0], 0.0f);
-    EXPECT_FLOAT_EQ(m.m[1][1], 1.0f);
-    EXPECT_FLOAT_EQ(m.m[1][2], 0.0f);
-    EXPECT_FLOAT_EQ(m.m[2][0], 0.0f);
-    EXPECT_FLOAT_EQ(m.m[2][1], 0.0f);
-    EXPECT_FLOAT_EQ(m.m[2][2], 1.0f);
+    EXPECT_FLOAT_EQ(m.m00, 1.0f);
+    EXPECT_FLOAT_EQ(m.m01, 0.0f);
+    EXPECT_FLOAT_EQ(m.m02, 0.0f);
+    EXPECT_FLOAT_EQ(m.m10, 0.0f);
+    EXPECT_FLOAT_EQ(m.m11, 1.0f);
+    EXPECT_FLOAT_EQ(m.m12, 0.0f);
+    EXPECT_FLOAT_EQ(m.m20, 0.0f);
+    EXPECT_FLOAT_EQ(m.m21, 0.0f);
+    EXPECT_FLOAT_EQ(m.m22, 1.0f);
 }
 
 TEST_F(Matrix3Test, ValueConstruction) {
     Matrix3 m1(1.0f, 2.0f, 3.0f,
-                 4.0f, 5.0f, 6.0f,
-                 7.0f, 8.0f, 9.0f);
+                4.0f, 5.0f, 6.0f,
+                7.0f, 8.0f, 9.0f);
     
-    EXPECT_FLOAT_EQ(m1.m[0][0], 1.0f);
-    EXPECT_FLOAT_EQ(m1.m[0][1], 2.0f);
-    EXPECT_FLOAT_EQ(m1.m[0][2], 3.0f);
-    EXPECT_FLOAT_EQ(m1.m[1][0], 4.0f);
-    EXPECT_FLOAT_EQ(m1.m[1][1], 5.0f);
-    EXPECT_FLOAT_EQ(m1.m[1][2], 6.0f);
-    EXPECT_FLOAT_EQ(m1.m[2][0], 7.0f);
-    EXPECT_FLOAT_EQ(m1.m[2][1], 8.0f);
-    EXPECT_FLOAT_EQ(m1.m[2][2], 9.0f);
+    EXPECT_FLOAT_EQ(m1.m00, 1.0f);
+    EXPECT_FLOAT_EQ(m1.m01, 2.0f);
+    EXPECT_FLOAT_EQ(m1.m02, 3.0f);
+    EXPECT_FLOAT_EQ(m1.m10, 4.0f);
+    EXPECT_FLOAT_EQ(m1.m11, 5.0f);
+    EXPECT_FLOAT_EQ(m1.m12, 6.0f);
+    EXPECT_FLOAT_EQ(m1.m20, 7.0f);
+    EXPECT_FLOAT_EQ(m1.m21, 8.0f);
+    EXPECT_FLOAT_EQ(m1.m22, 9.0f);
 }
 
 TEST_F(Matrix3Test, Identity) {
@@ -98,50 +98,50 @@ TEST_F(Matrix3Test, Multiplication) {
 
     // Test matrix * scalar
     Matrix3 scaled = identity * 2.0f;
-    EXPECT_FLOAT_EQ(scaled.m[0][0], 2.0f);
-    EXPECT_FLOAT_EQ(scaled.m[1][1], 2.0f);
-    EXPECT_FLOAT_EQ(scaled.m[2][2], 2.0f);
+    EXPECT_FLOAT_EQ(scaled.m00, 2.0f);
+    EXPECT_FLOAT_EQ(scaled.m11, 2.0f);
+    EXPECT_FLOAT_EQ(scaled.m22, 2.0f);
 }
 
 TEST_F(Matrix3Test, Addition) {
     Matrix3 m1(1.0f, 0.0f, 0.0f,
-                 0.0f, 1.0f, 0.0f,
-                 0.0f, 0.0f, 1.0f);
+               0.0f, 1.0f, 0.0f,
+               0.0f, 0.0f, 1.0f);
     
     Matrix3 m2(2.0f, 0.0f, 0.0f,
-                 0.0f, 2.0f, 0.0f,
-                 0.0f, 0.0f, 2.0f);
+               0.0f, 2.0f, 0.0f,
+               0.0f, 0.0f, 2.0f);
     
     Matrix3 sum = m1 + m2;
-    EXPECT_FLOAT_EQ(sum.m[0][0], 3.0f);
-    EXPECT_FLOAT_EQ(sum.m[1][1], 3.0f);
-    EXPECT_FLOAT_EQ(sum.m[2][2], 3.0f);
+    EXPECT_FLOAT_EQ(sum.m00, 3.0f);
+    EXPECT_FLOAT_EQ(sum.m11, 3.0f);
+    EXPECT_FLOAT_EQ(sum.m22, 3.0f);
 }
 
 TEST_F(Matrix3Test, Subtraction) {
     Matrix3 m1(2.0f, 0.0f, 0.0f,
-                 0.0f, 2.0f, 0.0f,
-                 0.0f, 0.0f, 2.0f);
+               0.0f, 2.0f, 0.0f,
+               0.0f, 0.0f, 2.0f);
     
     Matrix3 m2(1.0f, 0.0f, 0.0f,
-                 0.0f, 1.0f, 0.0f,
-                 0.0f, 0.0f, 1.0f);
+               0.0f, 1.0f, 0.0f,
+               0.0f, 0.0f, 1.0f);
     
     Matrix3 diff = m1 - m2;
-    EXPECT_FLOAT_EQ(diff.m[0][0], 1.0f);
-    EXPECT_FLOAT_EQ(diff.m[1][1], 1.0f);
-    EXPECT_FLOAT_EQ(diff.m[2][2], 1.0f);
+    EXPECT_FLOAT_EQ(diff.m00, 1.0f);
+    EXPECT_FLOAT_EQ(diff.m11, 1.0f);
+    EXPECT_FLOAT_EQ(diff.m22, 1.0f);
 }
 
 TEST_F(Matrix3Test, Transpose) {
     Matrix3 m(1.0f, 2.0f, 3.0f,
-                4.0f, 5.0f, 6.0f,
-                7.0f, 8.0f, 9.0f);
+              4.0f, 5.0f, 6.0f,
+              7.0f, 8.0f, 9.0f);
     
     Matrix3 mt = m.transposed();
-    EXPECT_FLOAT_EQ(mt.m[0][1], m.m[1][0]);
-    EXPECT_FLOAT_EQ(mt.m[0][2], m.m[2][0]);
-    EXPECT_FLOAT_EQ(mt.m[1][2], m.m[2][1]);
+    EXPECT_FLOAT_EQ(mt.m01, m.m10);
+    EXPECT_FLOAT_EQ(mt.m02, m.m20);
+    EXPECT_FLOAT_EQ(mt.m12, m.m21);
     
     m.transpose();
     EXPECT_EQ(m, mt);

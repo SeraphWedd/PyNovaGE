@@ -45,36 +45,36 @@ TEST_F(FrustumCullingTest, SphereTest) {
 }
 
 TEST_F(FrustumCullingTest, AABBTest) {
-    // AABB at origin
-    AABB aabb(Vector3(0, 0, 0), Vector3(1, 1, 1));
+    // AABB at origin - create with min/max points
+    AABB aabb(Vector3(-0.5f, -0.5f, -0.5f), Vector3(0.5f, 0.5f, 0.5f));
     EXPECT_EQ(frustum_->testAABB(aabb), FrustumCulling::TestResult::INSIDE);
     
     // AABB partially intersecting
-    AABB intersectingAABB(Vector3(0, 5, 0), Vector3(2, 2, 2));
+    AABB intersectingAABB(Vector3(-1.0f, 4.0f, -1.0f), Vector3(1.0f, 6.0f, 1.0f));
     EXPECT_EQ(frustum_->testAABB(intersectingAABB), FrustumCulling::TestResult::INTERSECT);
     
     // AABB completely outside
-    AABB outsideAABB(Vector3(0, 20, 0), Vector3(1, 1, 1));
+    AABB outsideAABB(Vector3(-0.5f, 19.5f, -0.5f), Vector3(0.5f, 20.5f, 0.5f));
     EXPECT_EQ(frustum_->testAABB(outsideAABB), FrustumCulling::TestResult::OUTSIDE);
 }
 
 TEST_F(FrustumCullingTest, AABBSIMDTest) {
-    // AABB at origin
-    AABB aabb(Vector3(0, 0, 0), Vector3(1, 1, 1));
+    // AABB at origin - create with min/max points
+    AABB aabb(Vector3(-0.5f, -0.5f, -0.5f), Vector3(0.5f, 0.5f, 0.5f));
     EXPECT_EQ(frustum_->testAABBSIMD(aabb), FrustumCulling::TestResult::INSIDE);
     
     // AABB partially intersecting
-    AABB intersectingAABB(Vector3(0, 5, 0), Vector3(2, 2, 2));
+    AABB intersectingAABB(Vector3(-1.0f, 4.0f, -1.0f), Vector3(1.0f, 6.0f, 1.0f));
     EXPECT_EQ(frustum_->testAABBSIMD(intersectingAABB), FrustumCulling::TestResult::INTERSECT);
     
     // AABB completely outside
-    AABB outsideAABB(Vector3(0, 20, 0), Vector3(1, 1, 1));
+    AABB outsideAABB(Vector3(-0.5f, 19.5f, -0.5f), Vector3(0.5f, 20.5f, 0.5f));
     EXPECT_EQ(frustum_->testAABBSIMD(outsideAABB), FrustumCulling::TestResult::OUTSIDE);
 }
 
 TEST_F(FrustumCullingTest, UpdateTest) {
     // Test initial state
-    AABB aabb(Vector3(0, 0, 0), Vector3(1, 1, 1));
+    AABB aabb(Vector3(-0.5f, -0.5f, -0.5f), Vector3(0.5f, 0.5f, 0.5f));
     EXPECT_EQ(frustum_->testAABB(aabb), FrustumCulling::TestResult::INSIDE);
     
     // Move camera and update frustum
