@@ -16,6 +16,7 @@ add_library(pynovage_math
     src/geometry/bspline.cpp
     src/geometry/bezier.cpp
     src/geometry/hermite.cpp
+    src/geometry/catmull_rom.cpp
     src/lighting/attenuation.cpp
     src/lighting/point_light.cpp
     src/lighting/directional_light.cpp
