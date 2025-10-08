@@ -160,9 +160,9 @@ static void BM_Matrix3Orthogonalization(benchmark::State& state) {
     
     for (auto _ : state) {
         // Gram-Schmidt orthogonalization
-        Vector3 x(m.m[0][0], m.m[0][1], m.m[0][2]);
-        Vector3 y(m.m[1][0], m.m[1][1], m.m[1][2]);
-        Vector3 z(m.m[2][0], m.m[2][1], m.m[2][2]);
+        Vector3 x(m.m00, m.m01, m.m02);
+        Vector3 y(m.m10, m.m11, m.m12);
+        Vector3 z(m.m20, m.m21, m.m22);
         
         x = x.normalized();
         y = (y - x * x.dot(y)).normalized();
