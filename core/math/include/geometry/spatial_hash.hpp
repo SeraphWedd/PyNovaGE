@@ -34,16 +34,9 @@ public:
     }
     
     void insert(std::unique_ptr<SpatialObject<T>> object) override {
-        // Reuse thread-local storage for cell indices to avoid allocation
-        storage_.cellIndices.clear();
+        // Grid size is fixed in reserveObjects now to avoid expensive rebuilds
         
-        // Throttle grid adjustment: only on powers of two to avoid per-insert cost
-        std::size_t oldGridSize = gridSize_;
-        if (objectCount_ == 0 || ((objectCount_ & (objectCount_ - 1)) == 0)) {
-            adjustGridSize();
-        }
-        
-        // Update total bounds
+        // Update total bounds efficiently
         const AABB& objBounds = object->getBounds();
         if (objectCount_ == 0) {
             totalBounds_ = objBounds;
@@ -60,58 +53,23 @@ public:
             );
         }
         
-        // If grid size changed, rebuild
-        if (oldGridSize != gridSize_ && objectCount_ > 0) {
-            // Store object for after rebuild
-            std::vector<std::unique_ptr<SpatialObject<T>>> objects;
-            objects.reserve(objectCount_ + 1);
-            objects.push_back(std::move(object));
-            
-            // Collect existing objects
-            for (auto& pair : objectMap_) {
-                objects.push_back(std::move(pair.second));
-            }
-            
-            // Clear and rebuild
-            clear();
-            for (auto& obj : objects) {
-                const SpatialObject<T>* objPtr = obj.get();
-                std::size_t id = reinterpret_cast<std::size_t>(objPtr);
-                objectMap_[id] = std::move(obj);
-                objectCount_++;
-                
-        // Calculate cell indices without padding for insert (fewer cells touched)
-        std::vector<std::size_t> cellIndices;
-        cellIndices.reserve(8);
-        getCellIndicesNoPad(objPtr->getBounds(), cellIndices);
-                
-                // Add to cells
-                for (std::size_t index : cellIndices) {
-                    cells_[index].objects.push_back(objPtr);
-                }
-                
-                objectCells_[id] = std::move(cellIndices);
-            }
-            return;
-        }
-        
-        // Normal insertion path
+        // Fast object insertion path
         const SpatialObject<T>* objPtr = object.get();
-        std::size_t id = reinterpret_cast<std::size_t>(objPtr);
+        const std::size_t id = reinterpret_cast<std::size_t>(objPtr);
         objectMap_[id] = std::move(object);
         objectCount_++;
         
-        // Calculate cell indices without padding (reusing thread-local storage)
+        // Reuse thread-local storage for cell indices
+        storage_.cellIndices.clear();
         getCellIndicesNoPad(objBounds, storage_.cellIndices);
         
-        // Add to cells
+        // Fast insert using SOA Cell implementation
         for (std::size_t index : storage_.cellIndices) {
-            auto it = cells_.try_emplace(index).first;
-            it->second.objects.push_back(objPtr);
+            cells_[index].push_back(objPtr);
         }
         
-        // Copy indices for tracking (need a copy since storage_ will be reused)
-        objectCells_[id] = storage_.cellIndices;
+        // Move indices to permanent storage
+        objectCells_[id] = std::move(storage_.cellIndices);
     }
     
     void remove(const SpatialObject<T>* object) override {
@@ -119,20 +77,11 @@ public:
         auto it = objectCells_.find(id);
         if (it == objectCells_.end()) return;
         
-        // Remove from cells
+        // Remove from cells using Cell API
         const auto& cellIndices = it->second;
         for (std::size_t index : cellIndices) {
             auto& cell = cells_[index];
-            // Fast remove since order doesn't matter
-            for (std::size_t i = 0; i < cell.objects.size(); ++i) {
-                if (cell.objects[i] == object) {
-                    if (i < cell.objects.size() - 1) {
-                        cell.objects[i] = cell.objects.back();
-                    }
-                    cell.objects.pop_back();
-                    break;
-                }
-            }
+            cell.remove_ptr(object);
         }
         
         // Remove from maps
@@ -169,24 +118,16 @@ public:
         if (oldIt != objectCells_.end()) {
             const auto& oldIndices = oldIt->second;
             
-            // Remove from old cells with fast removal
+            // Remove from old cells using Cell API
             for (std::size_t index : oldIndices) {
                 auto& cell = cells_[index];
-                for (std::size_t i = 0; i < cell.objects.size(); ++i) {
-                    if (cell.objects[i] == object) {
-                        if (i < cell.objects.size() - 1) {
-                            cell.objects[i] = cell.objects.back();
-                        }
-                        cell.objects.pop_back();
-                        break;
-                    }
-                }
+                cell.remove_ptr(object);
             }
         }
         
         // Add to new cells
         for (std::size_t index : newCellIndices) {
-            cells_[index].objects.push_back(object);
+            cells_[index].push_back(object);
         }
         
         objectCells_[id] = std::move(newCellIndices);
@@ -209,6 +150,15 @@ public:
         if (expectedCells > cells_.bucket_count()) {
             cells_.reserve(expectedCells);
         }
+
+        // Choose a power-of-two grid size up-front based on expected count to avoid
+        // expensive grid rebuilds during bulk insert.
+        if (count < 100) gridSize_ = 16;
+        else if (count < 1000) gridSize_ = 32;
+        else if (count < 10000) gridSize_ = 64;
+        else gridSize_ = 128;
+        gridSizeSq_ = gridSize_ * gridSize_;
+        cellSizeInv_ = 1.0f / config_.cellSize;
     }
     
     void query(const SpatialQuery<T>& query,
@@ -238,20 +188,27 @@ public:
             processed.reserve(32);
             
             // Check neighboring cells for objects that might contain the point
-            std::size_t x = baseIndex % gridSize_;
-            std::size_t y = (baseIndex / gridSize_) % gridSize_;
-            std::size_t z = baseIndex / gridSizeSq_;
+            const std::size_t gridMask = gridSize_ - 1;
+            const std::size_t gridShift = static_cast<std::size_t>(log2(gridSize_));
+            std::size_t x = baseIndex & gridMask;
+            std::size_t y = (baseIndex >> gridShift) & gridMask;
+            std::size_t z = (baseIndex >> (2 * gridShift)) & gridMask;
             
             for (const auto& offset : offsets) {
-                std::size_t newX = (x + offset[0]) % gridSize_;
-                std::size_t newY = (y + offset[1]) % gridSize_;
-                std::size_t newZ = (z + offset[2]) % gridSize_;
-                std::size_t index = newX + newY * gridSize_ + newZ * gridSizeSq_;
+                std::size_t newX = (x + offset[0]) & gridMask;
+                std::size_t newY = (y + offset[1]) & gridMask;
+                std::size_t newZ = (z + offset[2]) & gridMask;
+                std::size_t index = newX + (newY << gridShift) + (newZ << (2 * gridShift));
                 
                 auto it = cells_.find(index);
                 if (it == cells_.end()) continue;
                 
-                for (const auto* obj : it->second.objects) {
+                const auto& cell = it->second;
+                if (cell.empty()) continue;
+                
+                const std::size_t n = cell.get_size();
+                for (std::size_t i = 0; i < n; ++i) {
+                    const auto* obj = cell.get(i);
                     if (processed.insert(obj).second && 
                         obj->contains(point) && 
                         query.shouldAcceptObject(*obj)) {
@@ -270,13 +227,15 @@ public:
             
             // Conservative approach: iterate non-empty cells and test objects via shouldAcceptObject
             for (const auto& pair : cells_) {
-                const auto& cell = pair.second;
-                if (cell.objects.empty()) continue;
-                for (const auto* obj : cell.objects) {
-                    if (query.shouldAcceptObject(*obj)) {
-                        results.push_back(obj);
-                    }
+            const auto& cell = pair.second;
+            if (cell.empty()) continue;
+            const std::size_t n = cell.get_size();
+            for (std::size_t i = 0; i < n; ++i) {
+                const auto* obj = cell.get(i);
+                if (query.shouldAcceptObject(*obj)) {
+                    results.push_back(obj);
                 }
+            }
             }
             return;
         }
@@ -310,13 +269,13 @@ public:
             if (it == cells_.end()) continue;
             
             const auto& cell = it->second;
-            // Skip empty cells or if cell is too far
-            if (cell.objects.empty()) continue;
+            if (cell.empty()) continue;
             
             // Process objects in this cell
-            for (const auto* obj : cell.objects) {
+            const std::size_t n = cell.get_size();
+            for (std::size_t i = 0; i < n; ++i) {
+                const auto* obj = cell.get(i);
                 if (processed.insert(obj).second) {
-                    // Extra bounds check since we might have over-estimated cells
                     if (aabbAABBIntersection(bounds, obj->getBounds()).has_value() &&
                         query.shouldAcceptObject(*obj)) {
                         results.push_back(obj);
@@ -367,8 +326,77 @@ public:
 
 private:
     struct Cell {
+        static constexpr std::size_t LOCAL_CAPACITY = 8;
+        const SpatialObject<T>* local_objects[LOCAL_CAPACITY];
         std::vector<const SpatialObject<T>*> objects;
-        Cell() { objects.reserve(8); }  // Most cells contain few objects
+        std::size_t size;
+        
+        Cell() : size(0) {}
+        
+        void push_back(const SpatialObject<T>* obj) {
+            if (size < LOCAL_CAPACITY) {
+                local_objects[size++] = obj;
+            } else {
+                if (objects.empty()) {
+                    objects.reserve(LOCAL_CAPACITY * 2);
+                    objects.insert(objects.end(), local_objects, local_objects + LOCAL_CAPACITY);
+                }
+                objects.push_back(obj);
+                size++;
+            }
+        }
+        
+        const SpatialObject<T>* get(std::size_t index) const {
+            if (size <= LOCAL_CAPACITY) {
+                return local_objects[index];
+            }
+            return objects[index];
+        }
+        
+        void set(std::size_t index, const SpatialObject<T>* obj) {
+            if (size <= LOCAL_CAPACITY) {
+                local_objects[index] = obj;
+            } else {
+                objects[index] = obj;
+            }
+        }
+        
+        void pop_back() {
+            if (size == 0) return;
+            if (size <= LOCAL_CAPACITY) {
+                --size;
+                return;
+            }
+            objects.pop_back();
+            --size;
+            if (size == LOCAL_CAPACITY) {
+                for (std::size_t i = 0; i < LOCAL_CAPACITY; ++i) {
+                    local_objects[i] = objects[i];
+                }
+                objects.clear();
+            }
+        }
+        
+        bool remove_ptr(const SpatialObject<T>* obj) {
+            for (std::size_t i = 0; i < size; ++i) {
+                if (get(i) == obj) {
+                    if (i != size - 1) {
+                        set(i, get(size - 1));
+                    }
+                    pop_back();
+                    return true;
+                }
+            }
+            return false;
+        }
+        
+        void clear() {
+            objects.clear();
+            size = 0;
+        }
+        
+        bool empty() const { return size == 0; }
+        std::size_t get_size() const { return size; }
     };
     
     // Thread-local per-object reusable storage to avoid allocations
@@ -399,11 +427,15 @@ private:
     }
     
     std::size_t positionToCellIndex(const Vector3& position) const {
-        // Fast cell index calculation
-        std::size_t x = static_cast<std::size_t>(std::floor(position.x * cellSizeInv_)) % gridSize_;
-        std::size_t y = static_cast<std::size_t>(std::floor(position.y * cellSizeInv_)) % gridSize_;
-        std::size_t z = static_cast<std::size_t>(std::floor(position.z * cellSizeInv_)) % gridSize_;
-        return x + y * gridSize_ + z * gridSizeSq_;
+        // Fast cell index calculation using bit operations
+        const std::size_t gridMask = gridSize_ - 1;
+        const std::size_t gridShift = static_cast<std::size_t>(log2(gridSize_));
+        
+        std::size_t x = static_cast<std::size_t>(std::floor(position.x * cellSizeInv_)) & gridMask;
+        std::size_t y = static_cast<std::size_t>(std::floor(position.y * cellSizeInv_)) & gridMask;
+        std::size_t z = static_cast<std::size_t>(std::floor(position.z * cellSizeInv_)) & gridMask;
+        
+        return x + (y << gridShift) + (z << (2 * gridShift));
     }
     
     void getCellIndices(const AABB& bounds, std::vector<std::size_t>& indices) const {
@@ -444,41 +476,54 @@ private:
     }
     
     void getCellIndicesNoPad(const AABB& bounds, std::vector<std::size_t>& indices) const {
-        // Fast path for objects that likely fit in one cell (avoid modulo)
-        float minX = std::floor(bounds.min.x * cellSizeInv_);
-        float minY = std::floor(bounds.min.y * cellSizeInv_);
-        float minZ = std::floor(bounds.min.z * cellSizeInv_);
-        float maxX = std::floor(bounds.max.x * cellSizeInv_);
-        float maxY = std::floor(bounds.max.y * cellSizeInv_);
-        float maxZ = std::floor(bounds.max.z * cellSizeInv_);
+        // Get grid coords - float ops first for better vectorization
+        const float minX = std::floor(bounds.min.x * cellSizeInv_);
+        const float minY = std::floor(bounds.min.y * cellSizeInv_);
+        const float minZ = std::floor(bounds.min.z * cellSizeInv_);
+        const float maxX = std::floor(bounds.max.x * cellSizeInv_);
+        const float maxY = std::floor(bounds.max.y * cellSizeInv_);
+        const float maxZ = std::floor(bounds.max.z * cellSizeInv_);
         
+        // Single-cell fast path
         if (maxX == minX && maxY == minY && maxZ == minZ) {
-            // Object fits in one cell
-            std::size_t x = static_cast<std::size_t>(minX) % gridSize_;
-            std::size_t y = static_cast<std::size_t>(minY) % gridSize_;
-            std::size_t z = static_cast<std::size_t>(minZ) % gridSize_;
-            indices.push_back(x + y * gridSize_ + z * gridSizeSq_);
+            // Since gridSize_ is power of 2, modulo is a mask operation
+            const std::size_t gridMask = gridSize_ - 1;
+            const std::size_t x = static_cast<std::size_t>(minX) & gridMask;
+            const std::size_t y = static_cast<std::size_t>(minY) & gridMask;
+            const std::size_t z = static_cast<std::size_t>(minZ) & gridMask;
+            indices.push_back(x + (y << static_cast<std::size_t>(log2(gridSize_))) + 
+                            (z << static_cast<std::size_t>(2 * log2(gridSize_))));
             return;
         }
         
-        // Multi-cell case
-        std::size_t gminX = static_cast<std::size_t>(minX) % gridSize_;
-        std::size_t gminY = static_cast<std::size_t>(minY) % gridSize_;
-        std::size_t gminZ = static_cast<std::size_t>(minZ) % gridSize_;
-        std::size_t gmaxX = static_cast<std::size_t>(maxX) % gridSize_;
-        std::size_t gmaxY = static_cast<std::size_t>(maxY) % gridSize_;
-        std::size_t gmaxZ = static_cast<std::size_t>(maxZ) % gridSize_;
+        // Multi-cell case with efficient grid wrapping
+        const std::size_t gridMask = gridSize_ - 1;
+        const std::size_t gridShift = static_cast<std::size_t>(log2(gridSize_));
+        const std::size_t gminX = static_cast<std::size_t>(minX) & gridMask;
+        const std::size_t gminY = static_cast<std::size_t>(minY) & gridMask;
+        const std::size_t gminZ = static_cast<std::size_t>(minZ) & gridMask;
+        std::size_t gmaxX = static_cast<std::size_t>(maxX) & gridMask;
+        std::size_t gmaxY = static_cast<std::size_t>(maxY) & gridMask;
+        std::size_t gmaxZ = static_cast<std::size_t>(maxZ) & gridMask;
         
+        // Handle wrapping for max coords
         if (gmaxX < gminX) gmaxX += gridSize_;
         if (gmaxY < gminY) gmaxY += gridSize_;
         if (gmaxZ < gminZ) gmaxZ += gridSize_;
         
+        // Reserve exact capacity needed
+        const std::size_t numX = gmaxX - gminX + 1;
+        const std::size_t numY = gmaxY - gminY + 1;
+        const std::size_t numZ = gmaxZ - gminZ + 1;
+        indices.reserve(numX * numY * numZ);
+        
+        // Efficient grid index calculation using bit shifts instead of multiplication
         for (std::size_t z = gminZ; z <= gmaxZ; ++z) {
-            std::size_t zBase = (z % gridSize_) * gridSizeSq_;
+            const std::size_t zBase = (z & gridMask) << (2 * gridShift);
             for (std::size_t y = gminY; y <= gmaxY; ++y) {
-                std::size_t zyBase = zBase + (y % gridSize_) * gridSize_;
+                const std::size_t zyBase = zBase + ((y & gridMask) << gridShift);
                 for (std::size_t x = gminX; x <= gmaxX; ++x) {
-                    indices.push_back(zyBase + (x % gridSize_));
+                    indices.push_back(zyBase + (x & gridMask));
                 }
             }
         }
