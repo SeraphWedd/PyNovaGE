@@ -12,10 +12,10 @@ namespace geometry {
 
 class FrustumCulling {
 public:
-    enum class TestResult {
-        OUTSIDE,
-        INTERSECT,
-        INSIDE
+    enum class TestResult : uint32_t {
+        OUTSIDE = 0,
+        INTERSECT = 1,
+        INSIDE = 2
     };
     
     // Planes in order: NEAR, FAR, LEFT, RIGHT, TOP, BOTTOM
@@ -30,60 +30,85 @@ public:
     }
     
     TestResult testPoint(const Vector3& point) const {
+        bool allPositive = true;
         for (const Plane& plane : planes_) {
-            if (plane.signedDistance(point) < 0) {
+            float d = plane.signedDistance(point);
+            if (d < 0) {
                 return TestResult::OUTSIDE;
             }
+            allPositive = allPositive && (d > 0);
         }
-        return TestResult::INSIDE;
+        return allPositive ? TestResult::INSIDE : TestResult::OUTSIDE;
     }
     
     TestResult testSphere(const Vector3& center, float radius) const {
-        bool intersect = false;
+        constexpr float eps = 1e-6f;
+        bool allInside = true;
+        bool anyIntersect = false;
         
         for (const Plane& plane : planes_) {
             float distance = plane.signedDistance(center);
             
-            if (distance < -radius) {
+            if (distance < -radius - eps) {
                 return TestResult::OUTSIDE;
-            } else if (std::abs(distance) <= radius) {
-                intersect = true;
+            }
+            
+            // Sphere is inside the plane only if the center is farther from the plane than radius
+            if (distance < radius + eps) {
+                if (distance > -radius - eps) {
+                    anyIntersect = true;
+                }
+                if (distance < radius - eps) {
+                    allInside = false;
+                }
             }
         }
         
-        return intersect ? TestResult::INTERSECT : TestResult::INSIDE;
+        return allInside ? TestResult::INSIDE : (anyIntersect ? TestResult::INTERSECT : TestResult::OUTSIDE);
     }
     
     TestResult testAABB(const AABB& aabb) const {
-        bool intersect = false;
+        constexpr float eps = 1e-6f;
+        bool allInside = true;
+        bool anyIntersect = false;
         
         // Get box extents
         Vector3 center = aabb.center();
-        Vector3 extent = aabb.dimensions();
+        Vector3 extent = aabb.halfExtents();  // Use half extents for r calculation
         
         for (const Plane& plane : planes_) {
-            // Project box onto plane normal
+            // Project box onto plane normal using half extents
             float r = extent.x * std::abs(plane.normal.x) +
                      extent.y * std::abs(plane.normal.y) +
                      extent.z * std::abs(plane.normal.z);
             
             float d = plane.signedDistance(center);
             
-            if (d < -r) {
+            if (d < -r - eps) {
                 return TestResult::OUTSIDE;
-            } else if (std::abs(d) <= r) {
-                intersect = true;
+            }
+            
+            if (d < r - eps) {
+                if (d > -r + eps) {
+                    anyIntersect = true;
+                }
+                allInside = false;
             }
         }
         
-        return intersect ? TestResult::INTERSECT : TestResult::INSIDE;
+        if (allInside) {
+            return TestResult::INSIDE;
+        }
+        return anyIntersect ? TestResult::INTERSECT : TestResult::OUTSIDE;
     }
     
     // Optimized AABB test using SIMD
     TestResult testAABBSIMD(const AABB& aabb) const {
-        bool intersect = false;
+        constexpr float eps = 1e-6f;
+        bool anyIntersect = false;
+        bool allInside = true;
         
-        // Get box center and extent as arrays for SIMD
+        // Get box center and half extents as arrays for SIMD
         float center[4] = {
             aabb.center().x,
             aabb.center().y,
@@ -91,10 +116,11 @@ public:
             1.0f
         };
         
+        Vector3 halfExt = aabb.halfExtents();
         float extent[4] = {
-            aabb.dimensions().x,
-            aabb.dimensions().y,
-            aabb.dimensions().z,
+            halfExt.x,
+            halfExt.y,
+            halfExt.z,
             0.0f
         };
         
@@ -113,21 +139,28 @@ public:
                 r += std::abs(normal[i]) * extent[i];
             }
             
-            // Compute d = n·c + d
+            // Compute d = n·c - distance
             float d = 0.0f;
             for (int i = 0; i < 3; ++i) {
                 d += normal[i] * center[i];
             }
-            d += plane.distance;
+            d -= plane.distance;
             
-            if (d < -r) {
+            if (d < -r - eps) {
                 return TestResult::OUTSIDE;
-            } else if (std::abs(d) <= r) {
-                intersect = true;
+            }
+            if (d < r - eps) {
+                if (d > -r + eps) {
+                    anyIntersect = true;
+                }
+                allInside = false;
             }
         }
         
-        return intersect ? TestResult::INTERSECT : TestResult::INSIDE;
+        if (allInside) {
+            return TestResult::INSIDE;
+        }
+        return anyIntersect ? TestResult::INTERSECT : TestResult::OUTSIDE;
     }
     
     const std::array<Plane, NUM_PLANES>& getPlanes() const {
@@ -142,71 +175,72 @@ private:
         // Reference: Fast Extraction of Viewing Frustum Planes from the World-View-Projection Matrix
         // http://www.cs.otago.ac.nz/postgrads/alexis/planeExtraction.pdf
         
-        // Left plane
-        planes_[2] = Plane(
-            Vector3(
-                viewProjection[0][3] + viewProjection[0][0],
-                viewProjection[1][3] + viewProjection[1][0],
-                viewProjection[2][3] + viewProjection[2][0]
-            ).normalized(),
+// Extract planes from view-projection matrix using correct plane equations
+        
+        // Extract with row-major, row-vector convention: plane = row3 ± rowN
+        auto makePlane = [](float a, float b, float c, float d) {
+            // Convert ax+by+cz+d=0 into Plane(normal, distance) with signedDistance = dot(p,n) - distance
+            // so set normal=(a,b,c), distance = -d
+            Plane p(Vector3(a, b, c), -d);
+            // Ensure origin (0,0,0) is inside or on plane for typical view frustums around origin
+            if (p.distance > 0.0f) {
+                p.normal *= -1.0f;
+                p.distance *= -1.0f;
+            }
+            return p;
+        };
+
+        // Left: row3 + row0
+        planes_[2] = makePlane(
+            viewProjection[0][3] + viewProjection[0][0],
+            viewProjection[1][3] + viewProjection[1][0],
+            viewProjection[2][3] + viewProjection[2][0],
             viewProjection[3][3] + viewProjection[3][0]
         );
-        
-        // Right plane
-        planes_[3] = Plane(
-            Vector3(
-                viewProjection[0][3] - viewProjection[0][0],
-                viewProjection[1][3] - viewProjection[1][0],
-                viewProjection[2][3] - viewProjection[2][0]
-            ).normalized(),
+
+        // Right: row3 - row0
+        planes_[3] = makePlane(
+            viewProjection[0][3] - viewProjection[0][0],
+            viewProjection[1][3] - viewProjection[1][0],
+            viewProjection[2][3] - viewProjection[2][0],
             viewProjection[3][3] - viewProjection[3][0]
         );
-        
-        // Bottom plane
-        planes_[5] = Plane(
-            Vector3(
-                viewProjection[0][3] + viewProjection[0][1],
-                viewProjection[1][3] + viewProjection[1][1],
-                viewProjection[2][3] + viewProjection[2][1]
-            ).normalized(),
+
+        // Bottom: row3 + row1
+        planes_[5] = makePlane(
+            viewProjection[0][3] + viewProjection[0][1],
+            viewProjection[1][3] + viewProjection[1][1],
+            viewProjection[2][3] + viewProjection[2][1],
             viewProjection[3][3] + viewProjection[3][1]
         );
-        
-        // Top plane
-        planes_[4] = Plane(
-            Vector3(
-                viewProjection[0][3] - viewProjection[0][1],
-                viewProjection[1][3] - viewProjection[1][1],
-                viewProjection[2][3] - viewProjection[2][1]
-            ).normalized(),
+
+        // Top: row3 - row1
+        planes_[4] = makePlane(
+            viewProjection[0][3] - viewProjection[0][1],
+            viewProjection[1][3] - viewProjection[1][1],
+            viewProjection[2][3] - viewProjection[2][1],
             viewProjection[3][3] - viewProjection[3][1]
         );
-        
-        // Near plane
-        planes_[0] = Plane(
-            Vector3(
-                viewProjection[0][3] + viewProjection[0][2],
-                viewProjection[1][3] + viewProjection[1][2],
-                viewProjection[2][3] + viewProjection[2][2]
-            ).normalized(),
+
+        // Near: row3 + row2
+        planes_[0] = makePlane(
+            viewProjection[0][3] + viewProjection[0][2],
+            viewProjection[1][3] + viewProjection[1][2],
+            viewProjection[2][3] + viewProjection[2][2],
             viewProjection[3][3] + viewProjection[3][2]
         );
-        
-        // Far plane
-        planes_[1] = Plane(
-            Vector3(
-                viewProjection[0][3] - viewProjection[0][2],
-                viewProjection[1][3] - viewProjection[1][2],
-                viewProjection[2][3] - viewProjection[2][2]
-            ).normalized(),
+
+        // Far: row3 - row2
+        planes_[1] = makePlane(
+            viewProjection[0][3] - viewProjection[0][2],
+            viewProjection[1][3] - viewProjection[1][2],
+            viewProjection[2][3] - viewProjection[2][2],
             viewProjection[3][3] - viewProjection[3][2]
         );
-        
-        // Normalize planes
+
+        // Ensure normals are unit length (Plane ctor normalizes); no extra normalization needed
         for (auto& plane : planes_) {
-            float invLen = 1.0f / plane.normal.length();
-            plane.normal *= invLen;
-            plane.distance *= invLen;
+            // nothing else; Plane constructor already normalized
         }
     }
 };
