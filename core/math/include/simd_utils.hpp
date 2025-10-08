@@ -403,6 +403,35 @@ public:
      * @return Dot product result
      */
     static float DotProduct4f(const float* a, const float* b);
+
+    /**
+     * @brief Tests if a moving sphere intersects an AABB using SIMD operations
+     * 
+     * Optimized implementation that performs all axis tests simultaneously and
+     * avoids redundant calculations. Uses SIMD for:
+     * - Parallel axis overlap tests
+     * - Vector operations (add, subtract, multiply)
+     * - Min/max operations
+     * 
+     * @param sphere_pos Initial sphere position (x,y,z)
+     * @param sphere_vel Sphere velocity vector (x,y,z)
+     * @param sphere_radius Sphere radius
+     * @param aabb_min AABB minimum point (x,y,z)
+     * @param aabb_max AABB maximum point (x,y,z)
+     * @param time_step Maximum time to test for collision
+     * @param[out] result Array to store:
+     *   - [0]: Time of impact (if collision occurs)
+     *   - [1,2,3]: Collision point coordinates
+     * @return True if collision occurs within time_step, false otherwise
+     */
+    static bool TestMovingSphereAABB(
+        const float* sphere_pos,
+        const float* sphere_vel,
+        float sphere_radius,
+        const float* aabb_min,
+        const float* aabb_max,
+        float time_step,
+        float* result);
 };
 
 } // namespace math

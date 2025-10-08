@@ -72,93 +72,49 @@ std::optional<ContinuousCollisionResult> testMovingSphereAABB(
     const Vector3& end,
     float timeStep)
 {
+    // Compute velocity
     Vector3 velocity = (end - start) / timeStep;
-
-    // First check if we're already intersecting at start position
-    Vector3 closest = Vector3(
-        std::clamp(start.x, aabb.min.x, aabb.max.x),
-        std::clamp(start.y, aabb.min.y, aabb.max.y),
-        std::clamp(start.z, aabb.min.z, aabb.max.z)
+    
+    // Result buffer: [time, px, py, pz]
+    alignas(16) float result[4];
+    
+    bool hasCollision = SimdUtils::TestMovingSphereAABB(
+        &start.x,
+        &velocity.x,
+        sphere.radius,
+        &aabb.min.x,
+        &aabb.max.x,
+        timeStep,
+        result
     );
     
-    Vector3 toSphere = start - closest;
-    if (toSphere.lengthSquared() <= sphere.radius * sphere.radius) {
-        ContinuousCollisionResult result;
-        result.intersects = true;
-        result.timeOfImpact = 0.0f;
-        result.point = start;
-        result.normal = toSphere.normalized();
-        result.distance = 0.0f;
-        return result;
-    }
-    
-    // Expand AABB by sphere radius
-    AABB expandedAABB;
-    expandedAABB.min = aabb.min - Vector3(sphere.radius, sphere.radius, sphere.radius);
-    expandedAABB.max = aabb.max + Vector3(sphere.radius, sphere.radius, sphere.radius);
-    
-    float t_near = 0.0f;
-    float t_far = timeStep;
-    
-    // Helper to process a single axis slab
-    auto process_axis = [&](float startCoord, float velCoord, float minCoord, float maxCoord) -> bool {
-        if (std::abs(velCoord) < constants::epsilon) {
-            // Moving parallel to this slab; must start within the slab
-            if (startCoord < minCoord || startCoord > maxCoord) {
-                return false;
-            }
-            return true;
-        }
-        float t1 = (minCoord - startCoord) / velCoord;
-        float t2 = (maxCoord - startCoord) / velCoord;
-        if (t1 > t2) std::swap(t1, t2);
-        t_near = std::max(t_near, t1);
-        t_far = std::min(t_far, t2);
-        if (t_near > t_far || t_far < 0.0f) {
-            return false;
-        }
-        return true;
-    };
-
-    // X axis
-    if (!process_axis(start.x, velocity.x, expandedAABB.min.x, expandedAABB.max.x)) {
-        return std::nullopt;
-    }
-    // Y axis
-    if (!process_axis(start.y, velocity.y, expandedAABB.min.y, expandedAABB.max.y)) {
-        return std::nullopt;
-    }
-    // Z axis
-    if (!process_axis(start.z, velocity.z, expandedAABB.min.z, expandedAABB.max.z)) {
+    if (!hasCollision) {
         return std::nullopt;
     }
     
-    // If nearest intersection is beyond our time step, no collision
-    if (t_near > timeStep) {
-        return std::nullopt;
-    }
+    // Compute collision details
+    Vector3 collisionPoint(result[1], result[2], result[3]);
     
-    // We have a collision - compute the details
-    ContinuousCollisionResult result;
-    result.intersects = true;
-    result.timeOfImpact = t_near / timeStep;  // Normalize to [0,1]
+    ContinuousCollisionResult collisionResult;
+    collisionResult.intersects = true;
+    collisionResult.timeOfImpact = result[0] / timeStep; // Normalize to [0,1]
+    collisionResult.point = collisionPoint;
+    collisionResult.distance = velocity.length() * result[0];
     
-    // Collision point
-    Vector3 collisionPoint = start + velocity * t_near;
-    result.point = collisionPoint;
+    // Compute the normal based on the collision sphere center (SIMD returns center at collision)
+    Vector3 sphereCenter = collisionPoint;
     
-    // Find closest point on original AABB for normal calculation
-    closest = Vector3(
-        std::clamp(collisionPoint.x, aabb.min.x, aabb.max.x),
-        std::clamp(collisionPoint.y, aabb.min.y, aabb.max.y),
-        std::clamp(collisionPoint.z, aabb.min.z, aabb.max.z)
+    // Find the closest point on the AABB to the sphere center at collision time
+    Vector3 closest(
+        std::clamp(sphereCenter.x, aabb.min.x, aabb.max.x),
+        std::clamp(sphereCenter.y, aabb.min.y, aabb.max.y),
+        std::clamp(sphereCenter.z, aabb.min.z, aabb.max.z)
     );
     
-    // Normal points from closest point to sphere center
-    result.normal = (collisionPoint - closest).normalized();
-    result.distance = velocity.length() * t_near;
+    // The normal is from closest point to sphere center (points away from AABB)
+    collisionResult.normal = (sphereCenter - closest).normalized();
     
-    return result;
+    return collisionResult;
 }
 
 } // namespace geometry

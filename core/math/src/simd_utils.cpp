@@ -832,4 +832,186 @@ bool SimdUtils::InvertMatrix4x4(const float* m, float* result) {
 }
 
 } // namespace math
+
+bool pynovage::math::SimdUtils::TestMovingSphereAABB(
+    const float* sphere_pos,
+    const float* sphere_vel,
+    float sphere_radius,
+    const float* aabb_min,
+    const float* aabb_max,
+    float time_step,
+    float* result)
+{
+#if PYNOVAGE_MATH_HAS_SSE
+    // Load vectors into SIMD registers
+    __m128 pos = _mm_loadu_ps(sphere_pos); // Use unaligned load since we only need xyz
+    __m128 vel = _mm_loadu_ps(sphere_vel);
+    __m128 minb = _mm_loadu_ps(aabb_min);
+    __m128 maxb = _mm_loadu_ps(aabb_max);
+    __m128 radius = _mm_set1_ps(sphere_radius);
+    __m128 epsilon = _mm_set1_ps(1e-6f);
+    
+    // Expand AABB by sphere radius
+    minb = _mm_sub_ps(minb, radius);
+    maxb = _mm_add_ps(maxb, radius);
+    
+    // Early rejection test - are we already overlapping?
+    __m128 toAabb = _mm_sub_ps(pos, _mm_min_ps(_mm_max_ps(pos, minb), maxb));
+    __m128 distSq = _mm_dp_ps(toAabb, toAabb, 0x77); // 0x77 means use xyz, store in all elements
+    float initialDistSq;
+    _mm_store_ss(&initialDistSq, distSq);
+    
+    if (initialDistSq <= 0.0f) {
+        // Already overlapping
+        result[0] = 0.0f;
+        float tmpPos[4];
+        _mm_storeu_ps(tmpPos, pos);
+        result[1] = tmpPos[0];
+        result[2] = tmpPos[1];
+        result[3] = tmpPos[2];
+        return true;
+    }
+    
+    // Calculate intersection times for each axis
+    __m128 velAbs = _mm_andnot_ps(_mm_set1_ps(-0.0f), vel); // abs(vel)
+    __m128 parallel = _mm_cmplt_ps(velAbs, epsilon);
+    
+    // For non-parallel axes, calculate entry and exit times
+    __m128 diffMin = _mm_sub_ps(minb, pos); // Distance to min boundary
+    __m128 diffMax = _mm_sub_ps(maxb, pos); // Distance to max boundary
+    
+    // When parallel, if outside bounds return false
+    __m128 withinBounds = _mm_and_ps(
+        _mm_cmpge_ps(pos, minb),
+        _mm_cmple_ps(pos, maxb)
+    );
+    
+    if (_mm_movemask_ps(_mm_and_ps(parallel, _mm_andnot_ps(withinBounds, _mm_set1_ps(1.0f)))) & 0x7) {
+        return false; // Parallel to an axis and outside bounds
+    }
+    
+    // Calculate times only for non-parallel axes
+    __m128 bigTime = _mm_set1_ps(1e30f);
+    __m128 t1, t2;
+    
+    // For non-parallel axes, use actual time calculation
+    // For parallel axes within bounds, use large negative/positive values
+    // This ensures the min/max later picks the proper values
+    if (_mm_movemask_ps(parallel) & 0x7) {
+        __m128 safeInvVel = _mm_or_ps(
+            _mm_and_ps(parallel, _mm_set1_ps(1.0f)),
+            _mm_andnot_ps(parallel, _mm_div_ps(_mm_set1_ps(1.0f), vel))
+        );
+        
+        t1 = _mm_or_ps(
+            _mm_and_ps(parallel, _mm_and_ps(withinBounds, _mm_mul_ps(bigTime, _mm_set1_ps(-1.0f)))),
+            _mm_andnot_ps(parallel, _mm_mul_ps(diffMin, safeInvVel))
+        );
+        t2 = _mm_or_ps(
+            _mm_and_ps(parallel, _mm_and_ps(withinBounds, bigTime)),
+            _mm_andnot_ps(parallel, _mm_mul_ps(diffMax, safeInvVel))
+        );
+    } else {
+        // No parallel axes, just do the division
+        __m128 invVel = _mm_div_ps(_mm_set1_ps(1.0f), vel);
+        t1 = _mm_mul_ps(diffMin, invVel);
+        t2 = _mm_mul_ps(diffMax, invVel);
+    }
+    
+    // Find earliest/latest times for xyz axes
+    __m128 tMin = _mm_min_ps(t1, t2);
+    __m128 tMax = _mm_max_ps(t1, t2);
+    
+    // Get max of earliest times and min of latest times
+    float earliest = std::max(std::max(
+        _mm_cvtss_f32(_mm_shuffle_ps(tMin, tMin, _MM_SHUFFLE(0,0,0,0))),
+        _mm_cvtss_f32(_mm_shuffle_ps(tMin, tMin, _MM_SHUFFLE(1,1,1,1)))),
+        _mm_cvtss_f32(_mm_shuffle_ps(tMin, tMin, _MM_SHUFFLE(2,2,2,2))));
+    
+    float latest = std::min(std::min(
+        _mm_cvtss_f32(_mm_shuffle_ps(tMax, tMax, _MM_SHUFFLE(0,0,0,0))),
+        _mm_cvtss_f32(_mm_shuffle_ps(tMax, tMax, _MM_SHUFFLE(1,1,1,1)))),
+        _mm_cvtss_f32(_mm_shuffle_ps(tMax, tMax, _MM_SHUFFLE(2,2,2,2))));
+    
+    // Check if we have a valid collision
+    if (earliest > latest || latest < 0.0f || earliest > time_step) {
+        return false;
+    }
+    
+    // Store collision time and point
+    result[0] = earliest;
+    __m128 collisionTime = _mm_set1_ps(earliest);
+    __m128 collisionPoint = _mm_add_ps(pos, _mm_mul_ps(vel, collisionTime));
+    float tmpCol[4];
+    _mm_storeu_ps(tmpCol, collisionPoint);
+    result[1] = tmpCol[0];
+    result[2] = tmpCol[1];
+    result[3] = tmpCol[2];
+    
+    return true;
+#else
+    // Non-SIMD fallback implementation
+    // Early rejection - check if we're already overlapping
+    float closest[3] = {
+        std::min(std::max(sphere_pos[0], aabb_min[0]), aabb_max[0]),
+        std::min(std::max(sphere_pos[1], aabb_min[1]), aabb_max[1]),
+        std::min(std::max(sphere_pos[2], aabb_min[2]), aabb_max[2])
+    };
+    
+    float distSq = 0.0f;
+    for (int i = 0; i < 3; i++) {
+        float d = sphere_pos[i] - closest[i];
+        distSq += d * d;
+    }
+    
+    if (distSq <= sphere_radius * sphere_radius) {
+        result[0] = 0.0f;
+        result[1] = sphere_pos[0];
+        result[2] = sphere_pos[1];
+        result[3] = sphere_pos[2];
+        return true;
+    }
+    
+    // Expand AABB by sphere radius
+    float expanded_min[3], expanded_max[3];
+    for (int i = 0; i < 3; i++) {
+        expanded_min[i] = aabb_min[i] - sphere_radius;
+        expanded_max[i] = aabb_max[i] + sphere_radius;
+    }
+    
+    float tMin = 0.0f;
+    float tMax = time_step;
+    
+    // Test each axis
+    for (int i = 0; i < 3; i++) {
+        if (std::abs(sphere_vel[i]) < 1e-6f) {
+            if (sphere_pos[i] < expanded_min[i] || sphere_pos[i] > expanded_max[i]) {
+                return false;
+            }
+            continue;
+        }
+        
+        float t1 = (expanded_min[i] - sphere_pos[i]) * inv_vel[i];
+        float t2 = (expanded_max[i] - sphere_pos[i]) * inv_vel[i];
+        
+        if (t1 > t2) std::swap(t1, t2);
+        
+        tMin = std::max(tMin, t1);
+        tMax = std::min(tMax, t2);
+        
+        if (tMin > tMax) return false;
+    }
+    
+    if (tMin > time_step) return false;
+    
+    // Store results
+    result[0] = tMin;
+    for (int i = 0; i < 3; i++) {
+        result[i + 1] = sphere_pos[i] + sphere_vel[i] * tMin;
+    }
+    
+    return true;
+#endif
+}
+
 } // namespace pynovage
