@@ -185,7 +185,11 @@ private:
         // Check objects in this node
         for (const auto& obj : node->objects) {
             if (query.shouldAcceptObject(*obj)) {
-                results.push_back(obj.get());
+                // Ensure we haven't already added this object
+                auto it = std::find(results.begin(), results.end(), obj.get());
+                if (it == results.end()) {
+                    results.push_back(obj.get());
+                }
             }
         }
         
@@ -256,11 +260,10 @@ private:
     }
     
     void growTree(const AABB& bounds) {
-        // Create new root
+        // Create new root that encompasses both the old root and new bounds
         auto newRoot = std::make_unique<Node>();
         
-        // Compute new bounds to contain both old root and new bounds
-        // Compute union of bounds
+        // First, get the unified bounds
         Vector3 newMin(
             std::min(root_->bounds.min.x, bounds.min.x),
             std::min(root_->bounds.min.y, bounds.min.y),
@@ -271,12 +274,16 @@ private:
             std::max(root_->bounds.max.y, bounds.max.y),
             std::max(root_->bounds.max.z, bounds.max.z)
         );
-        newRoot->bounds = AABB(newMin, newMax);
         
-        // Scale by looseness factor
-        Vector3 c = newRoot->bounds.center();
-        Vector3 half = newRoot->bounds.dimensions() * 0.5f * config_.looseness;
-        newRoot->bounds = AABB(c - half, c + half);
+        // Calculate the center and half-size
+        Vector3 center = (newMax + newMin) * 0.5f;
+        Vector3 halfSize = (newMax - newMin) * 0.5f;
+        
+        // Expand slightly to ensure objects fit
+        halfSize = halfSize * config_.looseness;
+        
+        // Create the new bounds using the expanded dimensions
+        newRoot->bounds = AABB(center - halfSize, center + halfSize);
         
         // Move old root to appropriate child position
         std::size_t index = getChildIndex(newRoot->bounds, root_->bounds.center());

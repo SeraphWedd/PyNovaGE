@@ -106,7 +106,9 @@ public:
         } else {
             // Use a point query's position to create a small query bounds
             if (auto* pointQuery = dynamic_cast<const PointQuery<T>*>(&query)) {
-                queryBounds = AABB(pointQuery->getPoint(), Vector3(config_.cellSize * 0.5f, config_.cellSize * 0.5f, config_.cellSize * 0.5f));
+            const Vector3& point = pointQuery->getPoint();
+            Vector3 halfSize(config_.cellSize * 0.5f);
+            queryBounds = AABB(point - halfSize, point + halfSize);
             } else {
                 // For other query types, process all objects
                 for (const auto& pair : objectMap_) {

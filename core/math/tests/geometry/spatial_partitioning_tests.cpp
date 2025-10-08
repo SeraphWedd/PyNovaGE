@@ -19,10 +19,27 @@ public:
     
     AABB getBounds() const override { return bounds_; }
     bool intersects(const AABB& bounds) const override {
-        return !(bounds_.max.x < bounds.min.x || bounds_.min.x > bounds.max.x ||
-                bounds_.max.y < bounds.min.y || bounds_.min.y > bounds.max.y ||
-                bounds_.max.z < bounds.min.z || bounds_.min.z > bounds.max.z); }
-    bool contains(const Vector3& point) const override { return bounds_.contains(point); }
+        return aabbAABBIntersection(bounds_, bounds).has_value();
+    }
+
+    bool contains(const Vector3& point) const override {
+        // Create a small bounding sphere around the point for containment test
+        float epsilon = 0.001f;
+        return (point - bounds_.center()).lengthSquared() <= epsilon * epsilon;
+    }
+
+    bool intersectsRay(const Ray3D& ray, float& t) const override {
+        auto result = rayAABBIntersection(ray, bounds_);
+        if (result) {
+            t = result->distance;
+            return true;
+        }
+        return false;
+    }
+
+    bool intersectsFrustum(const FrustumCulling& frustum) const override {
+        return frustum.testAABB(bounds_) != FrustumCulling::TestResult::OUTSIDE;
+    }
     
     const int& getData() const override { return data_; }
     int& getData() override { return data_; }
@@ -46,9 +63,9 @@ protected:
             float y = static_cast<float>((i / 10) % 10) * spacing;
             float z = static_cast<float>(i / 100) * spacing;
             
+            Vector3 center(x, y, z);
             Vector3 halfExtent(0.5f, 0.5f, 0.5f);
-            AABB bounds(Vector3(x - halfExtent.x, y - halfExtent.y, z - halfExtent.z),
-                       Vector3(x + halfExtent.x, y + halfExtent.y, z + halfExtent.z));
+            AABB bounds(center - halfExtent, center + halfExtent);
             container_->insert(std::make_unique<MockObject>(bounds, i));
         }
     }
@@ -90,7 +107,10 @@ TYPED_TEST(SpatialPartitioningTest, VolumeQuery) {
     this->addObjects(1000, 2.0f);
     
     std::vector<const SpatialObject<int>*> results;
-    AABB queryBounds(Vector3(5.0f, 5.0f, 5.0f), Vector3(2.0f, 2.0f, 2.0f));
+    // Create AABB that will overlap with objects (objects are placed at integer coordinates)
+    Vector3 center(2.0f, 2.0f, 2.0f);
+    Vector3 halfExtent(1.0f, 1.0f, 1.0f);
+    AABB queryBounds(center - halfExtent, center + halfExtent);
     VolumeQuery<int> query(queryBounds);
     this->container_->query(query, results);
     
@@ -113,7 +133,9 @@ TYPED_TEST(SpatialPartitioningTest, RayQuery) {
 
 TYPED_TEST(SpatialPartitioningTest, Update) {
     // Add a single object
-    AABB initialBounds(Vector3(0.0f, 0.0f, 0.0f), Vector3(0.5f, 0.5f, 0.5f));
+    Vector3 center(0.0f, 0.0f, 0.0f);
+    Vector3 halfExtent(0.5f, 0.5f, 0.5f);
+    AABB initialBounds(center - halfExtent, center + halfExtent);
     auto obj = std::make_unique<MockObject>(initialBounds, 0);
     const SpatialObject<int>* objPtr = obj.get();
     this->container_->insert(std::move(obj));
@@ -125,7 +147,9 @@ TYPED_TEST(SpatialPartitioningTest, Update) {
     EXPECT_EQ(results.size(), 1);
     
     // Move object and update
-    AABB newBounds(Vector3(10.0f, 10.0f, 10.0f), Vector3(0.5f, 0.5f, 0.5f));
+    Vector3 newCenter(10.0f, 10.0f, 10.0f);
+    Vector3 newHalfExtent(0.5f, 0.5f, 0.5f);
+    AABB newBounds(newCenter - newHalfExtent, newCenter + newHalfExtent);
     obj = std::make_unique<MockObject>(newBounds, 0);
     this->container_->update(objPtr);
     

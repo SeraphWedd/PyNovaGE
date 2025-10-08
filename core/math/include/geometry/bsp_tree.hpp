@@ -47,9 +47,9 @@ public:
     }
     
     void update(const SpatialObject<T>* object) override {
-        // For BSP trees, removal and reinsertion is often more efficient
-        auto it = std::find_if(objectMap_.begin(), objectMap_.end(),
-            [object](const auto& pair) { return pair.second.get() == object; });
+        // Find the object in the map
+        std::size_t id = reinterpret_cast<std::size_t>(object);
+        auto it = objectMap_.find(id);
         
         if (it != objectMap_.end()) {
             auto obj = std::move(it->second);
@@ -113,14 +113,20 @@ private:
         Plane splitPlane;
         std::unique_ptr<Node> front;
         std::unique_ptr<Node> back;
-        std::vector<std::unique_ptr<SpatialObject<T>>> objects;
+        std::vector<const SpatialObject<T>*> objects;
         bool isLeaf() const { return !front && !back; }
     };
     
     void insertIntoNode(Node* node, std::unique_ptr<SpatialObject<T>> object) {
+        if (!node) return;
+        
+        const SpatialObject<T>* objPtr = object.get();
+        std::size_t id = reinterpret_cast<std::size_t>(objPtr);
+        objectMap_[id] = std::move(object);
+
         if (node->isLeaf()) {
             if (node->objects.size() < config_.maxTrianglesPerLeaf) {
-                node->objects.push_back(std::move(object));
+                node->objects.push_back(objPtr);
                 return;
             }
             
@@ -129,34 +135,43 @@ private:
         }
         
         // Choose child based on split plane
-        const AABB& objBounds = object->getBounds();
+        const AABB& objBounds = objPtr->getBounds();
         float dist = node->splitPlane.signedDistance(objBounds.center());
-        if (dist > 0.0f) {
-            insertIntoNode(node->front.get(), std::move(object));
-        } else if (dist < 0.0f) {
-            insertIntoNode(node->back.get(), std::move(object));
+        float epsilon = 1e-6f;  // Small epsilon to prevent floating point issues
+        
+        if (dist > epsilon) {
+            node->objects.push_back(objPtr);
+            if (node->front) {
+                node->front->objects.push_back(objPtr);
+            }
+        } else if (dist < -epsilon) {
+            node->objects.push_back(objPtr);
+            if (node->back) {
+                node->back->objects.push_back(objPtr);
+            }
         } else {
             // Object spans the split plane, keep it in this node
-            node->objects.push_back(std::move(object));
+            node->objects.push_back(objPtr);
         }
     }
     
     void removeFromNode(Node* node, const SpatialObject<T>* object) {
         if (!node) return;
         
-        auto it = std::find_if(node->objects.begin(), node->objects.end(),
-            [object](const auto& obj) { return obj.get() == object; });
-        
+        auto it = std::find(node->objects.begin(), node->objects.end(), object);
         if (it != node->objects.end()) {
             node->objects.erase(it);
-            return;
         }
         
-        // Recurse into children
+        // Remove from children
         if (!node->isLeaf()) {
             removeFromNode(node->front.get(), object);
             removeFromNode(node->back.get(), object);
         }
+        
+        // Remove from objectMap_
+        std::size_t id = reinterpret_cast<std::size_t>(object);
+        objectMap_.erase(id);
     }
     
     void queryNode(const Node* node, const SpatialQuery<T>& query,
@@ -164,9 +179,13 @@ private:
         if (!node || !query.shouldTraverseNode(node->bounds)) return;
         
         // Check objects in this node
-        for (const auto& obj : node->objects) {
+        for (const auto* obj : node->objects) {
             if (query.shouldAcceptObject(*obj)) {
-                results.push_back(obj.get());
+                // Avoid duplicates
+                auto it = std::find(results.begin(), results.end(), obj);
+                if (it == results.end()) {
+                    results.push_back(obj);
+                }
             }
         }
         
@@ -183,30 +202,44 @@ private:
         // Choose split plane
         node->splitPlane = chooseSplitPlane(node);
         
-        // Create child nodes
+        // Create child nodes with divided bounds
         node->front = std::make_unique<Node>();
         node->back = std::make_unique<Node>();
         
+        // Compute bounds for front and back based on split plane
+        Vector3 center = node->bounds.center();
+        Vector3 extent = node->bounds.dimensions() * 0.5f;
+        Vector3 split_normal = node->splitPlane.normal;
+        
+        // Front node bounds
+        Vector3 frontMin = node->bounds.min;
+        Vector3 frontMax = node->bounds.max;
+        if (split_normal.x != 0) frontMin.x = center.x;
+        if (split_normal.y != 0) frontMin.y = center.y;
+        if (split_normal.z != 0) frontMin.z = center.z;
+        node->front->bounds = AABB(frontMin, frontMax);
+        
+        // Back node bounds
+        Vector3 backMin = node->bounds.min;
+        Vector3 backMax = node->bounds.max;
+        if (split_normal.x != 0) backMax.x = center.x;
+        if (split_normal.y != 0) backMax.y = center.y;
+        if (split_normal.z != 0) backMax.z = center.z;
+        node->back->bounds = AABB(backMin, backMax);
+        
         // Distribute objects
-        std::vector<std::unique_ptr<SpatialObject<T>>> remainingObjects;
-        for (auto& obj : node->objects) {
+        for (auto* obj : node->objects) {
             const AABB& bounds = obj->getBounds();
             float dist = node->splitPlane.signedDistance(bounds.center());
-            if (dist > 0.0f) {
-                node->front->objects.push_back(std::move(obj));
-            } else if (dist < 0.0f) {
-                node->back->objects.push_back(std::move(obj));
-            } else {
-                remainingObjects.push_back(std::move(obj));
+            float epsilon = 1e-6f;
+            
+            if (dist > epsilon) {
+                node->front->objects.push_back(obj);
+            } else if (dist < -epsilon) {
+                node->back->objects.push_back(obj);
             }
+            // Objects near the split plane stay in the current node
         }
-        
-        // Keep spanning objects in this node
-        node->objects = std::move(remainingObjects);
-        
-        // Update child bounds
-        node->front->bounds = node->bounds;
-        node->back->bounds = node->bounds;
     }
     
     Plane chooseSplitPlane(const Node* node) const {
@@ -271,9 +304,14 @@ private:
     void collectObjects(Node* node, std::vector<std::unique_ptr<SpatialObject<T>>>& objects) {
         if (!node) return;
         
-        // Move objects from this node
-        for (auto& obj : node->objects) {
-            objects.push_back(std::move(obj));
+        // Move unique_ptrs from objectMap_ to objects vector
+        for (auto* obj : node->objects) {
+            std::size_t id = reinterpret_cast<std::size_t>(obj);
+            auto it = objectMap_.find(id);
+            if (it != objectMap_.end()) {
+                objects.push_back(std::move(it->second));
+                objectMap_.erase(it);
+            }
         }
         node->objects.clear();
         

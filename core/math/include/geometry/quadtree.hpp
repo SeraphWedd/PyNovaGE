@@ -193,7 +193,12 @@ private:
             node->children[index]->bounds = computeChildBounds(node->bounds, index);
         }
         
-        if (node->children[index]->bounds.contains(objBounds)) {
+        // Store in current node if object is too big for child
+        const AABB& obj3dBounds = object->getBounds();
+        AABB childBounds3D = node->children[index]->bounds.to3D(
+            obj3dBounds.min.y, obj3dBounds.max.y);
+        
+        if (containsAABB(childBounds3D, obj3dBounds)) {
             insertIntoNode(node->children[index].get(), std::move(object));
         } else {
             node->objects.push_back(std::move(object));
@@ -224,9 +229,22 @@ private:
                   std::vector<const SpatialObject<T>*>& results) const {
         if (!node) return;
         
+        // For point queries, determine Y bounds from the query point
+        float minY = -std::numeric_limits<float>::max();
+        float maxY = std::numeric_limits<float>::max();
+        
+        if (auto* pointQuery = dynamic_cast<const PointQuery<T>*>(&query)) {
+            const Vector3& point = pointQuery->getPoint();
+            minY = point.y - config_.minNodeSize;
+            maxY = point.y + config_.minNodeSize;
+        } else if (auto* volumeQuery = dynamic_cast<const VolumeQuery<T>*>(&query)) {
+            const AABB& bounds = volumeQuery->getBounds();
+            minY = bounds.min.y;
+            maxY = bounds.max.y;
+        }
+        
         // Convert 2D bounds to 3D for query
-        AABB bounds3D = node->bounds.to3D(-std::numeric_limits<float>::max(),
-                                        std::numeric_limits<float>::max());
+        AABB bounds3D = node->bounds.to3D(minY, maxY);
         
         if (!query.shouldTraverseNode(bounds3D)) return;
         
