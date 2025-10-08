@@ -418,7 +418,34 @@ Track A: Performance Foundation    Track B: Engine Core           Track C: High-
   - Memory characteristics: O(1), RMS: 17%
     - Cache performance: ~67.7-124ns across sizes
     - SIMD optimized: ~4x speedup
-- Path interpolation [ ]
+- Path interpolation [✓]
+  - **Benchmarks:**
+    - Construction:
+      - Small paths (8 pts): ~6.5μs
+      - Medium paths (64 pts): ~137μs
+      - Large paths (512 pts): ~5.6ms
+    - Evaluation:
+      - Small paths: ~8.3μs (12.0M/s)
+      - Medium paths: ~9.4μs (10.6M/s)
+      - Large paths: ~10.5μs (9.5M/s)
+    - Frame computation:
+      - Small paths: ~43μs (2.3M/s)
+      - Medium paths: ~52μs (1.9M/s)
+      - Large paths: ~88μs (1.1M/s)
+    - Type performance:
+      - Linear: ~23.0ns
+      - CatmullRom: ~92.1ns
+      - BSpline: ~311ns
+      - Bezier: ~562ns
+    - Arc length:
+      - Small paths: ~656ns (152.5M/s)
+      - Medium paths: ~4.3μs (23.1M/s)
+      - Large paths: ~28.9μs (3.5M/s)
+    - Notes:
+      - Linear paths extremely fast at 23ns per evaluation
+      - CatmullRom good middle ground at 92ns
+      - Frame computation most expensive at 43μs for small paths
+      - Good scaling with path size across operations
 
 ##### 1.2.7 Spatial Partitioning [ ]
 - BSP tree mathematics
