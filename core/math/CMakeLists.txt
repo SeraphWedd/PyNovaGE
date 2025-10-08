@@ -83,6 +83,7 @@ add_executable(math_tests
     tests/geometry/bspline_tests.cpp
     tests/geometry/bezier_tests.cpp
     tests/geometry/hermite_tests.cpp
+    tests/geometry/catmull_rom_tests.cpp
     tests/geometry/intersection_tests.cpp
     tests/geometry/continuous_collision_tests.cpp
     tests/geometry/high_speed_collision_tests.cpp
@@ -135,6 +136,7 @@ add_executable(math_benchmarks
     tests/geometry/bezier_perf_tests.cpp
     tests/geometry/bezier_perf_extended_tests.cpp
     tests/geometry/hermite_perf_tests.cpp
+    tests/geometry/catmull_rom_perf_tests.cpp
     tests/lighting/point_light_perf_tests.cpp
     tests/lighting/directional_light_perf_tests.cpp
     tests/lighting/spot_light_perf_tests.cpp
