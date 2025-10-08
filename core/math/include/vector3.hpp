@@ -63,13 +63,14 @@ namespace math {
  * }
  * @endcode
  */
-class Vector3 {
+class alignas(16) Vector3 {
 public:
     // Constructors
-    Vector3() : x(0.0f), y(0.0f), z(0.0f), w(0.0f) {}
-    Vector3(float x_, float y_, float z_) : x(x_), y(y_), z(z_), w(0.0f) {}
+    Vector3() { SimdUtils::Fill4f(xyzw, 0.0f); }
+    Vector3(float x_, float y_, float z_) : xyzw{x_, y_, z_, 0.0f} {}
     Vector3(const Vector3& other) = default;
     Vector3& operator=(const Vector3& other) = default;
+
 
     /**
      * @brief SIMD-optimized vector addition
@@ -78,50 +79,55 @@ public:
      */
     Vector3 operator+(const Vector3& other) const {
         Vector3 result;
-        SimdUtils::Add3f(&x, &other.x, &result.x);
+        SimdUtils::Add4f(xyzw, other.xyzw, result.xyzw);
         return result;
     }
 
     Vector3 operator-(const Vector3& other) const {
         Vector3 result;
-        SimdUtils::Subtract3f(&x, &other.x, &result.x);
+        SimdUtils::Subtract4f(xyzw, other.xyzw, result.xyzw);
         return result;
     }
 
     Vector3 operator-() const {
-        return Vector3(-x, -y, -z);
+        Vector3 result;
+        result.xyzw[0] = -xyzw[0];
+        result.xyzw[1] = -xyzw[1];
+        result.xyzw[2] = -xyzw[2];
+        result.xyzw[3] = xyzw[3]; // Keep w component unchanged
+        return result;
     }
 
     Vector3 operator*(float scalar) const {
         Vector3 result;
-        SimdUtils::Multiply3fScalar(&x, scalar, &result.x);
+        SimdUtils::Multiply4fScalar(xyzw, scalar, result.xyzw);
         return result;
     }
 
     Vector3 operator/(float scalar) const {
         Vector3 result;
-        SimdUtils::Divide3fScalar(&x, scalar, &result.x);
+        SimdUtils::Divide4fScalar(xyzw, scalar, result.xyzw);
         return result;
     }
 
     // Compound assignment operators
     Vector3& operator+=(const Vector3& other) {
-        SimdUtils::Add3f(&x, &other.x, &x);
+        SimdUtils::Add4f(xyzw, other.xyzw, xyzw);
         return *this;
     }
 
     Vector3& operator-=(const Vector3& other) {
-        SimdUtils::Subtract3f(&x, &other.x, &x);
+        SimdUtils::Subtract4f(xyzw, other.xyzw, xyzw);
         return *this;
     }
 
     Vector3& operator*=(float scalar) {
-        SimdUtils::Multiply3fScalar(&x, scalar, &x);
+        SimdUtils::Multiply4fScalar(xyzw, scalar, xyzw);
         return *this;
     }
 
     Vector3& operator/=(float scalar) {
-        SimdUtils::Divide3fScalar(&x, scalar, &x);
+        SimdUtils::Divide4fScalar(xyzw, scalar, xyzw);
         return *this;
     }
 
@@ -131,7 +137,8 @@ public:
      * @return The dot product value
      */
     float dot(const Vector3& other) const {
-        return SimdUtils::DotProduct3f(&x, &other.x);
+        // Only use x, y, and z components for dot product
+        return SimdUtils::DotProduct4f(xyzw, other.xyzw);
     }
 
     /**
@@ -142,7 +149,8 @@ public:
      */
     Vector3 cross(const Vector3& other) const {
         Vector3 result;
-        SimdUtils::CrossProduct3f(&x, &other.x, &result.x);
+        SimdUtils::CrossProduct3f(xyzw, other.xyzw, result.xyzw);
+        result.xyzw[3] = 0.0f; // Reset w component
         return result;
     }
 
@@ -158,7 +166,8 @@ public:
         float lenSq = lengthSquared();
         if (lenSq > 0.0f) {
             float invLen = 1.0f / std::sqrt(lenSq);
-            SimdUtils::Multiply3fScalar(&x, invLen, &x);
+            SimdUtils::Multiply4fScalar(xyzw, invLen, xyzw);
+            xyzw[3] = 0.0f; // Reset w component
         }
         return *this;
     }
@@ -222,7 +231,8 @@ public:
      */
     Vector3 cwiseProduct(const Vector3& other) const {
         Vector3 result;
-        SimdUtils::Multiply3f(&x, &other.x, &result.x);
+        SimdUtils::Multiply4f(xyzw, other.xyzw, result.xyzw);
+        result.xyzw[3] = 0.0f; // Reset w component
         return result;
     }
 
@@ -233,7 +243,8 @@ public:
      */
     Vector3 cwiseQuotient(const Vector3& other) const {
         Vector3 result;
-        SimdUtils::Divide3f(&x, &other.x, &result.x);
+        SimdUtils::Divide4f(xyzw, other.xyzw, result.xyzw);
+        result.xyzw[3] = 0.0f; // Reset w component
         return result;
     }
 
@@ -243,7 +254,7 @@ public:
     }
 
     void setZero() {
-        x = y = z = w = 0.0f;
+        x = y = z = w_pad = 0.0f;
     }
 
     // Distance and angle functions
@@ -275,13 +286,13 @@ public:
     // Min/Max operations
     static Vector3 min(const Vector3& a, const Vector3& b) {
         Vector3 result;
-        SimdUtils::Min4f(&a.x, &b.x, &result.x);
+        SimdUtils::Min4f(a.xyzw, b.xyzw, result.xyzw);
         return result;
     }
 
     static Vector3 max(const Vector3& a, const Vector3& b) {
         Vector3 result;
-        SimdUtils::Max4f(&a.x, &b.x, &result.x);
+        SimdUtils::Max4f(a.xyzw, b.xyzw, result.xyzw);
         return result;
     }
 
@@ -342,14 +353,14 @@ public:
         if (index < 0 || index >= 3) {
             throw std::out_of_range("Vector3 index out of range");
         }
-        return (&x)[index];
+        return xyzw[index];
     }
 
     const float& operator[](int index) const {
         if (index < 0 || index >= 3) {
             throw std::out_of_range("Vector3 index out of range");
         }
-        return (&x)[index];
+        return xyzw[index];
     }
 
     // Comparison operators
@@ -386,12 +397,12 @@ public:
         return !(*this == other);
     }
 
-    float x;
-    float y;
-    float z;
-private:
-    // Padding for SIMD alignment
-    float w;
+public:
+    // Public overlay to preserve v.x/v.y/v.z access while keeping SIMD-friendly layout
+    union {
+        struct { float x, y, z, w_pad; };
+        alignas(16) float xyzw[4];
+    };
 };
 
 // Global operators

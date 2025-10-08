@@ -49,63 +49,65 @@ namespace math {
  * }
  * @endcode
  */
-class Vector2 {
+class alignas(16) Vector2 {
 public:
     // Constructors
-    Vector2() : x(0.0f), y(0.0f) {}
-    Vector2(float x_, float y_) : x(x_), y(y_) {}
+    Vector2() { SimdUtils::Fill4f(xyzw, 0.0f); }
+    Vector2(float x_, float y_) : xyzw{x_, y_, 0.0f, 0.0f} {}
     Vector2(const Vector2& other) = default;
     Vector2& operator=(const Vector2& other) = default;
+
 
     // Basic vector operations
     Vector2 operator+(const Vector2& other) const {
         Vector2 result;
-        SimdUtils::Add2f(&x, &other.x, &result.x);
+        SimdUtils::Add4f(xyzw, other.xyzw, result.xyzw);
         return result;
     }
 
     Vector2 operator-(const Vector2& other) const {
         Vector2 result;
-        SimdUtils::Subtract2f(&x, &other.x, &result.x);
+        SimdUtils::Subtract4f(xyzw, other.xyzw, result.xyzw);
         return result;
     }
 
     Vector2 operator*(float scalar) const {
         Vector2 result;
-        SimdUtils::Multiply2fScalar(&x, scalar, &result.x);
+        SimdUtils::Multiply4fScalar(xyzw, scalar, result.xyzw);
         return result;
     }
 
     Vector2 operator/(float scalar) const {
         Vector2 result;
-        SimdUtils::Divide2fScalar(&x, scalar, &result.x);
+        SimdUtils::Divide4fScalar(xyzw, scalar, result.xyzw);
         return result;
     }
 
     // Compound assignment operators
     Vector2& operator+=(const Vector2& other) {
-        SimdUtils::Add2f(&x, &other.x, &x);
+        SimdUtils::Add4f(xyzw, other.xyzw, xyzw);
         return *this;
     }
 
     Vector2& operator-=(const Vector2& other) {
-        SimdUtils::Subtract2f(&x, &other.x, &x);
+        SimdUtils::Subtract4f(xyzw, other.xyzw, xyzw);
         return *this;
     }
 
     Vector2& operator*=(float scalar) {
-        SimdUtils::Multiply2fScalar(&x, scalar, &x);
+        SimdUtils::Multiply4fScalar(xyzw, scalar, xyzw);
         return *this;
     }
 
     Vector2& operator/=(float scalar) {
-        SimdUtils::Divide2fScalar(&x, scalar, &x);
+        SimdUtils::Divide4fScalar(xyzw, scalar, xyzw);
         return *this;
     }
 
     // Geometric operations
     float dot(const Vector2& other) const {
-        return SimdUtils::DotProduct2f(&x, &other.x);
+        // Only use x and y components for dot product
+        return SimdUtils::DotProduct4f(xyzw, other.xyzw);
     }
 
     float length() const {
@@ -120,7 +122,9 @@ public:
         float lenSq = lengthSquared();
         if (lenSq > 0.0f) {
             float invLen = 1.0f / std::sqrt(lenSq);
-            SimdUtils::Multiply2fScalar(&x, invLen, &x);
+            SimdUtils::Multiply4fScalar(xyzw, invLen, xyzw);
+            // Ensure z and w remain 0
+            xyzw[2] = xyzw[3] = 0.0f;
         }
     }
 
@@ -132,11 +136,11 @@ public:
 
     // Utility functions
     bool isZero() const {
-        return x == 0.0f && y == 0.0f;
+        return xyzw[0] == 0.0f && xyzw[1] == 0.0f;
     }
 
     void setZero() {
-        x = y = 0.0f;
+        SimdUtils::Fill4f(xyzw, 0.0f);
     }
 
     // Distance and angle functions
@@ -159,13 +163,13 @@ public:
     // Component-wise operations
     Vector2 cwiseProduct(const Vector2& other) const {
         Vector2 result;
-        SimdUtils::Multiply2f(&x, &other.x, &result.x);
+        SimdUtils::Multiply4f(xyzw, other.xyzw, result.xyzw);
         return result;
     }
 
     Vector2 cwiseQuotient(const Vector2& other) const {
         Vector2 result;
-        SimdUtils::Divide2f(&x, &other.x, &result.x);
+        SimdUtils::Divide4f(xyzw, other.xyzw, result.xyzw);
         return result;
     }
 
@@ -173,25 +177,36 @@ public:
     std::string toString() const {
         std::ostringstream ss;
         ss << std::fixed << std::setprecision(3);
-        ss << "(" << x << ", " << y << ")";
+        ss << "(" << xyzw[0] << ", " << xyzw[1] << ")";
         return ss.str();
     }
 
     // Static utility functions
     static Vector2 zero() {
-        return Vector2(0.0f, 0.0f);
+        Vector2 result;
+        SimdUtils::Fill4f(result.xyzw, 0.0f);
+        return result;
     }
 
     static Vector2 one() {
-        return Vector2(1.0f, 1.0f);
+        Vector2 result;
+        result.xyzw[0] = result.xyzw[1] = 1.0f;
+        result.xyzw[2] = result.xyzw[3] = 0.0f;
+        return result;
     }
 
     static Vector2 unitX() {
-        return Vector2(1.0f, 0.0f);
+        Vector2 result;
+        result.xyzw[0] = 1.0f;
+        result.xyzw[1] = result.xyzw[2] = result.xyzw[3] = 0.0f;
+        return result;
     }
 
     static Vector2 unitY() {
-        return Vector2(0.0f, 1.0f);
+        Vector2 result;
+        result.xyzw[1] = 1.0f;
+        result.xyzw[0] = result.xyzw[2] = result.xyzw[3] = 0.0f;
+        return result;
     }
 
     // Directional constants
@@ -227,53 +242,56 @@ public:
         if (index < 0 || index >= 2) {
             throw std::out_of_range("Vector2 index out of range");
         }
-        return (&x)[index];
+        return xyzw[index];
     }
 
     const float& operator[](int index) const {
         if (index < 0 || index >= 2) {
             throw std::out_of_range("Vector2 index out of range");
         }
-        return (&x)[index];
+        return xyzw[index];
     }
 
     // Comparison operators
     bool operator<(const Vector2& other) const {
         // For mixed components, we want this to be false
         // Only return true if ALL components are less
-        return x < other.x && y < other.y;
+        return xyzw[0] < other.xyzw[0] && xyzw[1] < other.xyzw[1];
     }
 
     bool operator<=(const Vector2& other) const {
         // For mixed components, we want this to be false
         // Only return true if ALL components are less or equal
-        return x <= other.x && y <= other.y;
+        return xyzw[0] <= other.xyzw[0] && xyzw[1] <= other.xyzw[1];
     }
 
     bool operator>(const Vector2& other) const {
         // For mixed components, we want this to be false
         // Only return true if ALL components are greater
-        return x > other.x && y > other.y;
+        return xyzw[0] > other.xyzw[0] && xyzw[1] > other.xyzw[1];
     }
 
     bool operator>=(const Vector2& other) const {
         // For mixed components, we want this to be false
         // Only return true if ALL components are greater or equal
-        return x >= other.x && y >= other.y;
+        return xyzw[0] >= other.xyzw[0] && xyzw[1] >= other.xyzw[1];
     }
 
     // Equality comparison
     bool operator==(const Vector2& other) const {
-        return x == other.x && y == other.y;
+        return xyzw[0] == other.xyzw[0] && xyzw[1] == other.xyzw[1];
     }
 
     bool operator!=(const Vector2& other) const {
         return !(*this == other);
     }
 
-    // Component access
-    float x;
-    float y;
+public:
+    // Public overlay to preserve v.x/v.y access while keeping SIMD-friendly layout
+    union {
+        struct { float x, y, z_pad, w_pad; };
+        alignas(16) float xyzw[4];
+    };
 };
 
 // Global operators
@@ -284,12 +302,16 @@ inline Vector2 operator*(float scalar, const Vector2& vec) {
 
 // Min/Max operations
 inline math::Vector2 min(const math::Vector2& a, const math::Vector2& b) {
-    return math::Vector2(std::min(a.x, b.x), std::min(a.y, b.y));
-}
+        Vector2 result;
+        SimdUtils::Min4f(a.xyzw, b.xyzw, result.xyzw);
+        return result;
+    }
 
-inline math::Vector2 max(const math::Vector2& a, const math::Vector2& b) {
-    return math::Vector2(std::max(a.x, b.x), std::max(a.y, b.y));
-}
+    inline math::Vector2 max(const math::Vector2& a, const math::Vector2& b) {
+        Vector2 result;
+        SimdUtils::Max4f(a.xyzw, b.xyzw, result.xyzw);
+        return result;
+    }
 
 // Stream operators
 inline std::ostream& operator<<(std::ostream& os, const Vector2& v) {
