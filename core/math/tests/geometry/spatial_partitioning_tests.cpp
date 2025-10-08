@@ -4,6 +4,7 @@
 #include "../../include/geometry/octree.hpp"
 #include "../../include/geometry/quadtree.hpp"
 #include "../../include/geometry/spatial_hash.hpp"
+#include <chrono>
 
 namespace pynovage {
 namespace math {
@@ -17,7 +18,10 @@ public:
         : bounds_(bounds), data_(data) {}
     
     AABB getBounds() const override { return bounds_; }
-    bool intersects(const AABB& bounds) const override { return bounds_.intersects(bounds); }
+    bool intersects(const AABB& bounds) const override {
+        return !(bounds_.max.x < bounds.min.x || bounds_.min.x > bounds.max.x ||
+                bounds_.max.y < bounds.min.y || bounds_.min.y > bounds.max.y ||
+                bounds_.max.z < bounds.min.z || bounds_.min.z > bounds.max.z); }
     bool contains(const Vector3& point) const override { return bounds_.contains(point); }
     
     const int& getData() const override { return data_; }
@@ -42,7 +46,9 @@ protected:
             float y = static_cast<float>((i / 10) % 10) * spacing;
             float z = static_cast<float>(i / 100) * spacing;
             
-            AABB bounds(Vector3(x, y, z), Vector3(0.5f));
+            Vector3 halfExtent(0.5f, 0.5f, 0.5f);
+            AABB bounds(Vector3(x - halfExtent.x, y - halfExtent.y, z - halfExtent.z),
+                       Vector3(x + halfExtent.x, y + halfExtent.y, z + halfExtent.z));
             container_->insert(std::make_unique<MockObject>(bounds, i));
         }
     }
@@ -84,7 +90,7 @@ TYPED_TEST(SpatialPartitioningTest, VolumeQuery) {
     this->addObjects(1000, 2.0f);
     
     std::vector<const SpatialObject<int>*> results;
-    AABB queryBounds(Vector3(5.0f, 5.0f, 5.0f), Vector3(2.0f));
+    AABB queryBounds(Vector3(5.0f, 5.0f, 5.0f), Vector3(2.0f, 2.0f, 2.0f));
     VolumeQuery<int> query(queryBounds);
     this->container_->query(query, results);
     
@@ -95,7 +101,10 @@ TYPED_TEST(SpatialPartitioningTest, RayQuery) {
     this->addObjects(1000, 2.0f);
     
     std::vector<const SpatialObject<int>*> results;
-    Ray ray(Vector3(0.0f), Vector3(1.0f, 1.0f, 1.0f).normalized());
+    Ray3D ray(
+        Vector3(0.0f, 0.0f, 0.0f),  // origin
+        Vector3(1.0f, 1.0f, 1.0f).normalized()  // direction
+    );
     RayQuery<int> query(ray, 100.0f);
     this->container_->query(query, results);
     
@@ -104,34 +113,34 @@ TYPED_TEST(SpatialPartitioningTest, RayQuery) {
 
 TYPED_TEST(SpatialPartitioningTest, Update) {
     // Add a single object
-    AABB initialBounds(Vector3(0.0f), Vector3(0.5f));
+    AABB initialBounds(Vector3(0.0f, 0.0f, 0.0f), Vector3(0.5f, 0.5f, 0.5f));
     auto obj = std::make_unique<MockObject>(initialBounds, 0);
     const SpatialObject<int>* objPtr = obj.get();
     this->container_->insert(std::move(obj));
     
     // Query initial position
     std::vector<const SpatialObject<int>*> results;
-    PointQuery<int> query(Vector3(0.0f));
+    PointQuery<int> query(Vector3(0.0f, 0.0f, 0.0f));
     this->container_->query(query, results);
     EXPECT_EQ(results.size(), 1);
     
     // Move object and update
-    AABB newBounds(Vector3(10.0f), Vector3(0.5f));
+    AABB newBounds(Vector3(10.0f, 10.0f, 10.0f), Vector3(0.5f, 0.5f, 0.5f));
     obj = std::make_unique<MockObject>(newBounds, 0);
     this->container_->update(objPtr);
     
     // Query new position
     results.clear();
-    PointQuery<int> newQuery(Vector3(10.0f));
+    PointQuery<int> newQuery(Vector3(10.0f, 10.0f, 10.0f));
     this->container_->query(newQuery, results);
     EXPECT_EQ(results.size(), 1);
 }
 
 // Performance tests
 TYPED_TEST(SpatialPartitioningTest, InsertionPerformance) {
-    auto start = std::chrono::high_resolution_clock::now();
+    auto start = std::chrono::steady_clock::now();
     this->addObjects(10000);
-    auto end = std::chrono::high_resolution_clock::now();
+    auto end = std::chrono::steady_clock::now();
     auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
     
     std::cout << "Insertion time for " << typeid(TypeParam).name() << ": "
@@ -141,15 +150,15 @@ TYPED_TEST(SpatialPartitioningTest, InsertionPerformance) {
 TYPED_TEST(SpatialPartitioningTest, QueryPerformance) {
     this->addObjects(10000);
     
-    auto start = std::chrono::high_resolution_clock::now();
+    auto start = std::chrono::steady_clock::now();
     std::vector<const SpatialObject<int>*> results;
     for (int i = 0; i < 1000; ++i) {
         results.clear();
-        AABB queryBounds(Vector3(i % 10 * 2.0f), Vector3(1.0f));
+        AABB queryBounds(Vector3(i % 10 * 2.0f, i % 10 * 2.0f, i % 10 * 2.0f), Vector3(1.0f, 1.0f, 1.0f));
         VolumeQuery<int> query(queryBounds);
         this->container_->query(query, results);
     }
-    auto end = std::chrono::high_resolution_clock::now();
+    auto end = std::chrono::steady_clock::now();
     auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
     
     std::cout << "Query time for " << typeid(TypeParam).name() << ": "
@@ -159,9 +168,9 @@ TYPED_TEST(SpatialPartitioningTest, QueryPerformance) {
 TYPED_TEST(SpatialPartitioningTest, UpdatePerformance) {
     this->addObjects(10000);
     
-    auto start = std::chrono::high_resolution_clock::now();
+    auto start = std::chrono::steady_clock::now();
     for (int i = 0; i < 1000; ++i) {
-        AABB queryBounds(Vector3(i % 10 * 2.0f), Vector3(1.0f));
+        AABB queryBounds(Vector3(i % 10 * 2.0f, i % 10 * 2.0f, i % 10 * 2.0f), Vector3(1.0f, 1.0f, 1.0f));
         std::vector<const SpatialObject<int>*> results;
         VolumeQuery<int> query(queryBounds);
         this->container_->query(query, results);
@@ -170,7 +179,7 @@ TYPED_TEST(SpatialPartitioningTest, UpdatePerformance) {
             this->container_->update(obj);
         }
     }
-    auto end = std::chrono::high_resolution_clock::now();
+    auto end = std::chrono::steady_clock::now();
     auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
     
     std::cout << "Update time for " << typeid(TypeParam).name() << ": "

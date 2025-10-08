@@ -2,10 +2,14 @@
 
 #include "spatial_partitioning.hpp"
 #include "../vector3.hpp"
+#include "../vector2.hpp"
 #include "../matrix4.hpp"
 #include <memory>
 #include <vector>
 #include <array>
+#include <unordered_map>
+#include <algorithm>
+#include <cmath>
 
 namespace pynovage {
 namespace math {
@@ -109,8 +113,8 @@ private:
         
         AABB2D() = default;
         explicit AABB2D(const AABB& aabb) {
-            center = Vector2(aabb.getCenter().x, aabb.getCenter().z);
-            extent = Vector2(aabb.getExtent().x, aabb.getExtent().z);
+            center = Vector2(aabb.center().x, aabb.center().z);
+            extent = Vector2(aabb.dimensions().x, aabb.dimensions().z);
         }
         
         void extend(const AABB2D& other) {
@@ -119,8 +123,8 @@ private:
             Vector2 otherMin = other.center - other.extent;
             Vector2 otherMax = other.center + other.extent;
             
-            min = Vector2::min(min, otherMin);
-            max = Vector2::max(max, otherMax);
+            min = math::min(min, otherMin);
+            max = math::max(max, otherMax);
             
             center = (min + max) * 0.5f;
             extent = (max - min) * 0.5f;

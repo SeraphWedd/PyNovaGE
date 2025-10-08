@@ -22,7 +22,18 @@ public:
             root_ = std::make_unique<Node>();
             root_->bounds = object->getBounds();
         } else {
-            root_->bounds.extend(object->getBounds());
+            const AABB& b = object->getBounds();
+            Vector3 newMin(
+                std::min(root_->bounds.min.x, b.min.x),
+                std::min(root_->bounds.min.y, b.min.y),
+                std::min(root_->bounds.min.z, b.min.z)
+            );
+            Vector3 newMax(
+                std::max(root_->bounds.max.x, b.max.x),
+                std::max(root_->bounds.max.y, b.max.y),
+                std::max(root_->bounds.max.z, b.max.z)
+            );
+            root_->bounds = AABB(newMin, newMax);
         }
         
         insertIntoNode(root_.get(), std::move(object));
@@ -119,9 +130,10 @@ private:
         
         // Choose child based on split plane
         const AABB& objBounds = object->getBounds();
-        if (node->splitPlane.isInFront(objBounds)) {
+        float dist = node->splitPlane.signedDistance(objBounds.center());
+        if (dist > 0.0f) {
             insertIntoNode(node->front.get(), std::move(object));
-        } else if (node->splitPlane.isBehind(objBounds)) {
+        } else if (dist < 0.0f) {
             insertIntoNode(node->back.get(), std::move(object));
         } else {
             // Object spans the split plane, keep it in this node
@@ -179,9 +191,10 @@ private:
         std::vector<std::unique_ptr<SpatialObject<T>>> remainingObjects;
         for (auto& obj : node->objects) {
             const AABB& bounds = obj->getBounds();
-            if (node->splitPlane.isInFront(bounds)) {
+            float dist = node->splitPlane.signedDistance(bounds.center());
+            if (dist > 0.0f) {
                 node->front->objects.push_back(std::move(obj));
-            } else if (node->splitPlane.isBehind(bounds)) {
+            } else if (dist < 0.0f) {
                 node->back->objects.push_back(std::move(obj));
             } else {
                 remainingObjects.push_back(std::move(obj));
@@ -194,21 +207,20 @@ private:
         // Update child bounds
         node->front->bounds = node->bounds;
         node->back->bounds = node->bounds;
-        node->splitPlane.split(node->front->bounds, node->back->bounds);
     }
     
     Plane chooseSplitPlane(const Node* node) const {
         // Simple middle split strategy
-        const Vector3& center = node->bounds.getCenter();
-        const Vector3& extent = node->bounds.getExtent();
+        Vector3 center = node->bounds.center();
+        Vector3 dims = node->bounds.dimensions();
         
-        // Choose axis with largest extent
-        if (extent.x > extent.y && extent.x > extent.z) {
-            return Plane(Vector3(1, 0, 0), center);
-        } else if (extent.y > extent.z) {
-            return Plane(Vector3(0, 1, 0), center);
+        // Choose axis with largest dimension
+        if (dims.x > dims.y && dims.x > dims.z) {
+            return Plane::fromPointAndNormal(center, Vector3(1, 0, 0));
+        } else if (dims.y > dims.z) {
+            return Plane::fromPointAndNormal(center, Vector3(0, 1, 0));
         } else {
-            return Plane(Vector3(0, 0, 1), center);
+            return Plane::fromPointAndNormal(center, Vector3(0, 0, 1));
         }
     }
     

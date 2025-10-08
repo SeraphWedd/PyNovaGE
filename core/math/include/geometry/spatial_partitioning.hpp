@@ -3,6 +3,8 @@
 #include "../vector3.hpp"
 #include "../matrix4.hpp"
 #include "primitives.hpp"
+#include "frustum_culling.hpp"
+#include "intersection.hpp"
 #include <cstdint>
 #include <vector>
 #include <memory>
@@ -31,8 +33,8 @@ public:
     virtual bool contains(const Vector3& point) const = 0;
     
     // Optional interface (default implementations provided)
-    virtual bool intersectsRay(const Ray& ray, float& t) const { return false; }
-    virtual bool intersectsFrustum(const Frustum& frustum) const { return false; }
+    virtual bool intersectsRay(const Ray3D& ray, float& t) const { return false; }
+    virtual bool intersectsFrustum(const FrustumCulling& frustum) const { return false; }
     
     // Data accessors
     virtual const T& getData() const = 0;
@@ -77,6 +79,9 @@ public:
         return nodeBounds.contains(point_);
     }
     
+    // Accessors
+    const Vector3& getPoint() const { return point_; }
+
 private:
     Vector3 point_;
 };
@@ -85,7 +90,7 @@ private:
 template<typename T>
 class RayQuery : public SpatialQuery<T> {
 public:
-    RayQuery(const Ray& ray, float maxDist = std::numeric_limits<float>::max())
+    RayQuery(const Ray3D& ray, float maxDist = std::numeric_limits<float>::max())
         : ray_(ray), maxDistance_(maxDist) {}
     
     bool shouldAcceptObject(const SpatialObject<T>& object) const override {
@@ -94,12 +99,12 @@ public:
     }
     
     bool shouldTraverseNode(const AABB& nodeBounds) const override {
-        float t;
-        return ray_.intersects(nodeBounds, t) && t <= maxDistance_;
+        auto result = rayAABBIntersection(ray_, nodeBounds);
+        return result && result->distance <= maxDistance_;
     }
     
 private:
-    Ray ray_;
+    Ray3D ray_;
     float maxDistance_;
 };
 
@@ -114,9 +119,12 @@ public:
     }
     
     bool shouldTraverseNode(const AABB& nodeBounds) const override {
-        return bounds_.intersects(nodeBounds);
+        return aabbAABBIntersection(bounds_, nodeBounds).has_value();
     }
     
+    // Accessors
+    const AABB& getBounds() const { return bounds_; }
+
 private:
     AABB bounds_;
 };
@@ -125,7 +133,7 @@ private:
 template<typename T>
 class FrustumQuery : public SpatialQuery<T> {
 public:
-    explicit FrustumQuery(const Frustum& frustum) : frustum_(frustum) {}
+    explicit FrustumQuery(const FrustumCulling& frustum) : frustum_(frustum) {}
     
     bool shouldAcceptObject(const SpatialObject<T>& object) const override {
         return object.intersectsFrustum(frustum_);
@@ -136,7 +144,7 @@ public:
     }
     
 private:
-    Frustum frustum_;
+    FrustumCulling frustum_;
 };
 
 /**

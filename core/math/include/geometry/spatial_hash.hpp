@@ -6,6 +6,7 @@
 #include <memory>
 #include <vector>
 #include <unordered_map>
+#include <unordered_set>
 #include <functional>
 
 namespace pynovage {
@@ -105,7 +106,7 @@ public:
         } else {
             // Use a point query's position to create a small query bounds
             if (auto* pointQuery = dynamic_cast<const PointQuery<T>*>(&query)) {
-                queryBounds = AABB(pointQuery->getPoint(), Vector3(config_.cellSize * 0.5f));
+                queryBounds = AABB(pointQuery->getPoint(), Vector3(config_.cellSize * 0.5f, config_.cellSize * 0.5f, config_.cellSize * 0.5f));
             } else {
                 // For other query types, process all objects
                 for (const auto& pair : objectMap_) {
@@ -168,8 +169,8 @@ public:
         for (const auto& pair : cells_) {
             Vector3 min = cellIndexToPosition(pair.first);
             AABB cellBounds(
-                min + Vector3(config_.cellSize * 0.5f),
-                Vector3(config_.cellSize * 0.5f)
+                min + Vector3(config_.cellSize * 0.5f, config_.cellSize * 0.5f, config_.cellSize * 0.5f),
+                Vector3(config_.cellSize * 0.5f, config_.cellSize * 0.5f, config_.cellSize * 0.5f)
             );
             drawAABB(cellBounds);
         }
@@ -206,8 +207,8 @@ private:
         std::vector<std::size_t> indices;
         
         // Get min/max cell coordinates
-        Vector3 min = bounds.getMin();
-        Vector3 max = bounds.getMax();
+        Vector3 min = bounds.min;
+        Vector3 max = bounds.max;
         
         std::size_t minX = static_cast<std::size_t>(std::floor(min.x / config_.cellSize));
         std::size_t minY = static_cast<std::size_t>(std::floor(min.y / config_.cellSize));
