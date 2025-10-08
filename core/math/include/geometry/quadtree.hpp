@@ -31,7 +31,12 @@ public:
             root_->bounds.extend(AABB2D(bounds));
         }
         
-        insertIntoNode(root_.get(), std::move(object));
+        // Store in object map
+        const SpatialObject<T>* objPtr = object.get();
+        std::size_t id = reinterpret_cast<std::size_t>(objPtr);
+        objectMap_[id] = std::move(object);
+        
+        insertIntoNode(root_.get(), objPtr);
         objectCount_++;
     }
     
@@ -48,13 +53,16 @@ public:
     void update(const SpatialObject<T>* object) override {
         if (!root_) return;
         
-        auto it = std::find_if(objectMap_.begin(), objectMap_.end(),
-            [object](const auto& pair) { return pair.second.get() == object; });
+        std::size_t id = reinterpret_cast<std::size_t>(object);
+        auto it = objectMap_.find(id);
         
         if (it != objectMap_.end()) {
+            // Remove from spatial structure but keep in map
             auto obj = std::move(it->second);
-            remove(object);
-            insert(std::move(obj));
+            removeFromNode(root_.get(), object);
+            
+            // Reinsert into spatial structure
+            insertIntoNode(root_.get(), object);
         }
     }
     
@@ -162,19 +170,19 @@ private:
     struct Node {
         AABB2D bounds;
         std::array<std::unique_ptr<Node>, NUM_CHILDREN> children;
-        std::vector<std::unique_ptr<SpatialObject<T>>> objects;
+        std::vector<const SpatialObject<T>*> objects;
         bool isLeaf() const {
             return std::all_of(children.begin(), children.end(),
                              [](const auto& child) { return !child; });
         }
     };
     
-    void insertIntoNode(Node* node, std::unique_ptr<SpatialObject<T>> object) {
+    void insertIntoNode(Node* node, const SpatialObject<T>* object) {
         const AABB2D objBounds(object->getBounds());
         
         if (calculateDepth(node) >= config_.maxDepth ||
             node->bounds.getMinExtent() <= config_.minNodeSize) {
-            node->objects.push_back(std::move(object));
+            node->objects.push_back(object);
             return;
         }
         
@@ -183,7 +191,7 @@ private:
             if (node->objects.size() >= config_.maxObjectsPerNode) {
                 splitNode(node);
             } else {
-                node->objects.push_back(std::move(object));
+                node->objects.push_back(object);
                 return;
             }
         }
@@ -201,7 +209,7 @@ private:
         if (containsAABB(childBounds3D, obj3dBounds)) {
             insertIntoNode(node->children[index].get(), std::move(object));
         } else {
-            node->objects.push_back(std::move(object));
+            node->objects.push_back(object);
         }
     }
     
@@ -209,7 +217,7 @@ private:
         if (!node) return;
         
         auto it = std::find_if(node->objects.begin(), node->objects.end(),
-            [object](const auto& obj) { return obj.get() == object; });
+            [object](const auto& obj) { return obj == object; });
         
         if (it != node->objects.end()) {
             node->objects.erase(it);
@@ -248,9 +256,9 @@ private:
         
         if (!query.shouldTraverseNode(bounds3D)) return;
         
-        for (const auto& obj : node->objects) {
+        for (const auto* obj : node->objects) {
             if (query.shouldAcceptObject(*obj)) {
-                results.push_back(obj.get());
+                results.push_back(obj);
             }
         }
         
@@ -264,8 +272,8 @@ private:
     void splitNode(Node* node) {
         if (!node->isLeaf()) return;
         
-        std::vector<std::unique_ptr<SpatialObject<T>>> remainingObjects;
-        for (auto& obj : node->objects) {
+        std::vector<const SpatialObject<T>*> remainingObjects;
+        for (auto* obj : node->objects) {
             const AABB2D objBounds(obj->getBounds());
             std::size_t index = getChildIndex(node->bounds, objBounds.center);
             
@@ -275,9 +283,9 @@ private:
             }
             
             if (node->children[index]->bounds.contains(objBounds)) {
-                node->children[index]->objects.push_back(std::move(obj));
+                node->children[index]->objects.push_back(obj);
             } else {
-                remainingObjects.push_back(std::move(obj));
+                remainingObjects.push_back(obj);
             }
         }
         
@@ -293,17 +301,17 @@ private:
         }
         
         if (totalObjects <= config_.maxObjectsPerNode) {
-            std::vector<std::unique_ptr<SpatialObject<T>>> allObjects;
+            std::vector<const SpatialObject<T>*> allObjects;
             allObjects.reserve(totalObjects);
             
-            for (auto& obj : node->objects) {
-                allObjects.push_back(std::move(obj));
+            for (auto* obj : node->objects) {
+                allObjects.push_back(obj);
             }
             
             for (auto& child : node->children) {
                 if (child) {
-                    for (auto& obj : child->objects) {
-                        allObjects.push_back(std::move(obj));
+                    for (auto* obj : child->objects) {
+                        allObjects.push_back(obj);
                     }
                     child.reset();
                 }
@@ -424,12 +432,24 @@ private:
             if (child) debugDrawNode(child.get(), drawAABB);
         }
     }
+
+    static bool containsAABB(const AABB& outer, const AABB& inner) {
+        return outer.min.x <= inner.min.x && outer.max.x >= inner.max.x &&
+               outer.min.y <= inner.min.y && outer.max.y >= inner.max.y &&
+               outer.min.z <= inner.min.z && outer.max.z >= inner.max.z;
+    }
     
     void collectObjects(Node* node, std::vector<std::unique_ptr<SpatialObject<T>>>& objects) {
         if (!node) return;
         
-        for (auto& obj : node->objects) {
-            objects.push_back(std::move(obj));
+        // Move unique_ptrs from objectMap_ to objects vector
+        for (auto* obj : node->objects) {
+            std::size_t id = reinterpret_cast<std::size_t>(obj);
+            auto it = objectMap_.find(id);
+            if (it != objectMap_.end()) {
+                objects.push_back(std::move(it->second));
+                objectMap_.erase(it);
+            }
         }
         node->objects.clear();
         

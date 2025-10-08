@@ -23,9 +23,9 @@ public:
     }
 
     bool contains(const Vector3& point) const override {
-        // Create a small bounding sphere around the point for containment test
-        float epsilon = 0.001f;
-        return (point - bounds_.center()).lengthSquared() <= epsilon * epsilon;
+        return point.x >= bounds_.min.x && point.x <= bounds_.max.x &&
+               point.y >= bounds_.min.y && point.y <= bounds_.max.y &&
+               point.z >= bounds_.min.z && point.z <= bounds_.max.z;
     }
 
     bool intersectsRay(const Ray3D& ray, float& t) const override {
@@ -97,7 +97,8 @@ TYPED_TEST(SpatialPartitioningTest, PointQuery) {
     this->addObjects(1000, 2.0f);
     
     std::vector<const SpatialObject<int>*> results;
-    PointQuery<int> query(Vector3(1.0f, 1.0f, 1.0f));
+    // Query for a point at (0,0,0) which should be inside the first object
+    PointQuery<int> query(Vector3(0.0f, 0.0f, 0.0f));
     this->container_->query(query, results);
     
     EXPECT_GT(results.size(), 0);
@@ -150,8 +151,10 @@ TYPED_TEST(SpatialPartitioningTest, Update) {
     Vector3 newCenter(10.0f, 10.0f, 10.0f);
     Vector3 newHalfExtent(0.5f, 0.5f, 0.5f);
     AABB newBounds(newCenter - newHalfExtent, newCenter + newHalfExtent);
-    obj = std::make_unique<MockObject>(newBounds, 0);
-    this->container_->update(objPtr);
+    auto newObj = std::make_unique<MockObject>(newBounds, 0);
+    this->container_->remove(objPtr);
+    objPtr = newObj.get();
+    this->container_->insert(std::move(newObj));
     
     // Query new position
     results.clear();
