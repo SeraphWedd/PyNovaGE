@@ -17,6 +17,7 @@ add_library(pynovage_math
     src/geometry/bezier.cpp
     src/geometry/hermite.cpp
     src/geometry/catmull_rom.cpp
+    src/geometry/path.cpp
     src/lighting/attenuation.cpp
     src/lighting/point_light.cpp
     src/lighting/directional_light.cpp
@@ -83,6 +84,7 @@ add_executable(math_tests
     tests/geometry/bspline_tests.cpp
     tests/geometry/bezier_tests.cpp
     tests/geometry/hermite_tests.cpp
+    tests/geometry/path_tests.cpp
     tests/geometry/intersection_tests.cpp
     tests/geometry/continuous_collision_tests.cpp
     tests/geometry/high_speed_collision_tests.cpp
