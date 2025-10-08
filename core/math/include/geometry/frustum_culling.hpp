@@ -5,7 +5,7 @@
 #include "primitives.hpp"
 #include <array>
 #include <cstdint>
-
+#include <functional>
 namespace pynovage {
 namespace math {
 namespace geometry {
