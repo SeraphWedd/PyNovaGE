@@ -55,36 +55,50 @@ inline std::optional<IntersectionResult> rayPlaneIntersection(const Ray3D& ray, 
  * @return Optional intersection result, empty if no intersection
  */
 inline std::optional<IntersectionResult> raySphereIntersection(const Ray3D& ray, const Sphere& sphere) {
-    // Solve |O + tD - C|^2 = r^2 -> (D·D) t^2 + 2 D·(O-C) t + |O-C|^2 - r^2 = 0
     Vector3 oc = ray.origin - sphere.center;
-    float a = ray.direction.dot(ray.direction); // Should be 1 since direction is normalized
-    float b = 2.0f * ray.direction.dot(oc);
-    float c = oc.dot(oc) - sphere.radius * sphere.radius;
+    float radiusSq = sphere.radius * sphere.radius;
     
-    // Solve quadratic equation at^2 + bt + c = 0
-    float discriminant = b * b - 4.0f * a * c;
-    
-    if (discriminant < 0.0f) {
-        return std::nullopt; // No intersection
+    // Early rejection: if ray origin is outside sphere and pointing away from it
+    float ocLenSq = oc.lengthSquared();
+    if (ocLenSq > radiusSq) {
+        float dirDotOC = ray.direction.dot(oc);
+        if (dirDotOC >= 0.0f) {
+            return std::nullopt;
+        }
     }
     
-    // Compute both intersections
-    float sqrtD = std::sqrt(discriminant);
-    float t0 = (-b - sqrtD) / (2.0f * a);
-    float t1 = (-b + sqrtD) / (2.0f * a);
+    // Using optimized quadratic equation solution since ray direction is normalized (a = 1)
+    float b = ray.direction.dot(oc); // No need for 2.0f * since we'll compensate in discriminant
+    float c = ocLenSq - radiusSq;
+    float discriminant = b * b - c; // Since a = 1, simplified from b^2 - 4ac
     
-    // Get closest valid intersection
-    float t;
-    if (t0 >= 0.0f && t1 >= 0.0f) t = std::min(t0, t1);
-    else if (t0 >= 0.0f) t = t0;
-    else if (t1 >= 0.0f) t = t1;
-    else return std::nullopt;
+    if (discriminant < 0.0f) {
+        return std::nullopt;
+    }
+    
+    // Only compute closest intersection point
+    float sqrtD = std::sqrt(discriminant);
+    float t = -b - sqrtD; // Start with closer intersection
+    
+    // If closer intersection is behind ray, try farther one
+    if (t < 0.0f) {
+        t = -b + sqrtD;
+        if (t < 0.0f) {
+            return std::nullopt;
+        }
+    }
+    
+    // Compute intersection details
+    Vector3 point = ray.getPoint(t);
+    Vector3 normal = (point - sphere.center);
+    float invRadius = 1.0f / sphere.radius; // Avoid division in normalization
+    normal *= invRadius; // Faster than normalized() since we know the length
     
     IntersectionResult result;
     result.intersects = true;
     result.distance = t;
-    result.point = ray.getPoint(t);
-    result.normal = (result.point - sphere.center).normalized();
+    result.point = point;
+    result.normal = normal;
     
     return result;
 }

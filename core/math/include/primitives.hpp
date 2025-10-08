@@ -102,54 +102,75 @@ public:
  * 
  * A triangle is defined by three vertices in counter-clockwise order.
  */
-class Triangle {
+class alignas(16) Triangle {
 public:
-    Triangle() : v0(), v1(), v2() {}
+    Triangle() : v0(), v1(), v2(), edges_computed(false) {}
     Triangle(const Vector3& v0_, const Vector3& v1_, const Vector3& v2_)
-        : v0(v0_), v1(v1_), v2(v2_) {}
+        : v0(v0_), v1(v1_), v2(v2_), edges_computed(false) {}
+
+    // Pre-compute edges and cross product for better performance
+    void computeEdges() const {
+        if (!edges_computed) {
+            edge1 = v1 - v0;
+            edge2 = v2 - v0;
+            cross = edge1.cross(edge2);
+            len2 = cross.lengthSquared();
+            edges_computed = true;
+        }
+    }
 
     Vector3 getNormal() const {
-        Vector3 edge1 = v1 - v0;
-        Vector3 edge2 = v2 - v0;
-        return edge1.cross(edge2).normalized();
+        computeEdges();
+        if (len2 > 1e-12f) {
+            return cross * (1.0f / std::sqrt(len2));
+        }
+        return Vector3(0.0f, 0.0f, 1.0f);
     }
 
     float getArea() const {
-        Vector3 edge1 = v1 - v0;
-        Vector3 edge2 = v2 - v0;
-        return edge1.cross(edge2).length() * 0.5f;
+        computeEdges();
+        return 0.5f * std::sqrt(len2);
     }
 
     Vector3 getCenter() const {
-        return (v0 + v1 + v2) * (1.0f / 3.0f);
+        static const float oneThird = 1.0f / 3.0f;
+        return (v0 + v1 + v2) * oneThird;
     }
 
-    struct Properties {
+    struct alignas(16) Properties {
         Vector3 normal;
         float area;
         Vector3 center;
+        float _padding; // Ensure 16-byte alignment
     };
 
-    // Compute normal, area, and center in one pass
+    // Optimized version that computes all properties in one pass
     Properties computePropertiesFast() const {
         Properties p{};
-        Vector3 edge1 = v1 - v0;
-        Vector3 edge2 = v2 - v0;
-        Vector3 c = edge1.cross(edge2);
-        float len2 = c.lengthSquared();
+        computeEdges();
+
         if (len2 > 1e-12f) {
-            float invLen = 1.0f / std::sqrt(len2);
-            p.normal = c * invLen;
-            p.area = 0.5f * (len2 * invLen); // 0.5 * |c|, where |c| = len2 * invLen
+            const float invLen = 1.0f / std::sqrt(len2);
+            p.normal = cross * invLen;
+            p.area = 0.5f * (len2 * invLen);
         } else {
             p.normal = Vector3(0.0f, 0.0f, 1.0f);
             p.area = 0.0f;
         }
-        p.center = (v0 + v1 + v2) * (1.0f / 3.0f);
+
+        static const float oneThird = 1.0f / 3.0f;
+        p.center = (v0 + v1 + v2) * oneThird;
         return p;
     }
 
+    // Core vertices
     Vector3 v0, v1, v2;
+
+private:
+    // Cached computations
+    mutable Vector3 edge1, edge2, cross;
+    mutable float len2;
+    mutable bool edges_computed;
 };
 
 /**
