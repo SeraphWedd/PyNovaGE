@@ -151,6 +151,7 @@ add_executable(math_benchmarks
     tests/lighting/area_light_perf_tests.cpp
     tests/geometry/spatial_partitioning_benchmarks.cpp
     tests/benchmarks/matrix_real_world_benchmarks.cpp
+    tests/benchmarks/quaternion_real_world_benchmarks.cpp
 )
 
 target_link_libraries(math_benchmarks

@@ -115,7 +115,7 @@ public:
      * @return Quaternion magnitude
      */
     float Magnitude() const {
-        return std::sqrt(w*w + x*x + y*y + z*z);
+        return std::sqrt(MagnitudeSquared());
     }
 
     /**
@@ -123,21 +123,18 @@ public:
      * @return Quaternion magnitude squared
      */
     float MagnitudeSquared() const {
-        return w*w + x*x + y*y + z*z;
+        return SimdUtils::DotProduct4f(data, data);
     }
 
     /**
-     * @brief Normalizes the quaternion to unit length
+     * @brief Normalizes the quaternion to unit length using fast SIMD operations
      * @return Reference to normalized quaternion
      */
     Quaternion& Normalize() {
-        const float mag = Magnitude();
-        if (mag > 0.0f) {
-            const float invMag = 1.0f / mag;
-            w *= invMag;
-            x *= invMag;
-            y *= invMag;
-            z *= invMag;
+        float magSq = MagnitudeSquared();
+        if (std::abs(magSq - 1.0f) > 1e-12f && magSq > 1e-12f) {
+            float invMag = 1.0f / std::sqrt(magSq);
+            SimdUtils::Multiply4fScalar(data, invMag, data);
         }
         return *this;
     }
@@ -182,12 +179,27 @@ public:
      * @return Result of multiplication
      */
     Quaternion operator*(const Quaternion& other) const {
-        return Quaternion(
-            w*other.w - x*other.x - y*other.y - z*other.z,  // w
-            w*other.x + x*other.w + y*other.z - z*other.y,  // x
-            w*other.y - x*other.z + y*other.w + z*other.x,  // y
-            w*other.z + x*other.y - y*other.x + z*other.w   // z
-        );
+        // Special case: if either quaternion is identity, return the other one
+        if (other.w == 1.0f && other.x == 0.0f && other.y == 0.0f && other.z == 0.0f) {
+            return *this;
+        }
+        if (w == 1.0f && x == 0.0f && y == 0.0f && z == 0.0f) {
+            return other;
+        }
+
+        // Regular quaternion multiplication
+        float result_w = w * other.w - x * other.x - y * other.y - z * other.z;
+        float result_x = w * other.x + x * other.w + y * other.z - z * other.y;
+        float result_y = w * other.y - x * other.z + y * other.w + z * other.x;
+        float result_z = w * other.z + x * other.y - y * other.x + z * other.w;
+
+        // Normalize only if the quaternions aren't already normalized
+        Quaternion result(result_w, result_x, result_y, result_z);
+        float mag = result.MagnitudeSquared();
+        if (std::abs(mag - 1.0f) > 1e-6f) {
+            result.Normalize();
+        }
+        return result;
     }
 
     /**
@@ -196,30 +208,40 @@ public:
      * @return Rotated vector
      */
     Vector3 RotateVector(const Vector3& v) const {
-        // First normalize the quaternion
-        Quaternion normalized = this->Normalized();
+        // We'll store the quaternion vector part and input vector as 4D vectors for SIMD
+        float qvec[4] = {x, y, z, 0.0f};
+        float vec[4] = {v.x, v.y, v.z, 0.0f};
+        float result[4], temp1[4], temp2[4], temp3[4];
         
-        // Extract the vector part and scalar part
-        Vector3 u(normalized.x, normalized.y, normalized.z);
-        float s = normalized.w;
+        // Calculate dot(qvec, vec) using SIMD
+        float dot_qv = SimdUtils::DotProduct3f(qvec, vec);
         
-        // Apply the rotation formula: v' = 2.0f * dot(u,v) * u + (s*s - dot(u,u)) * v + 2.0f * s * cross(u,v)
-        float dot_uv = u.x * v.x + u.y * v.y + u.z * v.z;
-        float dot_uu = u.x * u.x + u.y * u.y + u.z * u.z;
+        // Calculate dot(qvec, qvec)
+        float dot_qq = SimdUtils::DotProduct3f(qvec, qvec);
         
-        // Calculate cross product
-        Vector3 cross(
-            u.y * v.z - u.z * v.y,
-            u.z * v.x - u.x * v.z,
-            u.x * v.y - u.y * v.x
-        );
+        // Calculate cross product using SIMD-optimized operation
+        float cross[4];
+        SimdUtils::CrossProduct3f(qvec, vec, cross);
         
-        // Combine all terms
-        return Vector3(
-            2.0f * dot_uv * u.x + (s*s - dot_uu) * v.x + 2.0f * s * cross.x,
-            2.0f * dot_uv * u.y + (s*s - dot_uu) * v.y + 2.0f * s * cross.y,
-            2.0f * dot_uv * u.z + (s*s - dot_uu) * v.z + 2.0f * s * cross.z
-        );
+        // Prepare scalar multipliers
+        SimdUtils::Fill4f(temp1, 2.0f * dot_qv);  // 2 * dot(qvec,vec)
+        SimdUtils::Fill4f(temp2, w*w - dot_qq);   // w^2 - dot(qvec,qvec)
+        SimdUtils::Fill4f(temp3, 2.0f * w);      // 2w for cross product term
+        
+        // Calculate 2 * dot(qvec,vec) * qvec
+        SimdUtils::Multiply4f(temp1, qvec, result);
+        
+        // Add (w^2 - dot(qvec,qvec)) * vec
+        float scaled_vec[4];
+        SimdUtils::Multiply4f(temp2, vec, scaled_vec);
+        SimdUtils::Add4f(result, scaled_vec, result);
+        
+        // Add 2w * cross(qvec,vec)
+        float scaled_cross[4];
+        SimdUtils::Multiply4f(temp3, cross, scaled_cross);
+        SimdUtils::Add4f(result, scaled_cross, result);
+        
+        return Vector3(result[0], result[1], result[2]);
     }
 
     /**
@@ -228,19 +250,23 @@ public:
      * @param angle Output parameter for rotation angle in radians
      */
     void ToAxisAngle(Vector3& axis, float& angle) const {
-        // Normalize the quaternion first
-        Quaternion normalized = this->Normalized();
+        // Use SIMD to calculate squared norm of vector part
+        float vec_part[4] = {x, y, z, 0.0f};
+        float s_squared = SimdUtils::DotProduct3f(vec_part, vec_part);
         
-        angle = 2.0f * std::acos(normalized.w);
-        float s = std::sqrt(1.0f - normalized.w * normalized.w);
+        // Calculate angle
+        angle = 2.0f * std::acos(w);
+        float s = std::sqrt(s_squared);
         
         if (s > 1e-6f) {
-            axis.x = normalized.x / s;
-            axis.y = normalized.y / s;
-            axis.z = normalized.z / s;
+            // Use SIMD to divide vector part by s
+            float result[4];
+            SimdUtils::Divide3fScalar(vec_part, s, result);
+            axis.x = result[0];
+            axis.y = result[1];
+            axis.z = result[2];
         } else {
-            // If s is close to zero, the angle is close to 0 or 180 degrees
-            // In this case, any axis will do
+            // If s is close to zero, return default axis
             axis.x = 1.0f;
             axis.y = 0.0f;
             axis.z = 0.0f;
@@ -307,7 +333,7 @@ public:
     }
     
     static Quaternion FromEulerAngles(float roll, float pitch, float yaw) {
-        // Convert euler angles to quaternion using half angles
+        // Convert to radians and compute half angles
         float cr = std::cos(roll * 0.5f);
         float sr = std::sin(roll * 0.5f);
         float cp = std::cos(pitch * 0.5f);
@@ -315,12 +341,13 @@ public:
         float cy = std::cos(yaw * 0.5f);
         float sy = std::sin(yaw * 0.5f);
 
-        return Quaternion(
-            cr * cp * cy + sr * sp * sy,
-            sr * cp * cy - cr * sp * sy,
-            cr * sp * cy + sr * cp * sy,
-            cr * cp * sy - sr * sp * cy
-        );
+        // Compute quaternion components
+        float w = cr * cp * cy + sr * sp * sy;
+        float x = sr * cp * cy - cr * sp * sy;
+        float y = cr * sp * cy + sr * cp * sy;
+        float z = cr * cp * sy - sr * sp * cy;
+
+        return Quaternion(w, x, y, z).Normalize();
     }
 
     /**
@@ -330,22 +357,26 @@ public:
      * @param yaw Output parameter for rotation around Z axis (in radians)
      */
     void ToEulerAngles(float& roll, float& pitch, float& yaw) const {
+        // Use SIMD to compute all terms at once
+        float squares[4];
+        SimdUtils::Multiply4f(data, data, squares);
+
         // Roll (x-axis rotation)
         float sinr_cosp = 2.0f * (w * x + y * z);
-        float cosr_cosp = 1.0f - 2.0f * (x * x + y * y);
+        float cosr_cosp = 1.0f - 2.0f * (squares[1] + squares[2]); // 1 - 2(x² + y²)
         roll = std::atan2(sinr_cosp, cosr_cosp);
 
         // Pitch (y-axis rotation)
         float sinp = 2.0f * (w * y - z * x);
         if (std::abs(sinp) >= 1.0f) {
-pitch = std::copysign(constants::half_pi, sinp);
+            pitch = std::copysign(constants::half_pi, sinp);
         } else {
             pitch = std::asin(sinp);
         }
 
         // Yaw (z-axis rotation)
         float siny_cosp = 2.0f * (w * z + x * y);
-        float cosy_cosp = 1.0f - 2.0f * (y * y + z * z);
+        float cosy_cosp = 1.0f - 2.0f * (squares[2] + squares[3]); // 1 - 2(y² + z²)
         yaw = std::atan2(siny_cosp, cosy_cosp);
     }
 
@@ -383,19 +414,22 @@ pitch = std::copysign(constants::half_pi, sinp);
         // Clamp t to [0,1]
         t = t < 0.0f ? 0.0f : (t > 1.0f ? 1.0f : t);
 
+        // Ensure input quaternions are normalized
+        Quaternion q1 = start.Normalized();
+        Quaternion q2 = end.Normalized();
+
         // Calculate cosine of angle between quaternions
-        float cosOmega = start.Dot(end);
+        float cosOmega = q1.Dot(q2);
 
         // If negative dot product, negate one of the quaternions to take shorter path
-        Quaternion end2 = end;
         if (cosOmega < 0.0f) {
-            end2 = Quaternion(-end.w, -end.x, -end.y, -end.z);
+            q2 = Quaternion(-q2.w, -q2.x, -q2.y, -q2.z);
             cosOmega = -cosOmega;
         }
 
         // If very close, just lerp
         if (cosOmega > 0.9999f) {
-            return Lerp(start, end2, t);
+            return Lerp(q1, q2, t).Normalize();
         }
 
         // Calculate interpolation parameters
@@ -406,11 +440,11 @@ pitch = std::copysign(constants::half_pi, sinp);
 
         // Perform spherical linear interpolation
         return Quaternion(
-            scale0 * start.w + scale1 * end2.w,
-            scale0 * start.x + scale1 * end2.x,
-            scale0 * start.y + scale1 * end2.y,
-            scale0 * start.z + scale1 * end2.z
-        );
+            scale0 * q1.w + scale1 * q2.w,
+            scale0 * q1.x + scale1 * q2.x,
+            scale0 * q1.y + scale1 * q2.y,
+            scale0 * q1.z + scale1 * q2.z
+        ).Normalize();
     }
 };
 

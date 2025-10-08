@@ -466,6 +466,19 @@ void SimdUtils::Divide4f(const float* a, const float* b, float* result) {
 #endif
 }
 
+void SimdUtils::ReciprocalSqrt4f(const float* a, float* result) {
+#if PYNOVAGE_MATH_HAS_SSE
+    __m128 va = _mm_loadu_ps(a);
+    __m128 vr = _mm_rsqrt_ps(va);
+    _mm_storeu_ps(result, vr);
+#else
+    result[0] = 1.0f / std::sqrt(a[0]);
+    result[1] = 1.0f / std::sqrt(a[1]);
+    result[2] = 1.0f / std::sqrt(a[2]);
+    result[3] = 1.0f / std::sqrt(a[3]);
+#endif
+}
+
 void SimdUtils::Fill4f(float* result, float value) {
 #if PYNOVAGE_MATH_HAS_SSE
     __m128 vval = _mm_set1_ps(value);
