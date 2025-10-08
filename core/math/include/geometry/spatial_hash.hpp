@@ -8,6 +8,8 @@
 #include <unordered_map>
 #include <unordered_set>
 #include <functional>
+#include <algorithm>
+#include <cmath>
 
 namespace pynovage {
 namespace math {
@@ -17,7 +19,7 @@ template<typename T>
 class SpatialHash : public SpatialContainer<T> {
 public:
     explicit SpatialHash(const SpatialConfig& config = SpatialConfig())
-        : config_(config), objectCount_(0) {
+        : config_(config), objectCount_(0), totalBounds_(Vector3(0,0,0), Vector3(0,0,0)) {
         // Set reasonable grid size based on cell size
         cellSizeInv_ = 1.0f / config_.cellSize;
         gridSize_ = 32;  // Default to 32³ grid (32,768 cells)
@@ -25,12 +27,33 @@ public:
         
         // Pre-allocate initial cell capacity
         cells_.reserve(64);
+        
+        // Initialize object density tracking
+        objectsPerCell_ = 0;
+        maxObjectOverlap_ = 1;
     }
     
     void insert(std::unique_ptr<SpatialObject<T>> object) override {
         // Check if we need to adjust grid size
         std::size_t oldGridSize = gridSize_;
         adjustGridSize();
+        
+        // Update total bounds
+        const AABB& objBounds = object->getBounds();
+        if (objectCount_ == 0) {
+            totalBounds_ = objBounds;
+        } else {
+            totalBounds_.min = Vector3(
+                std::min(totalBounds_.min.x, objBounds.min.x),
+                std::min(totalBounds_.min.y, objBounds.min.y),
+                std::min(totalBounds_.min.z, objBounds.min.z)
+            );
+            totalBounds_.max = Vector3(
+                std::max(totalBounds_.max.x, objBounds.max.x),
+                std::max(totalBounds_.max.y, objBounds.max.y),
+                std::max(totalBounds_.max.z, objBounds.max.z)
+            );
+        }
         
         // If grid size changed, rebuild
         if (oldGridSize != gridSize_ && objectCount_ > 0) {
@@ -52,9 +75,9 @@ public:
                 objectMap_[id] = std::move(obj);
                 objectCount_++;
                 
-                // Calculate cell indices
+                // Calculate cell indices with padding
                 std::vector<std::size_t> cellIndices;
-                cellIndices.reserve(8);
+                cellIndices.reserve(27);  // Allow for more overlap
                 getCellIndices(objPtr->getBounds(), cellIndices);
                 
                 // Add to cells
@@ -73,11 +96,10 @@ public:
         objectMap_[id] = std::move(object);
         objectCount_++;
         
-        // Calculate cell indices
-        const AABB& bounds = objPtr->getBounds();
+        // Calculate cell indices with padding
         std::vector<std::size_t> cellIndices;
-        cellIndices.reserve(8);  // Most objects overlap with <= 8 cells
-        getCellIndices(bounds, cellIndices);
+        cellIndices.reserve(27);  // Allow for more overlap
+        getCellIndices(objBounds, cellIndices);
         
         // Add to cells
         for (std::size_t index : cellIndices) {
@@ -112,6 +134,18 @@ public:
         objectCells_.erase(it);
         objectMap_.erase(id);
         objectCount_--;
+    }
+    
+    // Helper to round up to next power of 2 (C++17 compatible)
+    static std::size_t nextPowerOfTwo(std::size_t v) {
+        v--;
+        v |= v >> 1;
+        v |= v >> 2;
+        v |= v >> 4;
+        v |= v >> 8;
+        v |= v >> 16;
+        v++;
+        return v;
     }
     
     void update(const SpatialObject<T>* object) override {
@@ -172,19 +206,66 @@ public:
         // Handle point queries
         if (auto* pointQuery = dynamic_cast<const PointQuery<T>*>(&query)) {
             const Vector3& point = pointQuery->getPoint();
-            std::size_t index = positionToCellIndex(point);
-            auto it = cells_.find(index);
-            if (it == cells_.end()) return;
-            const auto& cell = it->second;
-            for (const auto* obj : cell.objects) {
-                if (query.shouldAcceptObject(*obj)) {
-                    results.push_back(obj);
+            
+            // Check if point is in total bounds
+            if (!totalBounds_.contains(point)) return;
+            
+            // Get potential cells around point
+            std::size_t baseIndex = positionToCellIndex(point);
+            static const int offsets[8][3] = {
+                {0,0,0}, {1,0,0}, {0,1,0}, {1,1,0},
+                {0,0,1}, {1,0,1}, {0,1,1}, {1,1,1}
+            };
+            
+            static thread_local std::unordered_set<const SpatialObject<T>*> processed;
+            processed.clear();
+            processed.reserve(32);
+            
+            // Check neighboring cells for objects that might contain the point
+            std::size_t x = baseIndex % gridSize_;
+            std::size_t y = (baseIndex / gridSize_) % gridSize_;
+            std::size_t z = baseIndex / gridSizeSq_;
+            
+            for (const auto& offset : offsets) {
+                std::size_t newX = (x + offset[0]) % gridSize_;
+                std::size_t newY = (y + offset[1]) % gridSize_;
+                std::size_t newZ = (z + offset[2]) % gridSize_;
+                std::size_t index = newX + newY * gridSize_ + newZ * gridSizeSq_;
+                
+                auto it = cells_.find(index);
+                if (it == cells_.end()) continue;
+                
+                for (const auto* obj : it->second.objects) {
+                    if (processed.insert(obj).second && 
+                        obj->contains(point) && 
+                        query.shouldAcceptObject(*obj)) {
+                        results.push_back(obj);
+                    }
                 }
             }
             return;
         }
         
-        // For other query types (ray, etc), process all objects
+        // Handle ray queries without internal ray accessors
+        if (dynamic_cast<const RayQuery<T>*>(&query)) {
+            // Fall back to scanning potentially overlapping cells using the query's traversal predicate
+            // Build a coarse AABB using total bounds; if empty just scan all objects
+            if (objectCount_ == 0) return;
+            
+            // Conservative approach: iterate non-empty cells and test objects via shouldAcceptObject
+            for (const auto& pair : cells_) {
+                const auto& cell = pair.second;
+                if (cell.objects.empty()) continue;
+                for (const auto* obj : cell.objects) {
+                    if (query.shouldAcceptObject(*obj)) {
+                        results.push_back(obj);
+                    }
+                }
+            }
+            return;
+        }
+        
+        // For other query types, process all objects
         for (const auto& pair : objectMap_) {
             if (query.shouldAcceptObject(*pair.second)) {
                 results.push_back(pair.second.get());
@@ -194,24 +275,34 @@ public:
     
     void queryVolume(const AABB& bounds, const SpatialQuery<T>& query,
                     std::vector<const SpatialObject<T>*>& results) const {
-        // Get overlapping cell indices
+        // Early out if no intersection with total bounds
+        if (!aabbAABBIntersection(bounds, totalBounds_).has_value()) return;
+        
+        // Get overlapping cell indices with bounds padding
         std::vector<std::size_t> cellIndices;
-        cellIndices.reserve(8);
+        cellIndices.reserve(27);  // 3x3x3 grid around target
         getCellIndices(bounds, cellIndices);
         
         // Use a small hash set for duplicate checking
         static thread_local std::unordered_set<const SpatialObject<T>*> processed;
         processed.clear();
-        processed.reserve(32);  // Reserve space for typical case
+        processed.reserve(maxObjectOverlap_ * 2);  // Account for overlap
         
         // Process objects in overlapping cells
         for (std::size_t index : cellIndices) {
             auto it = cells_.find(index);
             if (it == cells_.end()) continue;
+            
             const auto& cell = it->second;
+            // Skip empty cells or if cell is too far
+            if (cell.objects.empty()) continue;
+            
+            // Process objects in this cell
             for (const auto* obj : cell.objects) {
                 if (processed.insert(obj).second) {
-                    if (query.shouldAcceptObject(*obj)) {
+                    // Extra bounds check since we might have over-estimated cells
+                    if (aabbAABBIntersection(bounds, obj->getBounds()).has_value() &&
+                        query.shouldAcceptObject(*obj)) {
                         results.push_back(obj);
                     }
                 }
@@ -265,12 +356,44 @@ private:
     };
     
     std::size_t adjustGridSize() {
-        // Adjust grid size based on number of objects
+        // Track average objects per cell and max overlap
+        if (!cells_.empty()) {
+            std::size_t totalObjects = 0;
+            std::size_t maxOverlap = 1;
+            for (const auto& pair : cells_) {
+                totalObjects += pair.second.objects.size();
+                maxOverlap = std::max(maxOverlap, pair.second.objects.size());
+            }
+            objectsPerCell_ = static_cast<float>(totalObjects) / cells_.size();
+            maxObjectOverlap_ = maxOverlap;
+        }
+        
+        // Adjust grid size based on density and bounds
         std::size_t oldSize = gridSize_;
-        if (objectCount_ < 100) gridSize_ = 16;
-        else if (objectCount_ < 1000) gridSize_ = 32;
-        else if (objectCount_ < 10000) gridSize_ = 64;
-        else gridSize_ = 128;
+        const float targetDensity = 4.0f;  // Aim for ~4 objects per cell
+        
+        if (objectCount_ == 0) {
+            gridSize_ = 16;  // Default size for empty container
+        } else {
+            // Calculate ideal cell count based on object density
+            float idealCells = objectCount_ / targetDensity;
+            
+            // Adjust for overlap
+            idealCells *= (maxObjectOverlap_ > 1) ? std::log2(maxObjectOverlap_) : 1.0f;
+            
+            // Calculate grid size to achieve ideal cell count
+            // Target cells = gridSize_^3, so gridSize_ = cbrt(target)
+            gridSize_ = static_cast<std::size_t>(
+                std::pow(idealCells, 1.0f/3.0f)  // Cube root
+            );
+            
+            // Round up to next power of 2 and clamp to valid range
+            gridSize_ = nextPowerOfTwo(gridSize_);
+            gridSize_ = std::min(
+                std::max(gridSize_, std::size_t(16)),  // Min 16³
+                std::size_t(256)  // Max 256³
+            );
+        }
         
         gridSizeSq_ = gridSize_ * gridSize_;
         return oldSize;
@@ -293,18 +416,29 @@ private:
     }
     
     void getCellIndices(const AABB& bounds, std::vector<std::size_t>& indices) const {
-        // Calculate cell coordinates directly
-        std::size_t minX = static_cast<std::size_t>(std::floor(bounds.min.x * cellSizeInv_)) % gridSize_;
-        std::size_t minY = static_cast<std::size_t>(std::floor(bounds.min.y * cellSizeInv_)) % gridSize_;
-        std::size_t minZ = static_cast<std::size_t>(std::floor(bounds.min.z * cellSizeInv_)) % gridSize_;
-        std::size_t maxX = static_cast<std::size_t>(std::floor(bounds.max.x * cellSizeInv_)) % gridSize_;
-        std::size_t maxY = static_cast<std::size_t>(std::floor(bounds.max.y * cellSizeInv_)) % gridSize_;
-        std::size_t maxZ = static_cast<std::size_t>(std::floor(bounds.max.z * cellSizeInv_)) % gridSize_;
+        // Add padding to catch edge cases
+        const float padding = config_.cellSize * 0.1f;  // 10% padding
+        Vector3 padMin = bounds.min - Vector3(padding, padding, padding);
+        Vector3 padMax = bounds.max + Vector3(padding, padding, padding);
+        
+        // Calculate cell coordinates with padding
+        std::size_t minX = static_cast<std::size_t>(std::floor(padMin.x * cellSizeInv_)) % gridSize_;
+        std::size_t minY = static_cast<std::size_t>(std::floor(padMin.y * cellSizeInv_)) % gridSize_;
+        std::size_t minZ = static_cast<std::size_t>(std::floor(padMin.z * cellSizeInv_)) % gridSize_;
+        std::size_t maxX = static_cast<std::size_t>(std::floor(padMax.x * cellSizeInv_)) % gridSize_;
+        std::size_t maxY = static_cast<std::size_t>(std::floor(padMax.y * cellSizeInv_)) % gridSize_;
+        std::size_t maxZ = static_cast<std::size_t>(std::floor(padMax.z * cellSizeInv_)) % gridSize_;
         
         // Handle cases where max < min after modulo
         if (maxX < minX) maxX += gridSize_;
         if (maxY < minY) maxY += gridSize_;
         if (maxZ < minZ) maxZ += gridSize_;
+        
+        // Calculate expected number of cells
+        std::size_t numX = maxX - minX + 1;
+        std::size_t numY = maxY - minY + 1;
+        std::size_t numZ = maxZ - minZ + 1;
+        indices.reserve(numX * numY * numZ);
         
         // Collect overlapping cell indices
         for (std::size_t z = minZ; z <= maxZ; ++z) {
@@ -328,6 +462,11 @@ private:
     float cellSizeInv_;  // 1.0f / cellSize
     std::size_t gridSize_;  // Current grid size (adjusted based on object count)
     std::size_t gridSizeSq_;  // gridSize_ * gridSize_
+    
+    // Statistical tracking for adaptive resizing
+    float objectsPerCell_;  // Average objects per non-empty cell
+    std::size_t maxObjectOverlap_;  // Maximum objects in any cell
+    AABB totalBounds_;  // Total bounds of all objects
 };
 
 } // namespace geometry
