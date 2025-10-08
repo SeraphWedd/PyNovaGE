@@ -335,7 +335,7 @@ Track A: Performance Foundation    Track B: Engine Core           Track C: High-
     - Large curves (32 points, 10 ops): ~307μs
     - Complexity: O(N³), ~0.01N³, RMS: 55%
 
-###### 1.2.6.1 B-splines [✓]
+###### 1.2.6.2 B-splines [✓]
 - Basic operations:
   - Construction (64 control points): ~247ns
   - Single point evaluation: ~290-324ns
