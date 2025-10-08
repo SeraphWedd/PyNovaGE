@@ -254,6 +254,58 @@ public:
      * @param yaw Rotation around Z axis (in radians)
      * @return Quaternion representing the euler angles
      */
+    /**
+     * @brief Creates a quaternion from an orthonormal basis
+     * @param forward Forward direction (Z axis)
+     * @param up Up direction (Y axis)
+     * @param right Right direction (X axis)
+     * @return Quaternion representing the orientation defined by the basis
+     */
+    static Quaternion fromBasis(const Vector3& forward, const Vector3& up, const Vector3& right) {
+        // Ensure vectors are normalized
+        Vector3 f = forward.normalized();
+        Vector3 u = up.normalized();
+        Vector3 r = right.normalized();
+        
+        // Construct rotation matrix from basis vectors
+        float m[3][3] = {
+            {r.x, r.y, r.z},
+            {u.x, u.y, u.z},
+            {f.x, f.y, f.z}
+        };
+        
+        float trace = m[0][0] + m[1][1] + m[2][2];
+        Quaternion q;
+        
+        if (trace > 0.0f) {
+            float s = 0.5f / std::sqrt(trace + 1.0f);
+            q.w = 0.25f / s;
+            q.x = (m[2][1] - m[1][2]) * s;
+            q.y = (m[0][2] - m[2][0]) * s;
+            q.z = (m[1][0] - m[0][1]) * s;
+        } else if (m[0][0] > m[1][1] && m[0][0] > m[2][2]) {
+            float s = 2.0f * std::sqrt(1.0f + m[0][0] - m[1][1] - m[2][2]);
+            q.w = (m[2][1] - m[1][2]) / s;
+            q.x = 0.25f * s;
+            q.y = (m[0][1] + m[1][0]) / s;
+            q.z = (m[0][2] + m[2][0]) / s;
+        } else if (m[1][1] > m[2][2]) {
+            float s = 2.0f * std::sqrt(1.0f + m[1][1] - m[0][0] - m[2][2]);
+            q.w = (m[0][2] - m[2][0]) / s;
+            q.x = (m[0][1] + m[1][0]) / s;
+            q.y = 0.25f * s;
+            q.z = (m[1][2] + m[2][1]) / s;
+        } else {
+            float s = 2.0f * std::sqrt(1.0f + m[2][2] - m[0][0] - m[1][1]);
+            q.w = (m[1][0] - m[0][1]) / s;
+            q.x = (m[0][2] + m[2][0]) / s;
+            q.y = (m[1][2] + m[2][1]) / s;
+            q.z = 0.25f * s;
+        }
+        
+        return q.Normalized();
+    }
+    
     static Quaternion FromEulerAngles(float roll, float pitch, float yaw) {
         // Convert euler angles to quaternion using half angles
         float cr = std::cos(roll * 0.5f);
