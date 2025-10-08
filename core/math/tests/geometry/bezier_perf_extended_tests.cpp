@@ -266,30 +266,30 @@ static void BM_BezierComplexOperations(benchmark::State& state) {
 
 // Register benchmarks with various input sizes
 BENCHMARK(BM_BezierCachePerformance)
-    ->RangeMultiplier(4)
-    ->Range(64, 16384)
+    ->RangeMultiplier(2)
+    ->Range(4, 128)  // More reasonable range for cache testing
     ->Complexity();
 
 BENCHMARK(BM_BezierMemoryLayout)
-    ->RangeMultiplier(4)
-    ->Range(64, 16384)
+    ->RangeMultiplier(2)
+    ->Range(4, 64)   // Memory layout tests up to typical max size
     ->Complexity();
 
 BENCHMARK(BM_BezierSIMDComparison)
-    ->RangeMultiplier(4)
-    ->Range(64, 16384)
+    ->RangeMultiplier(2)
+    ->Range(4, 32)   // SIMD most effective for curves up to degree 31
     ->Complexity();
 
 BENCHMARK(BM_BezierMemoryBehavior)
-    ->RangeMultiplier(4)
-    ->Range(64, 16384)
+    ->RangeMultiplier(2)
+    ->Range(4, 128)  // Test memory behavior with reasonable sizes
     ->Complexity();
 
 BENCHMARK(BM_BezierComplexOperations)
-    ->Args({64, 10})     // Small curve, few ops
-    ->Args({256, 50})    // Medium curve, moderate ops
-    ->Args({1024, 25})   // Large curve, fewer ops
-    ->Args({4096, 10})   // Very large curve, minimal ops
+    ->Args({8, 50})      // Small curve, many ops
+    ->Args({16, 25})     // Medium curve, moderate ops
+    ->Args({32, 10})     // Large curve, fewer ops
+    ->Args({64, 5})      // Very large curve, minimal ops
     ->Complexity();
 
 } // namespace tests

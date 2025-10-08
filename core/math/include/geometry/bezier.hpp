@@ -18,11 +18,17 @@ namespace math {
  * They are commonly used for smooth interpolation between points.
  *
  * Performance Characteristics:
- * - SIMD-optimized curve evaluation
+ * - SIMD-optimized curve evaluation for degrees < 32
+ * - Automatic fallback to De Casteljau for higher degrees
  * - Cache-friendly control point storage
  * - Efficient basis computation
  * - Fast degree elevation/reduction
  * - Optimized subdivision
+ *
+ * Memory Usage:
+ * - Fixed-size stack buffers for curves up to degree 31
+ * - Stack usage: O(n) for degree n with De Casteljau
+ * - Heap usage: O(n) for control points and coefficients
  *
  * Usage Guidelines:
  * - Use for smooth interpolation between points
