@@ -161,6 +161,9 @@ public:
     virtual void update(const SpatialObject<T>* object) = 0;
     virtual void clear() = 0;
     
+    // Optional capacity hint to reduce rehashing during bulk inserts
+    virtual void reserveObjects(std::size_t count) {}
+    
     // Queries
     virtual void query(const SpatialQuery<T>& query,
                       std::vector<const SpatialObject<T>*>& results) const = 0;

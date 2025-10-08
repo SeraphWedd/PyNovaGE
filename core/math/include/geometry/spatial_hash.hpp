@@ -34,9 +34,14 @@ public:
     }
     
     void insert(std::unique_ptr<SpatialObject<T>> object) override {
-        // Check if we need to adjust grid size
+        // Reuse thread-local storage for cell indices to avoid allocation
+        storage_.cellIndices.clear();
+        
+        // Throttle grid adjustment: only on powers of two to avoid per-insert cost
         std::size_t oldGridSize = gridSize_;
-        adjustGridSize();
+        if (objectCount_ == 0 || ((objectCount_ & (objectCount_ - 1)) == 0)) {
+            adjustGridSize();
+        }
         
         // Update total bounds
         const AABB& objBounds = object->getBounds();
@@ -75,10 +80,10 @@ public:
                 objectMap_[id] = std::move(obj);
                 objectCount_++;
                 
-                // Calculate cell indices with padding
-                std::vector<std::size_t> cellIndices;
-                cellIndices.reserve(27);  // Allow for more overlap
-                getCellIndices(objPtr->getBounds(), cellIndices);
+        // Calculate cell indices without padding for insert (fewer cells touched)
+        std::vector<std::size_t> cellIndices;
+        cellIndices.reserve(8);
+        getCellIndicesNoPad(objPtr->getBounds(), cellIndices);
                 
                 // Add to cells
                 for (std::size_t index : cellIndices) {
@@ -96,17 +101,17 @@ public:
         objectMap_[id] = std::move(object);
         objectCount_++;
         
-        // Calculate cell indices with padding
-        std::vector<std::size_t> cellIndices;
-        cellIndices.reserve(27);  // Allow for more overlap
-        getCellIndices(objBounds, cellIndices);
+        // Calculate cell indices without padding (reusing thread-local storage)
+        getCellIndicesNoPad(objBounds, storage_.cellIndices);
         
         // Add to cells
-        for (std::size_t index : cellIndices) {
-            cells_[index].objects.push_back(objPtr);
+        for (std::size_t index : storage_.cellIndices) {
+            auto it = cells_.try_emplace(index).first;
+            it->second.objects.push_back(objPtr);
         }
         
-        objectCells_[id] = std::move(cellIndices);
+        // Copy indices for tracking (need a copy since storage_ will be reused)
+        objectCells_[id] = storage_.cellIndices;
     }
     
     void remove(const SpatialObject<T>* object) override {
@@ -193,6 +198,17 @@ public:
         objectMap_.clear();
         objectCells_.clear();
         objectCount_ = 0;
+    }
+    
+    void reserveObjects(std::size_t count) override {
+        // Reserve internal containers to reduce rehashing during bulk inserts
+        objectMap_.reserve(count);
+        objectCells_.reserve(count);
+        // Heuristic: expect ~4 cells per object on average
+        std::size_t expectedCells = count * 4;
+        if (expectedCells > cells_.bucket_count()) {
+            cells_.reserve(expectedCells);
+        }
     }
     
     void query(const SpatialQuery<T>& query,
@@ -355,45 +371,20 @@ private:
         Cell() { objects.reserve(8); }  // Most cells contain few objects
     };
     
+    // Thread-local per-object reusable storage to avoid allocations
+    struct LocalStorage {
+        std::vector<std::size_t> cellIndices;
+        LocalStorage() { cellIndices.reserve(8); }
+    };
+    inline static thread_local LocalStorage storage_;
+    
     std::size_t adjustGridSize() {
-        // Track average objects per cell and max overlap
-        if (!cells_.empty()) {
-            std::size_t totalObjects = 0;
-            std::size_t maxOverlap = 1;
-            for (const auto& pair : cells_) {
-                totalObjects += pair.second.objects.size();
-                maxOverlap = std::max(maxOverlap, pair.second.objects.size());
-            }
-            objectsPerCell_ = static_cast<float>(totalObjects) / cells_.size();
-            maxObjectOverlap_ = maxOverlap;
-        }
-        
-        // Adjust grid size based on density and bounds
+        // Cheap heuristic based only on object count to avoid scanning cells_ each insert
         std::size_t oldSize = gridSize_;
-        const float targetDensity = 4.0f;  // Aim for ~4 objects per cell
-        
-        if (objectCount_ == 0) {
-            gridSize_ = 16;  // Default size for empty container
-        } else {
-            // Calculate ideal cell count based on object density
-            float idealCells = objectCount_ / targetDensity;
-            
-            // Adjust for overlap
-            idealCells *= (maxObjectOverlap_ > 1) ? std::log2(maxObjectOverlap_) : 1.0f;
-            
-            // Calculate grid size to achieve ideal cell count
-            // Target cells = gridSize_^3, so gridSize_ = cbrt(target)
-            gridSize_ = static_cast<std::size_t>(
-                std::pow(idealCells, 1.0f/3.0f)  // Cube root
-            );
-            
-            // Round up to next power of 2 and clamp to valid range
-            gridSize_ = nextPowerOfTwo(gridSize_);
-            gridSize_ = std::min(
-                std::max(gridSize_, std::size_t(16)),  // Min 16³
-                std::size_t(256)  // Max 256³
-            );
-        }
+        if (objectCount_ < 100) gridSize_ = 16;
+        else if (objectCount_ < 1000) gridSize_ = 32;
+        else if (objectCount_ < 10000) gridSize_ = 64;
+        else gridSize_ = 128;
         
         gridSizeSq_ = gridSize_ * gridSize_;
         return oldSize;
@@ -416,7 +407,7 @@ private:
     }
     
     void getCellIndices(const AABB& bounds, std::vector<std::size_t>& indices) const {
-        // Add padding to catch edge cases
+        // Add padding to catch edge cases (used for queries)
         const float padding = config_.cellSize * 0.1f;  // 10% padding
         Vector3 padMin = bounds.min - Vector3(padding, padding, padding);
         Vector3 padMax = bounds.max + Vector3(padding, padding, padding);
@@ -446,6 +437,47 @@ private:
             for (std::size_t y = minY; y <= maxY; ++y) {
                 std::size_t zyBase = zBase + (y % gridSize_) * gridSize_;
                 for (std::size_t x = minX; x <= maxX; ++x) {
+                    indices.push_back(zyBase + (x % gridSize_));
+                }
+            }
+        }
+    }
+    
+    void getCellIndicesNoPad(const AABB& bounds, std::vector<std::size_t>& indices) const {
+        // Fast path for objects that likely fit in one cell (avoid modulo)
+        float minX = std::floor(bounds.min.x * cellSizeInv_);
+        float minY = std::floor(bounds.min.y * cellSizeInv_);
+        float minZ = std::floor(bounds.min.z * cellSizeInv_);
+        float maxX = std::floor(bounds.max.x * cellSizeInv_);
+        float maxY = std::floor(bounds.max.y * cellSizeInv_);
+        float maxZ = std::floor(bounds.max.z * cellSizeInv_);
+        
+        if (maxX == minX && maxY == minY && maxZ == minZ) {
+            // Object fits in one cell
+            std::size_t x = static_cast<std::size_t>(minX) % gridSize_;
+            std::size_t y = static_cast<std::size_t>(minY) % gridSize_;
+            std::size_t z = static_cast<std::size_t>(minZ) % gridSize_;
+            indices.push_back(x + y * gridSize_ + z * gridSizeSq_);
+            return;
+        }
+        
+        // Multi-cell case
+        std::size_t gminX = static_cast<std::size_t>(minX) % gridSize_;
+        std::size_t gminY = static_cast<std::size_t>(minY) % gridSize_;
+        std::size_t gminZ = static_cast<std::size_t>(minZ) % gridSize_;
+        std::size_t gmaxX = static_cast<std::size_t>(maxX) % gridSize_;
+        std::size_t gmaxY = static_cast<std::size_t>(maxY) % gridSize_;
+        std::size_t gmaxZ = static_cast<std::size_t>(maxZ) % gridSize_;
+        
+        if (gmaxX < gminX) gmaxX += gridSize_;
+        if (gmaxY < gminY) gmaxY += gridSize_;
+        if (gmaxZ < gminZ) gmaxZ += gridSize_;
+        
+        for (std::size_t z = gminZ; z <= gmaxZ; ++z) {
+            std::size_t zBase = (z % gridSize_) * gridSizeSq_;
+            for (std::size_t y = gminY; y <= gmaxY; ++y) {
+                std::size_t zyBase = zBase + (y % gridSize_) * gridSize_;
+                for (std::size_t x = gminX; x <= gmaxX; ++x) {
                     indices.push_back(zyBase + (x % gridSize_));
                 }
             }

@@ -57,6 +57,7 @@ void BM_BulkInsert(benchmark::State& state) {
     for (auto _ : state) {
         state.PauseTiming();
         Container container;
+        container.reserveObjects(count);
         std::vector<std::unique_ptr<MockObject>> objects;
         objects.reserve(count);
         
