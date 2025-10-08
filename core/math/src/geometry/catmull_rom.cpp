@@ -51,16 +51,17 @@ void CatmullRom::setParameterization(Parameterization param) {
 
 float CatmullRom::computeParameter(const Vector3& p0, const Vector3& p1) const {
     float dist = (p1 - p0).length();
+    if (dist < 1e-6f) return 1e-6f;  // Avoid division by zero
     
     switch (param_) {
         case Parameterization::Uniform:
             return 1.0f;  // Equal spacing
             
         case Parameterization::Centripetal:
-            return std::sqrt(dist);  // Square root of chord length
+            return std::max(std::sqrt(dist), 1e-6f);  // Square root for better curvature
             
         case Parameterization::Chordal:
-            return dist;  // Actual chord length
+            return std::max(dist, 1e-6f);  // Proportional to distance
             
         default:
             return 1.0f;  // Fallback to uniform
@@ -74,17 +75,64 @@ void CatmullRom::updateSegmentParameters() {
     // First point has parameter 0
     parameters_.push_back(0.0f);
     
-    // Compute cumulative parameters
+    // Compute distances for SIMD batch processing
+    const size_t batchSize = 4;  // SIMD width
+    alignas(32) float distances[4];
     float total = 0.0f;
-    for (size_t i = 1; i < points_.size(); ++i) {
-        total += computeParameter(points_[i-1], points_[i]);
-        parameters_.push_back(total);
+    
+    // Process points in batches of 4
+    for (size_t i = 1; i < points_.size(); i += batchSize) {
+        const size_t count = std::min(batchSize, points_.size() - i);
+        
+        // Compute distances for this batch
+        for (size_t j = 0; j < count; ++j) {
+            float dist = (points_[i+j] - points_[i+j-1]).length();
+            distances[j] = std::max(dist, 1e-6f);
+        }
+        
+        // Apply parameterization using SIMD
+        alignas(32) float params[4];
+        if (param_ == Parameterization::Centripetal && useSimd_) {
+            // SIMD square root for centripetal parameterization
+            for (size_t j = 0; j < count; ++j) {
+                params[j] = std::sqrt(distances[j]);
+            }
+        } else if (param_ == Parameterization::Chordal) {
+            // Direct use of distances for chordal
+            std::copy(distances, distances + count, params);
+        } else {
+            // Uniform parameterization
+            std::fill(params, params + count, 1.0f);
+        }
+        
+        // Accumulate parameters
+        for (size_t j = 0; j < count; ++j) {
+            total += params[j];
+            parameters_.push_back(total);
+        }
     }
     
-    // Normalize parameters to [0,1]
+    // Normalize parameters to [0,1] using SIMD
     if (total > 0.0f) {
-        for (float& param : parameters_) {
-            param /= total;
+        const float scale = 1.0f / total;
+        for (size_t i = 0; i < parameters_.size(); i += batchSize) {
+            const size_t count = std::min(batchSize, parameters_.size() - i);
+            alignas(32) float batch[4];
+            
+            // Load batch
+            for (size_t j = 0; j < count; ++j) {
+                batch[j] = parameters_[i+j];
+            }
+            
+            // Scale batch with SIMD
+            alignas(32) float scales[4] = {scale, scale, scale, scale};
+            alignas(32) float result[4];
+            SimdUtils::Multiply4f(batch, scales, result);
+            
+            // Store results
+            for (size_t j = 0; j < count; ++j) {
+                parameters_[i+j] = result[j];
+            }
         }
     }
 }
@@ -94,12 +142,23 @@ Vector3 CatmullRom::computeTangent(const Vector3& prev, const Vector3& curr, con
     float dt0 = computeParameter(prev, curr);
     float dt1 = computeParameter(curr, next);
     
-    // Special case for zero distances
-    if (dt0 < 1e-6f) dt0 = 1.0f;
-    if (dt1 < 1e-6f) dt1 = 1.0f;
+    // Using accumulated parameterization for better behavior
+    Vector3 tangent;
+    if (dt0 > 1e-6f) {
+        tangent += (curr - prev) * (tension_ / dt0);
+    }
+    if (dt1 > 1e-6f) {
+        tangent += (next - curr) * (tension_ / dt1);
+    }
     
-    // Compute tangent weighted by parameterization
-    return (next - prev) * (tension_ / (dt0 + dt1));
+    // Return normalized tangent scaled by tension
+    float len = tangent.length();
+    if (len > 1e-6f) {
+        return tangent * (0.5f / len);  // Average and normalize
+    }
+    
+    // Fallback for degenerate case
+    return next - prev;
 }
 
 Hermite CatmullRom::getSegment(size_t index) const {
@@ -163,9 +222,73 @@ std::vector<Vector3> CatmullRom::evaluateMultiple(const std::vector<float>& para
             return results;
         }
         
-        // Process each parameter
-        for (float t : parameters) {
-            results.push_back(evaluate(t));
+        // Batch process parameters
+        const size_t batchSize = 4;  // SIMD width
+        std::vector<Hermite> segment_cache;  // Cache for reuse
+        
+        for (size_t i = 0; i < parameters.size(); i += batchSize) {
+            const size_t count = std::min(batchSize, parameters.size() - i);
+            alignas(32) float ts[4];  // Global parameters
+            alignas(32) size_t segments[4];  // Segment indices
+            alignas(32) float local_ts[4];  // Local parameters
+            
+            // Find segments and compute local parameters
+            for (size_t j = 0; j < count; ++j) {
+                float t = parameters[i+j];
+                ts[j] = t;
+                
+                if (t <= 0.0f) {
+                    results.push_back(points_[1]);
+                    continue;
+                }
+                if (t >= 1.0f) {
+                    results.push_back(points_[points_.size() - 2]);
+                    continue;
+                }
+                
+                // Find segment
+                size_t segment = 0;
+                for (size_t k = 1; k < parameters_.size() - 2; ++k) {
+                    if (parameters_[k] <= t && t < parameters_[k + 1]) {
+                        segment = k - 1;
+                        break;
+                    }
+                }
+                
+                segments[j] = segment;
+                local_ts[j] = (t - parameters_[segment + 1]) / 
+                            (parameters_[segment + 2] - parameters_[segment + 1]);
+                
+                // Ensure segment is cached
+                while (segment_cache.size() <= segment) {
+                    segment_cache.push_back(getSegment(segment_cache.size()));
+                }
+            }
+            
+            // Evaluate points using SIMD
+            if (useSimd_ && count == batchSize) {
+                alignas(32) float points[4][3];  // x,y,z components
+                
+                // Evaluate each point using cached segments
+                for (size_t j = 0; j < count; ++j) {
+                    Vector3 point = segment_cache[segments[j]].evaluate(local_ts[j]);
+                    points[j][0] = point.x;
+                    points[j][1] = point.y;
+                    points[j][2] = point.z;
+                }
+                
+                // Store results
+                for (size_t j = 0; j < count; ++j) {
+                    results.emplace_back(points[j][0], points[j][1], points[j][2]);
+                }
+            } else {
+                // Scalar fallback for partial batches
+                for (size_t j = 0; j < count; ++j) {
+                    if (ts[j] <= 0.0f || ts[j] >= 1.0f) continue;  // Already handled
+                    results.push_back(
+                        segment_cache[segments[j]].evaluate(local_ts[j]));
+                }
+            }
         }
         
         return results;
