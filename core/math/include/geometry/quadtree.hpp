@@ -145,11 +145,21 @@ private:
                    max.x >= otherMax.x && max.y >= otherMax.y;
         }
         
-        bool contains(const Vector2& point) const {
+    bool contains(const Vector2& point) const {
             Vector2 min = center - extent;
             Vector2 max = center + extent;
             return point.x >= min.x && point.x <= max.x &&
                    point.y >= min.y && point.y <= max.y;
+        }
+        
+        bool intersects(const AABB2D& other) const {
+            Vector2 min = center - extent;
+            Vector2 max = center + extent;
+            Vector2 otherMin = other.center - other.extent;
+            Vector2 otherMax = other.center + other.extent;
+            
+            return min.x <= otherMax.x && max.x >= otherMin.x &&
+                   min.y <= otherMax.y && max.y >= otherMin.y;
         }
         
         float getMinExtent() const {
@@ -175,10 +185,19 @@ private:
     };
     
     void insertIntoNode(Node* node, const SpatialObject<T>* object) {
-        const AABB2D objBounds(object->getBounds());
+        const AABB& obj3dBounds = object->getBounds();
+        const AABB2D objBounds(obj3dBounds);
         
         if (calculateDepth(node) >= config_.maxDepth ||
             node->bounds.getMinExtent() <= config_.minNodeSize) {
+            node->objects.push_back(object);
+            return;
+        }
+        
+        // If the object is significantly larger than the node in Y dimension, keep it at this level
+        float nodeSize = node->bounds.getMinExtent() * 2.0f;  // Convert from half-extent
+        float objHeight = obj3dBounds.max.y - obj3dBounds.min.y;
+        if (objHeight > nodeSize * config_.maxObjectSizeRatio) {
             node->objects.push_back(object);
             return;
         }
@@ -198,12 +217,9 @@ private:
             node->children[index]->bounds = computeChildBounds(node->bounds, index);
         }
         
-        // Store in current node if object is too big for child
-        const AABB& obj3dBounds = object->getBounds();
-        AABB childBounds3D = node->children[index]->bounds.to3D(
-            obj3dBounds.min.y, obj3dBounds.max.y);
-        
-        if (containsAABB(childBounds3D, obj3dBounds)) {
+        // Check if object fits in child node
+        const AABB2D& childBounds = node->children[index]->bounds;
+        if (childBounds.contains(objBounds)) {
             insertIntoNode(node->children[index].get(), object);
         } else {
             node->objects.push_back(object);
@@ -234,13 +250,25 @@ private:
                   std::vector<const SpatialObject<T>*>& results) const {
         if (!node) return;
         
-        // Traverse without over-filtering by Y; objects themselves will be filtered
+        // Early out if this node's bounds don't intersect the query volume
+        if (const auto* volumeQuery = dynamic_cast<const VolumeQuery<T>*>(&query)) {
+            const AABB& queryBounds = volumeQuery->getBounds();
+            const AABB2D queryBounds2D(queryBounds);
+            
+            // Quick 2D bounds check first
+            if (!node->bounds.intersects(queryBounds2D)) {
+                return;
+            }
+        }
+        
+        // Process objects at this node
         for (const auto* obj : node->objects) {
             if (query.shouldAcceptObject(*obj)) {
                 results.push_back(obj);
             }
         }
         
+        // Recurse into children if they exist
         if (!node->isLeaf()) {
             for (const auto& child : node->children) {
                 if (child) queryNode(child.get(), query, results);
@@ -253,7 +281,17 @@ private:
         
         std::vector<const SpatialObject<T>*> remainingObjects;
         for (auto* obj : node->objects) {
-            const AABB2D objBounds(obj->getBounds());
+            const AABB& obj3dBounds = obj->getBounds();
+            const AABB2D objBounds(obj3dBounds);
+            
+            // Check if object is too large in Y dimension for child nodes
+            float nodeSize = node->bounds.getMinExtent() * 2.0f;
+            float objHeight = obj3dBounds.max.y - obj3dBounds.min.y;
+            if (objHeight > nodeSize * config_.maxObjectSizeRatio) {
+                remainingObjects.push_back(obj);
+                continue;
+            }
+            
             std::size_t index = getChildIndex(node->bounds, objBounds.center);
             
             if (!node->children[index]) {
@@ -261,6 +299,7 @@ private:
                 node->children[index]->bounds = computeChildBounds(node->bounds, index);
             }
             
+            // Check if object fully fits in the child node's 2D bounds
             if (node->children[index]->bounds.contains(objBounds)) {
                 node->children[index]->objects.push_back(obj);
             } else {

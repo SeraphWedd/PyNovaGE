@@ -172,3 +172,60 @@ BENCHMARK_TEMPLATE(BM_Update, BSPTree<int>)
     ->Arg(10000)
     ->Arg(100000)
     ->Unit(benchmark::kMicrosecond);
+
+// Register Octree benchmarks
+BENCHMARK_TEMPLATE(BM_BulkInsert, Octree<int>)
+    ->Arg(100)
+    ->Arg(1000)
+    ->Arg(10000)
+    ->Unit(benchmark::kMicrosecond);
+
+BENCHMARK_TEMPLATE(BM_Query, Octree<int>)
+    ->Arg(1000)
+    ->Arg(10000)
+    ->Arg(100000)
+    ->Unit(benchmark::kMicrosecond);
+
+BENCHMARK_TEMPLATE(BM_Update, Octree<int>)
+    ->Arg(1000)
+    ->Arg(10000)
+    ->Arg(100000)
+    ->Unit(benchmark::kMicrosecond);
+
+// Register Quadtree benchmarks
+BENCHMARK_TEMPLATE(BM_BulkInsert, Quadtree<int>)
+    ->Arg(100)
+    ->Arg(1000)
+    ->Arg(10000)
+    ->Unit(benchmark::kMicrosecond);
+
+BENCHMARK_TEMPLATE(BM_Query, Quadtree<int>)
+    ->Arg(1000)
+    ->Arg(10000)
+    ->Arg(100000)
+    ->Unit(benchmark::kMicrosecond);
+
+BENCHMARK_TEMPLATE(BM_Update, Quadtree<int>)
+    ->Arg(1000)
+    ->Arg(10000)
+    ->Arg(100000)
+    ->Unit(benchmark::kMicrosecond);
+
+// Register SpatialHash benchmarks
+BENCHMARK_TEMPLATE(BM_BulkInsert, SpatialHash<int>)
+    ->Arg(100)
+    ->Arg(1000)
+    ->Arg(10000)
+    ->Unit(benchmark::kMicrosecond);
+
+BENCHMARK_TEMPLATE(BM_Query, SpatialHash<int>)
+    ->Arg(1000)
+    ->Arg(10000)
+    ->Arg(100000)
+    ->Unit(benchmark::kMicrosecond);
+
+BENCHMARK_TEMPLATE(BM_Update, SpatialHash<int>)
+    ->Arg(1000)
+    ->Arg(10000)
+    ->Arg(100000)
+    ->Unit(benchmark::kMicrosecond);

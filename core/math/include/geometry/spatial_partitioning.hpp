@@ -185,6 +185,7 @@ struct SpatialConfig {
     std::uint32_t maxDepth = 16;
     float minNodeSize = 1.0f;
     float looseness = 1.5f;  // For loose octrees/quadtrees
+    float maxObjectSizeRatio = 2.0f;  // For Quadtree/Octree, determines when to keep objects at current level
     
     // BSP specific
     float splitCost = 1.0f;
