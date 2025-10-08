@@ -90,6 +90,8 @@ add_executable(math_tests
     tests/geometry/high_speed_collision_tests.cpp
     tests/geometry/collision_response_tests.cpp
     tests/geometry/broad_phase_tests.cpp
+    tests/geometry/spatial_partitioning_tests.cpp
+    tests/geometry/frustum_culling_tests.cpp
     tests/lighting/light_types_tests.cpp
     tests/lighting/attenuation_tests.cpp
     tests/lighting/point_light_tests.cpp
