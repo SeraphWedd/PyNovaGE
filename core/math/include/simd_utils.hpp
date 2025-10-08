@@ -257,6 +257,20 @@ public:
     static bool InvertMatrix4x4(const float* m, float* result);
 
     /**
+     * @brief Fills 4 floats with a value using SIMD if available
+     * @param result Array to fill
+     * @param value Value to fill with
+     */
+    static void Fill4f(float* result, float value);
+
+    /**
+     * @brief Calculates square root of 4 floats using SIMD if available
+     * @param a Input array of 4 floats
+     * @param result Array to store results
+     */
+    static void Sqrt4f(const float* a, float* result);
+
+    /**
      * @brief Tests if 4 AABBs overlap with a target AABB along a single axis using SIMD
      * 
      * @param min_a Min value of target AABB for the axis

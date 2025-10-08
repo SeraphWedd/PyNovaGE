@@ -403,6 +403,31 @@ void SimdUtils::Divide4f(const float* a, const float* b, float* result) {
 #endif
 }
 
+void SimdUtils::Fill4f(float* result, float value) {
+#if PYNOVAGE_MATH_HAS_SSE
+    __m128 vval = _mm_set1_ps(value);
+    _mm_storeu_ps(result, vval);
+#else
+    result[0] = value;
+    result[1] = value;
+    result[2] = value;
+    result[3] = value;
+#endif
+}
+
+void SimdUtils::Sqrt4f(const float* a, float* result) {
+#if PYNOVAGE_MATH_HAS_SSE
+    __m128 va = _mm_loadu_ps(a);
+    __m128 vr = _mm_sqrt_ps(va);
+    _mm_storeu_ps(result, vr);
+#else
+    result[0] = std::sqrt(a[0]);
+    result[1] = std::sqrt(a[1]);
+    result[2] = std::sqrt(a[2]);
+    result[3] = std::sqrt(a[3]);
+#endif
+}
+
 float SimdUtils::DotProduct4f(const float* a, const float* b) {
 #if PYNOVAGE_MATH_HAS_SSE4_1
     __m128 va = _mm_loadu_ps(a);
