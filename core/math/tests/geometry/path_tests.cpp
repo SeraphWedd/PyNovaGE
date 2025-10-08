@@ -125,9 +125,11 @@ TEST_F(PathTest, PathLength) {
 TEST_F(PathTest, Tension) {
     path_.setTension(0.5f);  // Reduce tension
     Vector3 normalPos = path_.getPosition(0.5f);
+    printf("Normal tension (0.5): %.3f %.3f %.3f\n", normalPos.x, normalPos.y, normalPos.z);
     
     path_.setTension(2.0f);  // Increase tension
     Vector3 tightPos = path_.getPosition(0.5f);
+    printf("High tension (2.0): %.3f %.3f %.3f\n", tightPos.x, tightPos.y, tightPos.z);
     
     // Higher tension should pull curve closer to control points
     EXPECT_GT(tightPos.y, normalPos.y);

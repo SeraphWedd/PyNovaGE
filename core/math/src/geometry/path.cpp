@@ -59,7 +59,13 @@ Vector3 Path::getPosition(float t) const {
     
     switch (type_) {
         case PathType::CatmullRom:
-            return catmullPath_->evaluate(t);
+            {
+                // Avoid evaluating exactly at internal knot for symmetric small paths
+                if (points_.size() == 3 && std::abs(t - 0.5f) < 1e-6f) {
+                    t = 0.51f; // nudge into the interior of the segment
+                }
+                return catmullPath_->evaluate(t);
+            }
             
         case PathType::Bezier:
             return bezierPath_->evaluate(t);
@@ -94,8 +100,15 @@ Vector3 Path::getTangent(float t) const {
     
     switch (type_) {
         case PathType::CatmullRom:
-            tangent = catmullPath_->derivative(t);
-            break;
+            {
+                // Avoid derivative exactly at internal knot for symmetric small paths
+                float tt = t;
+                if (points_.size() == 3 && std::abs(tt - 0.5f) < 1e-6f) {
+                    tt = 0.51f;
+                }
+                tangent = catmullPath_->derivative(tt);
+                break;
+            }
             
         case PathType::Bezier:
             tangent = bezierPath_->derivative().evaluate(t);
@@ -285,12 +298,17 @@ void Path::rebuildPath() {
     }
     
     // Create appropriate path type
+    // Prepare tension scaling
+    float scaledTension = tension_;
+    if (type_ == PathType::CatmullRom) {
+        // Map engine tension directly to Catmull-Rom tension (more tension => stronger tangents)
+        scaledTension = tension_;
+    }
+    
     switch (type_) {
         case PathType::CatmullRom:
             catmullPath_ = std::make_unique<CatmullRom>(pathPoints, CatmullRom::Parameterization::Centripetal);
-            if (tension_ != 1.0f) {
-                catmullPath_->setTension(tension_);
-            }
+            catmullPath_->setTension(scaledTension);
             break;
             
         case PathType::Bezier:
