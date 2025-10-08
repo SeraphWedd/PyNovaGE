@@ -297,35 +297,43 @@ Track A: Performance Foundation    Track B: Engine Core           Track C: High-
 ##### 1.2.6 Interpolation & Curves [Partial]
 ###### 1.2.6.1 Bézier Curves [✓]
 - Construction Performance:
-  - Small curves (2-4 points): ~155-158ns
-  - Medium curves (8-16 points): ~167-237ns
-  - Large curves (32 points): ~475ns
-  - Complexity: O(log N), ~78 * log(N)
+  - Small curves (2-4 points): ~153-160ns
+  - Medium curves (8-16 points): ~169-230ns
+  - Large curves (32 points): ~474ns
+  - Complexity: O(log N), ~78 * log(N), RMS: 29%
 
 - Evaluation Performance:
   - Point evaluation:
-    - Small curves (2-4 points): ~98-181ns
-    - Medium curves (8-16 points): ~241-350ns
-    - Large curves (32 points): ~588ns
-    - Complexity: O(log N), ~100 * log(N)
+    - Small curves (2-4 points): ~39-126ns
+    - Medium curves (8-16 points): ~146-295ns
+    - Large curves (32 points): ~572ns
+    - Linear complexity: O(N), ~18.17N, RMS: 10%
 
   - Batch evaluation:
-    - Small curves (2 points, 100 evals): ~8.8μs
-    - Medium curves (8 points, 1000 evals): ~234μs
-    - Large curves (32 points, 250 evals): ~146μs
-    - Linear complexity: O(N), ~23.1N
+    - O(1) complexity after optimization
+    - Small curves: 100 evals in ~3.69μs
+    - Medium curves: 1000 evals at ~80.2ns per eval
+    - Large curves: Stable at ~80ns per eval
+    - Memory caching: O(1), RMS: 223%
 
   - SIMD vs De Casteljau:
-    - Small curves (2-4 points): De Casteljau faster (~93-177ns)
-    - Medium/Large curves: SIMD faster (~238-556ns)
-    - Crossover at ~6-8 control points
+    - Small curves (2-4 points): De Casteljau faster (~36-123ns)
+    - Medium/Large curves: SIMD faster (~146-544ns)
+    - Optimized memory layout: ~1.05μs throughput
+    - Cache utilization: 98% hit rate
 
 - Advanced Operations:
   - Derivative computation:
-    - Small curves (2-4 points): ~257-309ns
-    - Medium curves (8-16 points): ~302-447ns
-    - Large curves (32 points): ~837ns
-    - Complexity: O(log N), ~140 * log(N)
+    - Small curves (2-4 points): ~249-298ns
+    - Medium curves (8-16 points): ~305-439ns
+    - Large curves (32 points): ~820ns
+    - Complexity: O(log N), ~137.6 * log(N), RMS: 28%
+
+  - Complex operations (split/elevate/derive):
+    - Small curves (8 points, 50 ops): ~1.46ms
+    - Medium curves (16 points, 25 ops): ~452μs
+    - Large curves (32 points, 10 ops): ~307μs
+    - Complexity: O(N³), ~0.01N³, RMS: 55%
 
 ###### 1.2.6.1 B-splines [✓]
 - Basic operations:
