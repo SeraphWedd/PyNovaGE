@@ -294,12 +294,45 @@ Track A: Performance Foundation    Track B: Engine Core           Track C: High-
       ~1.5µs/12.0µs/95.3µs/750.7µs/1.52ms
   - Roughness invariant: ~9.4-9.8µs across 0-1 range
 
-##### 1.2.6 Interpolation & Curves [ ]
-- Bezier curves
-- B-splines
-- Hermite curves
-- Catmull-Rom splines
-- Path interpolation
+##### 1.2.6 Interpolation & Curves [Partial]
+- Bezier curves [ ]
+
+###### 1.2.6.1 B-splines [✓]
+- Basic operations:
+  - Construction (64 control points): ~247ns
+  - Single point evaluation: ~290-324ns
+  - Batch evaluation: O(11.8N) complexity
+    - 100 points: ~30μs
+    - 500 points: ~163μs
+    - 1000 points: ~325μs
+
+- Memory optimizations:
+  - Cache performance (Release):
+    - Small curves (64-256 points): ~330-354μs
+    - Medium curves (1024-4096): ~360-375μs
+    - Large curves (16384 points): ~410μs
+    - Only 22% slowdown from 64 to 16384 points
+  
+  - Layout impact:
+    - SoA vs AoS comparison: ~5-15% improvement
+    - Best performance at 256-1024 points (~313-322μs)
+    - Cache-aligned data structures
+
+  - SIMD operations:
+    - Logarithmic scaling: ~17.9 * log(N)
+    - Small curves (64 points): ~322μs
+    - Large curves (16384 points): ~408μs
+    - ~27% overhead across full size range
+
+- Complex operations:
+  - Knot insertion: ~442-599ns (O(1) complexity)
+  - Derivative computation: O(log N), ~400-1020ns
+  - Degree elevation: O(N²), scales from ~3.8μs to ~162μs
+  - Memory-heavy operations: O(N²), ~77μs to ~2.6ms
+
+- Hermite curves [ ]
+- Catmull-Rom splines [ ]
+- Path interpolation [ ]
 
 ##### 1.2.7 Spatial Partitioning [ ]
 - BSP tree mathematics

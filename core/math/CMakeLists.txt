@@ -126,6 +126,7 @@ add_executable(math_benchmarks
     tests/geometry/broad_phase_perf_tests.cpp
     tests/geometry/high_speed_collision_perf_tests.cpp
     tests/geometry/bspline_perf_tests.cpp
+    tests/geometry/bspline_perf_extended_tests.cpp
     tests/lighting/point_light_perf_tests.cpp
     tests/lighting/directional_light_perf_tests.cpp
     tests/lighting/spot_light_perf_tests.cpp
