@@ -50,6 +50,14 @@ namespace math {
 class Hermite {
 public:
     /**
+     * @brief Default constructor required for STL containers
+     * Creates an identity curve (p0=p1=t0=t1=0)
+     */
+    Hermite() : p0_(Vector3::zero()), p1_(Vector3::zero()),
+               t0_(Vector3::zero()), t1_(Vector3::zero()),
+               tension_(1.0f), useSimd_(false) {}
+
+    /**
      * @brief Constructs a Hermite curve from points and tangents
      * @param p0 Start point
      * @param p1 End point
