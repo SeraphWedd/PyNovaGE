@@ -8,13 +8,22 @@ namespace tests {
 class CatmullRomTest : public ::testing::Test {
 protected:
     void SetUp() override {
-        // Simple test curve with 4 points
+        // Curve with non-uniform segment lengths to test parameterization effects
         points = {
-            Vector3(0.0f, 0.0f, 0.0f),   // P0
-            Vector3(1.0f, 0.0f, 0.0f),   // P1
-            Vector3(1.0f, 1.0f, 0.0f),   // P2
-            Vector3(2.0f, 1.0f, 0.0f)    // P3
+            Vector3(0.0f, 0.0f, 0.0f),   // P0: origin
+            Vector3(1.0f, 0.0f, 0.0f),   // P1: unit step right
+            Vector3(1.0f, 2.0f, 0.0f),   // P2: 2 units up (longer segment)
+            Vector3(3.0f, 2.0f, 0.0f)    // P3: 2 units right (longer segment)
         };
+        // This creates segments with lengths:
+        // P0->P1 = 1.0 (unit step)
+        // P1->P2 = 2.0 (double length)
+        // P2->P3 = 2.0 (double length)
+        // The non-uniform lengths mean different parameterizations will
+        // produce different curves:
+        // - Uniform: equal time between points regardless of distance
+        // - Centripetal: time proportional to sqrt(distance)
+        // - Chordal: time directly proportional to distance
     }
 
     std::vector<Vector3> points;
