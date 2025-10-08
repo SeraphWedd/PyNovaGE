@@ -394,7 +394,30 @@ Track A: Performance Foundation    Track B: Engine Core           Track C: High-
   - Cache performance: O(1) with 0% RMS variance
   - Stack allocation for basis computation
   - Efficient batch processing with SIMD
-- Catmull-Rom splines [ ]
+- Catmull-Rom splines [✓]
+  - Construction Performance:
+    - Small curves (4-8 points): ~287-327ns
+    - Medium curves (16-32 points): ~449-632ns
+    - Large curves (64-256 points): ~956-3378ns
+    - Complexity: O(12.24N), RMS: 7%
+  - Evaluation Performance:
+    - Single point evaluation: O(1) ~100ns constant, RMS: 17%
+    - Small curves: ~67.7-82.0ns
+    - Medium curves: ~89.5-96.9ns
+    - Large curves: ~103-124ns
+  - Batch evaluation: O(69.17N), RMS: 6%
+    - Small batches (4-8 points): ~1662-1993ns
+    - Medium batches (16-64 points): ~2372-5324ns
+    - Large batches (128-1024 points): ~9182-71156ns
+  - Parameterization: Type switching ~1007ns, O(1)
+    - Uniform/Centripetal/Chordal: ~96.3ns each
+  - Point manipulation: O(23.98N), RMS: 15%
+    - Small curves: ~1169-1278ns
+    - Medium curves: ~1423-2524ns
+    - Large curves: ~4019-24177ns
+  - Memory characteristics: O(1), RMS: 17%
+    - Cache performance: ~67.7-124ns across sizes
+    - SIMD optimized: ~4x speedup
 - Path interpolation [ ]
 
 ##### 1.2.7 Spatial Partitioning [ ]
