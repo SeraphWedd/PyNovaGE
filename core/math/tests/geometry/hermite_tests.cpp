@@ -42,8 +42,8 @@ TEST_F(HermiteTest, TangentInfluence) {
 
     // At t=0, curve should follow start tangent
     Vector3 near_start = curve.evaluate(0.01f);
-    Vector3 expected_direction = t0.normalize();
-    Vector3 actual_direction = (near_start - p0).normalize();
+    Vector3 expected_direction = t0.normalized();
+    Vector3 actual_direction = (near_start - p0).normalized();
     
     // Directions should be very close
     EXPECT_NEAR(expected_direction.dot(actual_direction), 1.0f, 0.01f);

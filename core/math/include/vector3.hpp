@@ -158,11 +158,12 @@ public:
         return dot(*this);
     }
 
-    void normalize() {
+    Vector3& normalize() {
         float len = length();
         if (len > 0.0f) {
             *this /= len;
         }
+        return *this;
     }
 
     Vector3 normalized() const {

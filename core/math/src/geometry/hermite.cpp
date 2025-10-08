@@ -61,8 +61,7 @@ void Hermite::computeBasisSIMD(float t, float* basis) const {
 
     // Use SIMD operations for basis computation
     for (int i = 0; i < 4; ++i) {
-        float result;
-        SimdUtils::DotProduct4f(t_powers, coeffs[i], &result);
+        float result = SimdUtils::DotProduct4f(t_powers, coeffs[i]);
         basis[i] = result * (i % 2 == 1 ? tension_ : 1.0f);
     }
 }
