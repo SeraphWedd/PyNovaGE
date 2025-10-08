@@ -63,7 +63,7 @@ namespace math {
  * }
  * @endcode
  */
-class Vector3 {
+class alignas(16) Vector3 {
 public:
     // Constructors
     Vector3() : x(0.0f), y(0.0f), z(0.0f), w(0.0f) {}
@@ -390,7 +390,7 @@ public:
     float y;
     float z;
 private:
-    // Padding for SIMD alignment
+    // Padding for SIMD alignment, aligned to 16-byte boundary
     float w;
 };
 

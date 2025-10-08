@@ -49,11 +49,12 @@ namespace math {
  * }
  * @endcode
  */
-class Vector2 {
+class alignas(16) Vector2 {
+public:
 public:
     // Constructors
-    Vector2() : x(0.0f), y(0.0f) {}
-    Vector2(float x_, float y_) : x(x_), y(y_) {}
+    Vector2() : x(0.0f), y(0.0f), z(0.0f), w(0.0f) {}
+    Vector2(float x_, float y_) : x(x_), y(y_), z(0.0f), w(0.0f) {}
     Vector2(const Vector2& other) = default;
     Vector2& operator=(const Vector2& other) = default;
 
@@ -120,7 +121,8 @@ public:
         float lenSq = lengthSquared();
         if (lenSq > 0.0f) {
             float invLen = 1.0f / std::sqrt(lenSq);
-            SimdUtils::Multiply2fScalar(&x, invLen, &x);
+            SimdUtils::Multiply4fScalar(&x, invLen, &x);
+            z = w = 0.0f;  // Reset padding
         }
     }
 
@@ -274,6 +276,10 @@ public:
     // Component access
     float x;
     float y;
+private:
+    // Padding for SIMD alignment
+    float z;
+    float w;
 };
 
 // Global operators
