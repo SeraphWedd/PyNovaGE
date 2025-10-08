@@ -101,6 +101,7 @@ add_executable(math_tests
     tests/lighting/shadow_map_tests.cpp
     tests/lighting/volumetric_light_tests.cpp
     tests/lighting/area_light_tests.cpp
+    tests/geometry/spatial_partitioning_perf_tests.cpp
 )
 
 target_link_libraries(math_tests
