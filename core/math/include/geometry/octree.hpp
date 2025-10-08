@@ -30,13 +30,29 @@ public:
             growTree(bounds);
         }
         
-        insertIntoNode(root_.get(), std::move(object));
+        // Ensure root depth is correct
+        if (root_) root_->depth = 0;
+        
+        // Store object in map first
+        const SpatialObject<T>* objPtr = object.get();
+        std::size_t id = reinterpret_cast<std::size_t>(objPtr);
+        objectMap_[id] = std::move(object);
+        
+        insertIntoNode(root_.get(), objPtr);
         objectCount_++;
     }
     
     void remove(const SpatialObject<T>* object) override {
         if (!root_) return;
         removeFromNode(root_.get(), object);
+        
+        // Remove ownership from map as well
+        std::size_t id = reinterpret_cast<std::size_t>(object);
+        auto it = objectMap_.find(id);
+        if (it != objectMap_.end()) {
+            objectMap_.erase(it);
+        }
+        
         objectCount_--;
         
         // Shrink tree if it's too empty
@@ -49,13 +65,15 @@ public:
         if (!root_) return;
         
         // Find and update object
-        auto it = std::find_if(objectMap_.begin(), objectMap_.end(),
-            [object](const auto& pair) { return pair.second.get() == object; });
+        std::size_t id = reinterpret_cast<std::size_t>(object);
+        auto it = objectMap_.find(id);
         
         if (it != objectMap_.end()) {
-            auto obj = std::move(it->second);
-            remove(object);
-            insert(std::move(obj));
+            // First remove from tree structure
+            removeFromNode(root_.get(), object);
+            
+            // Then reinsert into tree (ownership stays in map)
+            insertIntoNode(root_.get(), object);
         }
     }
     
@@ -112,20 +130,30 @@ private:
     struct Node {
         AABB bounds;
         std::array<std::unique_ptr<Node>, NUM_CHILDREN> children;
-        std::vector<std::unique_ptr<SpatialObject<T>>> objects;
+        std::vector<const SpatialObject<T>*> objects;
+        std::size_t depth = 0;
         bool isLeaf() const { 
             return std::all_of(children.begin(), children.end(),
                              [](const auto& child) { return !child; });
         }
     };
     
-    void insertIntoNode(Node* node, std::unique_ptr<SpatialObject<T>> object) {
+    void insertIntoNode(Node* node, const SpatialObject<T>* object) {
         const AABB& objBounds = object->getBounds();
         
         // Stop if we've reached max depth or node is too small
-        if (calculateDepth(node) >= config_.maxDepth ||
+        std::size_t depth = node->depth;
+        if (depth >= config_.maxDepth ||
             minExtent(node->bounds) <= config_.minNodeSize) {
-            node->objects.push_back(std::move(object));
+            node->objects.push_back(object);
+            return;
+        }
+        
+        // If the object is significantly larger than the node, keep it at this level
+        float nodeSize = minExtent(node->bounds);
+        float objSize = maxExtent(objBounds);
+        if (objSize > nodeSize * config_.maxObjectSizeRatio) {
+            node->objects.push_back(object);
             return;
         }
         
@@ -135,7 +163,7 @@ private:
             if (node->objects.size() >= config_.maxObjectsPerNode) {
                 splitNode(node);
             } else {
-                node->objects.push_back(std::move(object));
+                node->objects.push_back(object);
                 return;
             }
         }
@@ -144,14 +172,15 @@ private:
         if (!node->children[index]) {
             node->children[index] = std::make_unique<Node>();
             node->children[index]->bounds = computeChildBounds(node->bounds, index);
+            node->children[index]->depth = depth + 1;
         }
         
         // Insert into child if object fits entirely
         if (containsAABB(node->children[index]->bounds, objBounds)) {
-            insertIntoNode(node->children[index].get(), std::move(object));
+            insertIntoNode(node->children[index].get(), object);
         } else {
             // Object spans multiple children, keep it in this node
-            node->objects.push_back(std::move(object));
+            node->objects.push_back(object);
         }
     }
     
@@ -159,9 +188,7 @@ private:
         if (!node) return;
         
         // Check objects in this node
-        auto it = std::find_if(node->objects.begin(), node->objects.end(),
-            [object](const auto& obj) { return obj.get() == object; });
-        
+        auto it = std::find(node->objects.begin(), node->objects.end(), object);
         if (it != node->objects.end()) {
             node->objects.erase(it);
             return;
@@ -183,13 +210,9 @@ private:
         if (!node || !query.shouldTraverseNode(node->bounds)) return;
         
         // Check objects in this node
-        for (const auto& obj : node->objects) {
+        for (const auto* obj : node->objects) {
             if (query.shouldAcceptObject(*obj)) {
-                // Ensure we haven't already added this object
-                auto it = std::find(results.begin(), results.end(), obj.get());
-                if (it == results.end()) {
-                    results.push_back(obj.get());
-                }
+                results.push_back(obj);
             }
         }
         
@@ -205,20 +228,30 @@ private:
         if (!node->isLeaf()) return;
         
         // Create child nodes and distribute objects
-        std::vector<std::unique_ptr<SpatialObject<T>>> remainingObjects;
-        for (auto& obj : node->objects) {
+        std::vector<const SpatialObject<T>*> remainingObjects;
+        for (const auto* obj : node->objects) {
             const AABB& objBounds = obj->getBounds();
+            
+            // Check if object is too large for child nodes
+            float nodeSize = minExtent(node->bounds) * 0.5f;  // Child nodes are half the size
+            float objSize = maxExtent(objBounds);
+            if (objSize > nodeSize * config_.maxObjectSizeRatio) {
+                remainingObjects.push_back(obj);
+                continue;
+            }
+            
             std::size_t index = getChildIndex(node->bounds, objBounds.center());
             
             if (!node->children[index]) {
                 node->children[index] = std::make_unique<Node>();
                 node->children[index]->bounds = computeChildBounds(node->bounds, index);
+                node->children[index]->depth = node->depth + 1;
             }
             
             if (containsAABB(node->children[index]->bounds, objBounds)) {
-                node->children[index]->objects.push_back(std::move(obj));
+                node->children[index]->objects.push_back(obj);
             } else {
-                remainingObjects.push_back(std::move(obj));
+                remainingObjects.push_back(obj);
             }
         }
         
@@ -238,23 +271,22 @@ private:
         // Merge if total objects is below threshold
         if (totalObjects <= config_.maxObjectsPerNode) {
             // Collect all objects
-            std::vector<std::unique_ptr<SpatialObject<T>>> allObjects;
+            std::vector<const SpatialObject<T>*> allObjects;
             allObjects.reserve(totalObjects);
-            for (auto& obj : node->objects) {
-                allObjects.push_back(std::move(obj));
+            
+            for (const auto* obj : node->objects) {
+                allObjects.push_back(obj);
             }
+            
             for (auto& child : node->children) {
                 if (child) {
-                    for (auto& obj : child->objects) {
-                        allObjects.push_back(std::move(obj));
+                    for (const auto* obj : child->objects) {
+                        allObjects.push_back(obj);
                     }
+                    child.reset();
                 }
             }
             
-            // Clear children and store all objects in this node
-            for (auto& child : node->children) {
-                child.reset();
-            }
             node->objects = std::move(allObjects);
         }
     }
@@ -284,10 +316,15 @@ private:
         
         // Create the new bounds using the expanded dimensions
         newRoot->bounds = AABB(center - halfSize, center + halfSize);
+        newRoot->depth = 0;
         
         // Move old root to appropriate child position
         std::size_t index = getChildIndex(newRoot->bounds, root_->bounds.center());
         newRoot->children[index] = std::move(root_);
+        // Update depths in moved subtree
+        if (newRoot->children[index]) {
+            setDepthRecursive(newRoot->children[index].get(), 1);
+        }
         root_ = std::move(newRoot);
     }
     
@@ -309,6 +346,7 @@ private:
             // Only one child contains objects, make it the new root
             std::unique_ptr<Node> newRoot = std::move(root_->children[getChildIndex(root_->bounds, target->bounds.center())]);
             root_ = std::move(newRoot);
+            setDepthRecursive(root_.get(), 0);
         }
     }
     
@@ -337,32 +375,9 @@ private:
         return AABB(cMin, cMax);
     }
     
-    std::size_t calculateDepth(const Node* node) const {
-        std::size_t depth = 0;
-        const Node* current = node;
-        while (current != root_.get()) {
-            current = findParent(current);
-            if (!current) break;
-            depth++;
-        }
-        return depth;
-    }
-    
-    const Node* findParent(const Node* node) const {
-        if (!root_ || node == root_.get()) return nullptr;
-        return findParentRecursive(root_.get(), node);
-    }
-    
-    const Node* findParentRecursive(const Node* parent, const Node* target) const {
-        if (!parent) return nullptr;
-        
-        for (const auto& child : parent->children) {
-            if (child.get() == target) return parent;
-            const Node* result = findParentRecursive(child.get(), target);
-            if (result) return result;
-        }
-        
-        return nullptr;
+    static float maxExtent(const AABB& b) {
+        Vector3 d = b.dimensions();
+        return std::max(d.x, std::max(d.y, d.z));
     }
     
     bool shouldRebalance() const {
@@ -409,6 +424,14 @@ private:
         Vector3 d = b.dimensions();
         return std::min(d.x, std::min(d.y, d.z));
     }
+    
+    void setDepthRecursive(Node* node, std::size_t baseDepth) {
+        if (!node) return;
+        node->depth = baseDepth;
+        for (auto& child : node->children) {
+            if (child) setDepthRecursive(child.get(), baseDepth + 1);
+        }
+    }
 
     void debugDrawNode(const Node* node, const std::function<void(const AABB&)>& drawAABB) const {
         if (!node) return;
@@ -421,9 +444,14 @@ private:
     void collectObjects(Node* node, std::vector<std::unique_ptr<SpatialObject<T>>>& objects) {
         if (!node) return;
         
-        // Move objects from this node
-        for (auto& obj : node->objects) {
-            objects.push_back(std::move(obj));
+        // Move unique_ptrs from objectMap_ to objects vector based on raw pointers stored in nodes
+        for (const auto* objPtr : node->objects) {
+            std::size_t id = reinterpret_cast<std::size_t>(objPtr);
+            auto it = objectMap_.find(id);
+            if (it != objectMap_.end()) {
+                objects.push_back(std::move(it->second));
+                objectMap_.erase(it);
+            }
         }
         node->objects.clear();
         
