@@ -54,25 +54,86 @@ public:
     void updateTemporalCoherence();
 
 private:
-    // SoA data structures for better cache and SIMD
-    struct ProxyData {
+    // SIMD-aligned SoA data structures
+    struct alignas(32) ProxyData {
+        // Frequently accessed bounds data - aligned for efficient SIMD
+        struct alignas(32) BoundsData {
+            std::vector<float> minX, minY, minZ;
+            std::vector<float> maxX, maxY, maxZ;
+        } bounds;
+        
+        // Object type and state
         std::vector<bool> isStatic;
         std::vector<Vector3> centers;
         std::vector<uint32_t> mortonCodes;
         std::vector<AABB> aabbs;          // Only used for returning full AABB data
-
-        // Bounds data for efficient SIMD
-        std::vector<float> minX, minY, minZ;
-        std::vector<float> maxX, maxY, maxZ;
-
-        // Dynamic object data
-        std::vector<int32_t> sortKeys[3];    // Sort keys for each axis
-        std::vector<bool> needsResort[3];    // Flags for each axis
-
-        // Static object data
-        std::vector<size_t> gridKeys;        // Hash grid cell keys
-
-        // Maintain free list for proxy IDs
+        
+        // Sorting and dynamic object data - aligned for better cache utilization
+        struct alignas(16) DynamicData {
+            std::vector<int32_t> sortKeys;    // Sort keys for this axis
+            std::vector<bool> needsResort;    // Flags for this axis
+            std::vector<ProxyId> objects;     // Objects sorted by this axis
+        } dynamicAxes[3];
+        
+        // Static object data with small-array optimization
+        struct StaticCell {
+            static constexpr size_t LOCAL_CAPACITY = 8;
+            ProxyId local_objects[LOCAL_CAPACITY];
+            std::vector<ProxyId> objects;
+            size_t size;
+            
+            StaticCell() : size(0) {}
+            
+            void push_back(ProxyId obj) {
+                if (size < LOCAL_CAPACITY) {
+                    local_objects[size++] = obj;
+                } else {
+                    if (objects.empty()) {
+                        objects.reserve(LOCAL_CAPACITY * 2);
+                        objects.insert(objects.end(), local_objects, local_objects + LOCAL_CAPACITY);
+                    }
+                    objects.push_back(obj);
+                    size++;
+                }
+            }
+            
+            void remove(ProxyId obj) {
+                if (size <= LOCAL_CAPACITY) {
+                    for (size_t i = 0; i < size; ++i) {
+                        if (local_objects[i] == obj) {
+                            if (i < size - 1) {
+                                local_objects[i] = local_objects[size - 1];
+                            }
+                            --size;
+                            return;
+                        }
+                    }
+                } else {
+                    auto it = std::find(objects.begin(), objects.end(), obj);
+                    if (it != objects.end()) {
+                        *it = objects.back();
+                        objects.pop_back();
+                        --size;
+                        if (size == LOCAL_CAPACITY) {
+                            std::copy(objects.begin(), objects.begin() + LOCAL_CAPACITY, local_objects);
+                            objects.clear();
+                        }
+                    }
+                }
+            }
+            
+            bool empty() const { return size == 0; }
+            size_t get_size() const { return size; }
+            
+            ProxyId operator[](size_t index) const {
+                return (index < LOCAL_CAPACITY) ? local_objects[index] : objects[index - LOCAL_CAPACITY];
+            }
+        };
+        
+        std::unordered_map<size_t, StaticCell> grid;  // Grid cells with small-array optimization
+        std::vector<size_t> gridKeys;                 // Hash grid cell keys
+        
+        // ID management
         std::vector<ProxyId> freeIds;
         ProxyId nextId = 0;
 
@@ -102,12 +163,8 @@ private:
     std::vector<SpatialBin> mSpatialBins;
     bool mBinsNeedUpdate = true;
 
-    // Dynamic object lists (sorted by min bounds)
-    std::vector<ProxyId> mDynamicList[3];  // One list per axis
+    // Axis state
     bool mDirtyAxes[3];  // Tracks which axes need sorting
-
-    // Hash grid for static objects
-    std::unordered_map<size_t, std::vector<ProxyId>> mGrid;
 
     // Morton code and hash computation
     uint32_t computeMortonCode(const Vector3& position) const;

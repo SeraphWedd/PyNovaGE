@@ -33,18 +33,18 @@ BroadPhase::BroadPhase(float cell_size) : mCellSize(cell_size) {
     mProxyData.aabbs.reserve(INITIAL_CAPACITY);
     
     // Reserve space for bounds data
-    mProxyData.minX.reserve(INITIAL_CAPACITY);
-    mProxyData.minY.reserve(INITIAL_CAPACITY);
-    mProxyData.minZ.reserve(INITIAL_CAPACITY);
-    mProxyData.maxX.reserve(INITIAL_CAPACITY);
-    mProxyData.maxY.reserve(INITIAL_CAPACITY);
-    mProxyData.maxZ.reserve(INITIAL_CAPACITY);
+    mProxyData.bounds.minX.reserve(INITIAL_CAPACITY);
+    mProxyData.bounds.minY.reserve(INITIAL_CAPACITY);
+    mProxyData.bounds.minZ.reserve(INITIAL_CAPACITY);
+    mProxyData.bounds.maxX.reserve(INITIAL_CAPACITY);
+    mProxyData.bounds.maxY.reserve(INITIAL_CAPACITY);
+    mProxyData.bounds.maxZ.reserve(INITIAL_CAPACITY);
     
     // Reserve space for dynamic object data
     for (int i = 0; i < 3; ++i) {
-        mProxyData.sortKeys[i].reserve(INITIAL_CAPACITY);
-        mProxyData.needsResort[i].reserve(INITIAL_CAPACITY);
-        mDynamicList[i].reserve(INITIAL_CAPACITY);
+        mProxyData.dynamicAxes[i].sortKeys.reserve(INITIAL_CAPACITY);
+        mProxyData.dynamicAxes[i].needsResort.reserve(INITIAL_CAPACITY);
+        mProxyData.dynamicAxes[i].objects.reserve(INITIAL_CAPACITY);
         mDirtyAxes[i] = false;
     }
     
@@ -72,10 +72,10 @@ void BroadPhase::updateTemporalCoherence() {
         
         PreviousState st;
         st.center = mProxyData.centers[id];
-        Vector3 halfExtent = Vector3(
-            (mProxyData.maxX[id] - mProxyData.minX[id]) * 0.5f,
-            (mProxyData.maxY[id] - mProxyData.minY[id]) * 0.5f,
-            (mProxyData.maxZ[id] - mProxyData.minZ[id]) * 0.5f
+    Vector3 halfExtent = Vector3(
+            (mProxyData.bounds.maxX[id] - mProxyData.bounds.minX[id]) * 0.5f,
+            (mProxyData.bounds.maxY[id] - mProxyData.bounds.minY[id]) * 0.5f,
+            (mProxyData.bounds.maxZ[id] - mProxyData.bounds.minZ[id]) * 0.5f
         );
         st.extent = halfExtent;
         
@@ -97,17 +97,17 @@ ProxyId BroadPhase::createProxy(const AABB& aabb, bool is_static) {
         mProxyData.centers.resize(new_size);
         mProxyData.mortonCodes.resize(new_size);
         mProxyData.aabbs.resize(new_size);
-        mProxyData.minX.resize(new_size);
-        mProxyData.minY.resize(new_size);
-        mProxyData.minZ.resize(new_size);
-        mProxyData.maxX.resize(new_size);
-        mProxyData.maxY.resize(new_size);
-        mProxyData.maxZ.resize(new_size);
+        mProxyData.bounds.minX.resize(new_size);
+        mProxyData.bounds.minY.resize(new_size);
+        mProxyData.bounds.minZ.resize(new_size);
+        mProxyData.bounds.maxX.resize(new_size);
+        mProxyData.bounds.maxY.resize(new_size);
+        mProxyData.bounds.maxZ.resize(new_size);
         mProxyData.gridKeys.resize(new_size);
         
         for (int i = 0; i < 3; ++i) {
-            mProxyData.sortKeys[i].resize(new_size);
-            mProxyData.needsResort[i].resize(new_size);
+            mProxyData.dynamicAxes[i].sortKeys.resize(new_size);
+            mProxyData.dynamicAxes[i].needsResort.resize(new_size);
         }
     }
     
@@ -117,12 +117,12 @@ ProxyId BroadPhase::createProxy(const AABB& aabb, bool is_static) {
     mProxyData.centers[id] = (aabb.min + aabb.max) * 0.5f;
     
     // Store bounds data
-    mProxyData.minX[id] = aabb.min.x;
-    mProxyData.minY[id] = aabb.min.y;
-    mProxyData.minZ[id] = aabb.min.z;
-    mProxyData.maxX[id] = aabb.max.x;
-    mProxyData.maxY[id] = aabb.max.y;
-    mProxyData.maxZ[id] = aabb.max.z;
+    mProxyData.bounds.minX[id] = aabb.min.x;
+    mProxyData.bounds.minY[id] = aabb.min.y;
+    mProxyData.bounds.minZ[id] = aabb.min.z;
+    mProxyData.bounds.maxX[id] = aabb.max.x;
+    mProxyData.bounds.maxY[id] = aabb.max.y;
+    mProxyData.bounds.maxZ[id] = aabb.max.z;
     
     // Compute Morton code
     mProxyData.mortonCodes[id] = computeMortonCode(mProxyData.centers[id]);
@@ -133,9 +133,9 @@ ProxyId BroadPhase::createProxy(const AABB& aabb, bool is_static) {
     } else {
         // Initialize dynamic object data
         for (int axis = 0; axis < 3; ++axis) {
-            mProxyData.sortKeys[axis][id] = static_cast<int32_t>(mDynamicList[axis].size());
-            mProxyData.needsResort[axis][id] = false;
-            mDynamicList[axis].push_back(id);
+            mProxyData.dynamicAxes[axis].sortKeys[id] = static_cast<int32_t>(mProxyData.dynamicAxes[axis].objects.size());
+            mProxyData.dynamicAxes[axis].needsResort[id] = false;
+            mProxyData.dynamicAxes[axis].objects.push_back(id);
             mDirtyAxes[axis] = true;
         }
     }
@@ -151,7 +151,7 @@ void BroadPhase::destroyProxy(ProxyId id) {
         removeFromGrid(id);
     } else {
         for (int axis = 0; axis < 3; axis++) {
-            auto& list = mDynamicList[axis];
+            auto& list = mProxyData.dynamicAxes[axis].objects;
             list.erase(std::remove(list.begin(), list.end(), id), list.end());
         }
     }
@@ -182,17 +182,17 @@ void BroadPhase::updateProxy(ProxyId id, const AABB& aabb) {
     mProxyData.mortonCodes[id] = computeMortonCode(mProxyData.centers[id]);
     
     // Store old bounds for comparison
-    float oldMinX = mProxyData.minX[id];
-    float oldMinY = mProxyData.minY[id];
-    float oldMinZ = mProxyData.minZ[id];
+    float oldMinX = mProxyData.bounds.minX[id];
+    float oldMinY = mProxyData.bounds.minY[id];
+    float oldMinZ = mProxyData.bounds.minZ[id];
     
     // Update bounds
-    mProxyData.minX[id] = aabb.min.x;
-    mProxyData.minY[id] = aabb.min.y;
-    mProxyData.minZ[id] = aabb.min.z;
-    mProxyData.maxX[id] = aabb.max.x;
-    mProxyData.maxY[id] = aabb.max.y;
-    mProxyData.maxZ[id] = aabb.max.z;
+    mProxyData.bounds.minX[id] = aabb.min.x;
+    mProxyData.bounds.minY[id] = aabb.min.y;
+    mProxyData.bounds.minZ[id] = aabb.min.z;
+    mProxyData.bounds.maxX[id] = aabb.max.x;
+    mProxyData.bounds.maxY[id] = aabb.max.y;
+    mProxyData.bounds.maxZ[id] = aabb.max.z;
     
     const float EPSILON = 1e-4f;
     
@@ -210,9 +210,9 @@ void BroadPhase::updateProxy(ProxyId id, const AABB& aabb) {
         if (needsResortY) mDirtyAxes[1] = true;
         if (needsResortZ) mDirtyAxes[2] = true;
         
-        mProxyData.needsResort[0][id] = needsResortX;
-        mProxyData.needsResort[1][id] = needsResortY;
-        mProxyData.needsResort[2][id] = needsResortZ;
+        mProxyData.dynamicAxes[0].needsResort[id] = needsResortX;
+        mProxyData.dynamicAxes[1].needsResort[id] = needsResortY;
+        mProxyData.dynamicAxes[2].needsResort[id] = needsResortZ;
     }
 }
 
@@ -245,54 +245,93 @@ std::vector<CollisionPair> BroadPhase::findPotentialCollisions(size_t max_pairs)
         }
     }
     
-    // Check dynamic vs dynamic using SAP with optimized cache access
-    const auto& list = mDynamicList[0];  // X-axis list
+    // Check dynamic vs dynamic using SAP with optimized cache access and SIMD
+    const auto& list = mProxyData.dynamicAxes[0].objects;  // X-axis list
     const size_t listSize = list.size();
 
-    // Pre-compute and cache min/max bounds for current iteration
-    struct BoundsCache {
-        float minX, maxX;
-        float minY, maxY;
-        float minZ, maxZ;
+    // Pre-compute and cache bounds in SoA format for SIMD processing
+    struct alignas(32) BoundsCache {
+        std::vector<float> minX, maxX;
+        std::vector<float> minY, maxY;
+        std::vector<float> minZ, maxZ;
     };
-    std::vector<BoundsCache> cache(listSize);
+    BoundsCache cache;
     
-    // Build cache - this should be more cache-friendly than random access
+    // Pre-allocate vectors
+    cache.minX.resize(listSize);
+    cache.maxX.resize(listSize);
+    cache.minY.resize(listSize);
+    cache.maxY.resize(listSize);
+    cache.minZ.resize(listSize);
+    cache.maxZ.resize(listSize);
+    
+    // Build SoA cache
     for (size_t i = 0; i < listSize; i++) {
         ProxyId id = list[i];
-        cache[i].minX = mProxyData.minX[id];
-        cache[i].maxX = mProxyData.maxX[id];
-        cache[i].minY = mProxyData.minY[id];
-        cache[i].maxY = mProxyData.maxY[id];
-        cache[i].minZ = mProxyData.minZ[id];
-        cache[i].maxZ = mProxyData.maxZ[id];
+        cache.minX[i] = mProxyData.bounds.minX[id];
+        cache.maxX[i] = mProxyData.bounds.maxX[id];
+        cache.minY[i] = mProxyData.bounds.minY[id];
+        cache.maxY[i] = mProxyData.bounds.maxY[id];
+        cache.minZ[i] = mProxyData.bounds.minZ[id];
+        cache.maxZ[i] = mProxyData.bounds.maxZ[id];
     }
     
-    // Do sweep with cached bounds
+    // Allocate SIMD working arrays
+    const size_t SIMD_WIDTH = 4;
+    alignas(32) float mins[12];  // 4 sets of x,y,z
+    alignas(32) float maxs[12];  // 4 sets of x,y,z
+    alignas(32) int results[4];
+    
+    // Do sweep with SIMD-accelerated bounds testing
     for (size_t i = 0; i < listSize && pairs.size() < max_pairs; i++) {
-        const float max_i = cache[i].maxX;
-        const float min_i_y = cache[i].minY;
-        const float max_i_y = cache[i].maxY;
-        const float min_i_z = cache[i].minZ;
-        const float max_i_z = cache[i].maxZ;
+        const float max_i = cache.maxX[i];
+        const float min_i_y = cache.minY[i];
+        const float max_i_y = cache.maxY[i];
+        const float min_i_z = cache.minZ[i];
+        const float max_i_z = cache.maxZ[i];
         
-        for (size_t j = i + 1; j < listSize && pairs.size() < max_pairs; j++) {
+        size_t j = i + 1;
+        while (j < listSize && pairs.size() < max_pairs) {
             // Quick X-axis check
-            if (cache[j].minX > max_i) break;
+            if (cache.minX[j] > max_i) break;
             
-            // Y and Z axes check using cached values
-            if (min_i_y <= cache[j].maxY && cache[j].minY <= max_i_y &&
-                min_i_z <= cache[j].maxZ && cache[j].minZ <= max_i_z) {
-                CollisionPair pair{list[i], list[j]};
-                size_t hash = pair.hash();
-                if (pairHashes.insert(hash).second) {
-                    pairs.push_back(pair);
+            // Process up to 4 candidates at once
+            size_t batchSize = std::min(SIMD_WIDTH, listSize - j);
+            
+            // Load target AABB (i)
+            float minA[3] = {cache.minX[i], min_i_y, min_i_z};
+            float maxA[3] = {max_i, max_i_y, max_i_z};
+            
+            // Load batch of AABBs (j, j+1, j+2, j+3)
+            for (size_t k = 0; k < batchSize; k++) {
+                mins[k] = cache.minX[j + k];
+                mins[k + 4] = cache.minY[j + k];
+                mins[k + 8] = cache.minZ[j + k];
+                maxs[k] = cache.maxX[j + k];
+                maxs[k + 4] = cache.maxY[j + k];
+                maxs[k + 8] = cache.maxZ[j + k];
+            }
+            
+            // Test batch with SIMD
+            SimdUtils::TestAABBOverlap4f(minA, maxA, mins, maxs, results);
+            
+            // Process results
+            for (size_t k = 0; k < batchSize; k++) {
+                if (results[k]) {
+                    CollisionPair pair{list[i], list[j + k]};
+                    size_t hash = pair.hash();
+                    if (pairHashes.insert(hash).second) {
+                        pairs.push_back(pair);
+                        if (pairs.size() >= max_pairs) break;
+                    }
                 }
             }
+            
+            j += batchSize;
         }
     }
     
-    // Then check dynamic vs static using spatial bins
+    // Then check dynamic vs static using spatial bins with SIMD
     for (size_t id = 0; id < mProxyData.aabbs.size(); ++id) {
         // Skip inactive or static proxies
         if (pairs.size() >= max_pairs ||
@@ -302,26 +341,66 @@ std::vector<CollisionPair> BroadPhase::findPotentialCollisions(size_t max_pairs)
         }
         
         // Use spatial bins to accelerate static collision checks
-        int minBinX = getBinIndex(mProxyData.minX[id]);
-        int maxBinX = getBinIndex(mProxyData.maxX[id]);
+        int minBinX = getBinIndex(mProxyData.bounds.minX[id]);
+        int maxBinX = getBinIndex(mProxyData.bounds.maxX[id]);
+        
+        // Load dynamic object bounds once
+        float minA[3] = {
+            mProxyData.bounds.minX[id],
+            mProxyData.bounds.minY[id],
+            mProxyData.bounds.minZ[id]
+        };
+        float maxA[3] = {
+            mProxyData.bounds.maxX[id],
+            mProxyData.bounds.maxY[id],
+            mProxyData.bounds.maxZ[id]
+        };
+        
+        // SIMD working arrays
+        const size_t SIMD_WIDTH = 4;
+        alignas(32) float mins[12];  // 4 sets of x,y,z
+        alignas(32) float maxs[12];  // 4 sets of x,y,z
+        alignas(32) int results[4];
         
         // For each overlapping bin
-        for (int x = minBinX; x <= maxBinX; x++) {
+        for (int x = minBinX; x <= maxBinX && pairs.size() < max_pairs; x++) {
             if (x < 0 || x >= static_cast<int>(mSpatialBins.size())) continue;
             
             const auto& bin = mSpatialBins[x];
+            const auto& staticObjects = bin.staticObjects;
+            size_t numStatic = staticObjects.size();
             
-            // For small bins, just test all pairs
-            for (ProxyId staticId : bin.staticObjects) {
-                if (testOverlap(id, staticId)) {
-                    CollisionPair pair{id, staticId};
-                    size_t hash = pair.hash();
-                    if (pairHashes.insert(hash).second) {
-                        pairs.push_back(pair);
-                        if (pairs.size() >= max_pairs) break;
+            // Process static objects in batches of 4
+            for (size_t i = 0; i < numStatic && pairs.size() < max_pairs; i += SIMD_WIDTH) {
+                size_t batchSize = std::min(SIMD_WIDTH, numStatic - i);
+                
+                // Load batch of static AABBs
+                for (size_t k = 0; k < batchSize; k++) {
+                    ProxyId staticId = staticObjects[i + k];
+                    mins[k] = mProxyData.bounds.minX[staticId];
+                    mins[k + 4] = mProxyData.bounds.minY[staticId];
+                    mins[k + 8] = mProxyData.bounds.minZ[staticId];
+                    maxs[k] = mProxyData.bounds.maxX[staticId];
+                    maxs[k + 4] = mProxyData.bounds.maxY[staticId];
+                    maxs[k + 8] = mProxyData.bounds.maxZ[staticId];
+                }
+                
+                // Test batch with SIMD
+                SimdUtils::TestAABBOverlap4f(minA, maxA, mins, maxs, results);
+                
+                // Process results
+                for (size_t k = 0; k < batchSize; k++) {
+                    if (results[k]) {
+                        CollisionPair pair{id, staticObjects[i + k]};
+                        size_t hash = pair.hash();
+                        if (pairHashes.insert(hash).second) {
+                            pairs.push_back(pair);
+                            if (pairs.size() >= max_pairs) break;
+                        }
                     }
                 }
             }
+            
             if (pairs.size() >= max_pairs) break;
         }
     }
@@ -329,7 +408,7 @@ std::vector<CollisionPair> BroadPhase::findPotentialCollisions(size_t max_pairs)
 }
 
 void BroadPhase::sortAxisList(int axis) {
-    auto& list = mDynamicList[axis];
+    auto& list = mProxyData.dynamicAxes[axis].objects;
     if (list.empty()) return;
 
     // First pass: update sort keys and find the range that needs sorting
@@ -338,10 +417,10 @@ void BroadPhase::sortAxisList(int axis) {
     
     for (size_t i = 0; i < list.size(); ++i) {
         ProxyId id = list[i];
-        if (mProxyData.needsResort[axis][id]) {
+        if (mProxyData.dynamicAxes[axis].needsResort[id]) {
             minIdx = std::min(minIdx, static_cast<int32_t>(i));
             maxIdx = static_cast<int32_t>(i);
-            mProxyData.needsResort[axis][id] = false;  // Reset flag
+            mProxyData.dynamicAxes[axis].needsResort[id] = false;  // Reset flag
         }
     }
     
@@ -358,16 +437,16 @@ void BroadPhase::sortAxisList(int axis) {
                   float minA, minB;
                   switch (axis) {
                       case 0:
-                          minA = mProxyData.minX[a];
-                          minB = mProxyData.minX[b];
+                          minA = mProxyData.bounds.minX[a];
+                          minB = mProxyData.bounds.minX[b];
                           break;
                       case 1:
-                          minA = mProxyData.minY[a];
-                          minB = mProxyData.minY[b];
+                          minA = mProxyData.bounds.minY[a];
+                          minB = mProxyData.bounds.minY[b];
                           break;
                       case 2:
-                          minA = mProxyData.minZ[a];
-                          minB = mProxyData.minZ[b];
+                          minA = mProxyData.bounds.minZ[a];
+                          minB = mProxyData.bounds.minZ[b];
                           break;
                       default:
                           return false;
@@ -378,15 +457,46 @@ void BroadPhase::sortAxisList(int axis) {
     // Update sort keys in the affected range
     for (int32_t i = minIdx; i <= maxIdx; ++i) {
         ProxyId id = list[i];
-        mProxyData.sortKeys[axis][id] = i;
+        mProxyData.dynamicAxes[axis].sortKeys[id] = i;
     }
 }
 
 bool BroadPhase::testOverlap(ProxyId a, ProxyId b) const {
-    // Quick AABB overlap test using SoA layout
-    return !(mProxyData.minX[a] > mProxyData.maxX[b] || mProxyData.minX[b] > mProxyData.maxX[a] ||
-             mProxyData.minY[a] > mProxyData.maxY[b] || mProxyData.minY[b] > mProxyData.maxY[a] ||
-             mProxyData.minZ[a] > mProxyData.maxZ[b] || mProxyData.minZ[b] > mProxyData.maxZ[a]);
+#if PYNOVAGE_MATH_HAS_SSE2
+    // Load bounds data for object a
+    __m128 minA = _mm_set_ps(0.0f,
+                            mProxyData.bounds.minZ[a],
+                            mProxyData.bounds.minY[a],
+                            mProxyData.bounds.minX[a]);
+    __m128 maxA = _mm_set_ps(0.0f,
+                            mProxyData.bounds.maxZ[a],
+                            mProxyData.bounds.maxY[a],
+                            mProxyData.bounds.maxX[a]);
+
+    // Load bounds data for object b
+    __m128 minB = _mm_set_ps(0.0f,
+                            mProxyData.bounds.minZ[b],
+                            mProxyData.bounds.minY[b],
+                            mProxyData.bounds.minX[b]);
+    __m128 maxB = _mm_set_ps(0.0f,
+                            mProxyData.bounds.maxZ[b],
+                            mProxyData.bounds.maxY[b],
+                            mProxyData.bounds.maxX[b]);
+
+    // Test minB <= maxA and minA <= maxB for all axes simultaneously
+    __m128 cmpMinMaxA = _mm_cmple_ps(minB, maxA);
+    __m128 cmpMinMaxB = _mm_cmple_ps(minA, maxB);
+    __m128 andResult = _mm_and_ps(cmpMinMaxA, cmpMinMaxB);
+
+    // Check if all three axes overlap (ignore w component)
+    int mask = _mm_movemask_ps(andResult) & 0x7;
+    return mask == 0x7;
+#else
+    // Fallback scalar implementation
+    return !(mProxyData.bounds.minX[a] > mProxyData.bounds.maxX[b] || mProxyData.bounds.minX[b] > mProxyData.bounds.maxX[a] ||
+             mProxyData.bounds.minY[a] > mProxyData.bounds.maxY[b] || mProxyData.bounds.minY[b] > mProxyData.bounds.maxY[a] ||
+             mProxyData.bounds.minZ[a] > mProxyData.bounds.maxZ[b] || mProxyData.bounds.minZ[b] > mProxyData.bounds.maxZ[a]);
+#endif
 }
 
 void BroadPhase::insertionSort(std::vector<ProxyId>& list, int axis) {
@@ -394,9 +504,9 @@ void BroadPhase::insertionSort(std::vector<ProxyId>& list, int axis) {
         ProxyId key = list[i];
         float value;
         switch (axis) {
-            case 0: value = mProxyData.minX[key]; break;
-            case 1: value = mProxyData.minY[key]; break;
-            case 2: value = mProxyData.minZ[key]; break;
+            case 0: value = mProxyData.bounds.minX[key]; break;
+            case 1: value = mProxyData.bounds.minY[key]; break;
+            case 2: value = mProxyData.bounds.minZ[key]; break;
             default: value = 0.0f;
         }
         
@@ -406,9 +516,9 @@ void BroadPhase::insertionSort(std::vector<ProxyId>& list, int axis) {
         while (j >= 0) {
             float otherValue;
             switch (axis) {
-                case 0: otherValue = mProxyData.minX[list[j]]; break;
-                case 1: otherValue = mProxyData.minY[list[j]]; break;
-                case 2: otherValue = mProxyData.minZ[list[j]]; break;
+                case 0: otherValue = mProxyData.bounds.minX[list[j]]; break;
+                case 1: otherValue = mProxyData.bounds.minY[list[j]]; break;
+                case 2: otherValue = mProxyData.bounds.minZ[list[j]]; break;
                 default: otherValue = 0.0f;
             }
             
@@ -436,7 +546,7 @@ void BroadPhase::insertIntoGrid(ProxyId id) {
     Vector3 cell_pos = mProxyData.centers[id] / mCellSize;
     size_t key = hashPosition(cell_pos);
     mProxyData.gridKeys[id] = key;
-    mGrid[key].push_back(id);
+    mProxyData.grid[key].push_back(id);
 }
 
 void BroadPhase::finalizeBroadPhase() {
@@ -452,8 +562,8 @@ void BroadPhase::finalizeBroadPhase() {
                 continue;
             }
             
-            int minBinX = getBinIndex(mProxyData.minX[id]);
-            int maxBinX = getBinIndex(mProxyData.maxX[id]);
+            int minBinX = getBinIndex(mProxyData.bounds.minX[id]);
+            int maxBinX = getBinIndex(mProxyData.bounds.maxX[id]);
             
             // For now just use X-axis bins - if this works well, we can extend to Y and Z
             for (int x = minBinX; x <= maxBinX; x++) {
@@ -474,12 +584,12 @@ void BroadPhase::finalizeBroadPhase() {
 }
 
 void BroadPhase::removeFromGrid(ProxyId id) {
-    auto it = mGrid.find(mProxyData.gridKeys[id]);
-    if (it != mGrid.end()) {
+    auto it = mProxyData.grid.find(mProxyData.gridKeys[id]);
+    if (it != mProxyData.grid.end()) {
         auto& cell = it->second;
-        cell.erase(std::remove(cell.begin(), cell.end(), id), cell.end());
+        cell.remove(id);
         if (cell.empty()) {
-            mGrid.erase(it);
+            mProxyData.grid.erase(it);
         }
     }
 }
