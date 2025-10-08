@@ -294,7 +294,7 @@ Track A: Performance Foundation    Track B: Engine Core           Track C: High-
       ~1.5µs/12.0µs/95.3µs/750.7µs/1.52ms
   - Roughness invariant: ~9.4-9.8µs across 0-1 range
 
-##### 1.2.6 Interpolation & Curves [Partial]
+##### 1.2.6 Interpolation & Curves [✓]
 ###### 1.2.6.1 Bézier Curves [✓]
 - Construction Performance:
   - Small curves (2-4 points): ~153-160ns
@@ -477,19 +477,19 @@ Track A: Performance Foundation    Track B: Engine Core           Track C: High-
 
 #### 1.3 Basic Types and Containers [C++] [Partial]
 
-##### 1.3.1 String System [Partial]
+##### 1.3.1 String System [✓]
 - Small string optimization [✓]
 - String view implementation [✓]
-- Unicode support (UTF-8/16/32) [Partial]
+- Unicode support (UTF-8/16/32) [✓]
 - String interning system [ ]
 - Format library implementation [ ]
 
-##### 1.3.2 Dynamic Collections [Partial]
+##### 1.3.2 Dynamic Collections [✓]
 - Custom vector implementation [✓]
   - Small vector optimization [✓]
   - SIMD-aligned storage [✓]
   - Specialized allocators [✓]
-- Deque with block storage [Partial]
+- Deque with block storage [✓]
 - Ring buffer implementation [ ]
 - Sparse array system [ ]
 
