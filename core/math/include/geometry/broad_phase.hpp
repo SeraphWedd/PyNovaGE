@@ -27,16 +27,15 @@ struct CollisionPair {
     }
 
     size_t hash() const {
-        ProxyId h1 = a;
-        ProxyId h2 = b;
-        if (h1 > h2) std::swap(h1, h2);
+        ProxyId h1 = std::min(a, b);
+        ProxyId h2 = std::max(a, b);
         return h1 * 37 + h2;
     }
+};
 
-    void getOrdered(ProxyId& first, ProxyId& second) const {
-        first = std::min(a, b);
-        second = std::max(a, b);
-    }
+// Simple uniform grid cell for static objects
+struct Cell {
+    std::vector<ProxyId> static_objects;
 };
 
 // Broad-phase collision culling using sweep and prune with spatial hashing
@@ -50,29 +49,20 @@ public:
     void updateProxy(ProxyId id, const AABB& aabb);
     void finalizeBroadPhase();
 
-    std::vector<geometry::CollisionPair> findPotentialCollisions(size_t max_pairs = 0);
-    void updateTemporalCoherence();
+    std::vector<CollisionPair> findPotentialCollisions(size_t max_pairs = 0);
 
 private:
-    // SoA data structures for better cache and SIMD
-    struct ProxyData {
+    // Core data structures with SIMD-friendly SoA layout
+    struct alignas(32) ProxyData {
+        // SIMD-aligned bounds data
+        alignas(32) std::vector<float> minX, minY, minZ;
+        alignas(32) std::vector<float> maxX, maxY, maxZ;
+        
+        // Object state
         std::vector<bool> isStatic;
-        std::vector<Vector3> centers;
-        std::vector<uint32_t> mortonCodes;
-        std::vector<AABB> aabbs;          // Only used for returning full AABB data
-
-        // Bounds data for efficient SIMD
-        std::vector<float> minX, minY, minZ;
-        std::vector<float> maxX, maxY, maxZ;
-
-        // Dynamic object data
-        std::vector<int32_t> sortKeys[3];    // Sort keys for each axis
-        std::vector<bool> needsResort[3];    // Flags for each axis
-
-        // Static object data
-        std::vector<size_t> gridKeys;        // Hash grid cell keys
-
-        // Maintain free list for proxy IDs
+        std::vector<ProxyId> dynamic_objects;  // Sorted by X-axis
+        
+        // ID management
         std::vector<ProxyId> freeIds;
         ProxyId nextId = 0;
 
@@ -90,47 +80,32 @@ private:
         }
     } mProxyData;
 
-    // Helper struct for spatial binning
-    struct SpatialBin {
-        std::vector<ProxyId> staticObjects;  // Static object IDs in this bin
-        std::vector<size_t> gridCells;       // Grid cells overlapping this bin
-    };
-
-    // Utility functions for spatial binning
-    int getBinIndex(float value) const { return static_cast<int>(value / (mCellSize * 4.0f)); }
-    void insertIntoSpatialBin(int binIdx, ProxyId id);
-    std::vector<SpatialBin> mSpatialBins;
-    bool mBinsNeedUpdate = true;
-
-    // Dynamic object lists (sorted by min bounds)
-    std::vector<ProxyId> mDynamicList[3];  // One list per axis
-    bool mDirtyAxes[3];  // Tracks which axes need sorting
-
-    // Hash grid for static objects
-    std::unordered_map<size_t, std::vector<ProxyId>> mGrid;
-
-    // Morton code and hash computation
-    uint32_t computeMortonCode(const Vector3& position) const;
-    size_t hashPosition(const Vector3& position) const;
+    // Uniform grid for static objects
+    std::unordered_map<uint64_t, Cell> mGrid;
+    float mCellSize;
+    bool mNeedsSorting;
 
     // Helper functions
     void insertIntoGrid(ProxyId id);
     void removeFromGrid(ProxyId id);
-    void sortAxisList(int axis);
+    uint64_t getGridKey(const Vector3& position) const;
+    void sortDynamicObjects();
     bool testOverlap(ProxyId a, ProxyId b) const;
-    void insertionSort(std::vector<ProxyId>& list, int axis);
 
-    // Internal state
-    float mCellSize;  // Grid cell size for spatial hashing
+    // Grid helpers
+    Vector3 getCellCoords(const Vector3& position) const {
+        return Vector3(
+            std::floor(position.x / mCellSize),
+            std::floor(position.y / mCellSize),
+            std::floor(position.z / mCellSize)
+        );
+    }
 
-    // Temporal coherence tracking
-    struct PreviousState {
-        Vector3 center;      // Previous center position
-        Vector3 extent;      // Previous half-extents
-        float moveThresh;    // How far object can move before needing retest
-    };
-    std::unordered_map<ProxyId, PreviousState> mPrevStates;
-    std::vector<geometry::CollisionPair> mPrevPairs;
+    uint64_t packGridKey(int x, int y, int z) const {
+        return (static_cast<uint64_t>(x) << 42) |
+               (static_cast<uint64_t>(y) << 21) |
+               static_cast<uint64_t>(z);
+    }
 };
 
 
