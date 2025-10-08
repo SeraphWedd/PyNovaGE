@@ -139,6 +139,59 @@ private:
      */
     bool validateKnots() const;
 
+    /**
+     * @brief Returns the multiplicity of a knot value
+     * @param u The knot value to check
+     * @param tolerance Tolerance for floating point comparison
+     * @return The number of times u appears in the knot vector
+     */
+    size_t getMultiplicity(float u, float tolerance = 1e-6f) const;
+
+    /**
+     * @brief Returns unique knot values in ascending order
+     * @param tolerance Tolerance for floating point comparison
+     * @return Vector of unique knot values
+     */
+    std::vector<float> getUniqueKnots(float tolerance = 1e-6f) const;
+
+    /**
+     * @brief Inserts a knot exactly without numerical error
+     * 
+     * This helper ensures the knot is inserted with exact
+     * arithmetic to avoid shape changes from numerical drift.
+     * 
+     * @param u The parameter value where to insert the knot
+     * @param tolerance Tolerance for finding the knot span
+     * @return True if insertion was successful
+     */
+    bool insertKnotExact(float u, float tolerance = 1e-6f);
+
+    /**
+     * @brief Converts B-spline segment to Bézier form
+     * 
+     * Elevates a segment of the B-spline curve to Bézier form by
+     * inserting knots until each internal knot has multiplicity p.
+     * This preserves the curve shape exactly.
+     * 
+     * @param startKnot Index where segment starts
+     * @param endKnot Index where segment ends
+     * @return True if conversion was successful
+     */
+    bool toBezierForm(size_t startKnot, size_t endKnot);
+
+    /**
+     * @brief Elevates degree of a Bézier segment
+     * 
+     * Given control points of a degree-p Bézier curve,
+     * computes control points for degree p+1 that define
+     * the same curve shape.
+     * 
+     * @param points Input control points (size p+1)
+     * @return Elevated control points (size p+2)
+     */
+    std::vector<Vector3> elevateBezierSegment(
+        const std::vector<Vector3>& points) const;
+
     std::vector<Vector3> controlPoints_;  // Control points defining the curve
     std::vector<float> knots_;           // Knot vector
     int degree_;                         // Degree of the curve
