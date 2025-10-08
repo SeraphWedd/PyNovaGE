@@ -31,7 +31,7 @@ public:
     
     TestResult testPoint(const Vector3& point) const {
         for (const Plane& plane : planes_) {
-            if (plane.distanceTo(point) < 0) {
+            if (plane.signedDistance(point) < 0) {
                 return TestResult::OUTSIDE;
             }
         }
@@ -42,7 +42,7 @@ public:
         bool intersect = false;
         
         for (const Plane& plane : planes_) {
-            float distance = plane.distanceTo(center);
+            float distance = plane.signedDistance(center);
             
             if (distance < -radius) {
                 return TestResult::OUTSIDE;
@@ -58,8 +58,8 @@ public:
         bool intersect = false;
         
         // Get box extents
-        Vector3 center = aabb.getCenter();
-        Vector3 extent = aabb.getExtent();
+        Vector3 center = aabb.center();
+        Vector3 extent = aabb.dimensions();
         
         for (const Plane& plane : planes_) {
             // Project box onto plane normal
@@ -67,7 +67,7 @@ public:
                      extent.y * std::abs(plane.normal.y) +
                      extent.z * std::abs(plane.normal.z);
             
-            float d = plane.distanceTo(center);
+            float d = plane.signedDistance(center);
             
             if (d < -r) {
                 return TestResult::OUTSIDE;
@@ -85,16 +85,16 @@ public:
         
         // Get box center and extent as arrays for SIMD
         float center[4] = {
-            aabb.getCenter().x,
-            aabb.getCenter().y,
-            aabb.getCenter().z,
+            aabb.center().x,
+            aabb.center().y,
+            aabb.center().z,
             1.0f
         };
         
         float extent[4] = {
-            aabb.getExtent().x,
-            aabb.getExtent().y,
-            aabb.getExtent().z,
+            aabb.dimensions().x,
+            aabb.dimensions().y,
+            aabb.dimensions().z,
             0.0f
         };
         
@@ -118,7 +118,7 @@ public:
             for (int i = 0; i < 3; ++i) {
                 d += normal[i] * center[i];
             }
-            d += plane.d;
+            d += plane.distance;
             
             if (d < -r) {
                 return TestResult::OUTSIDE;
@@ -142,49 +142,71 @@ private:
         // Reference: Fast Extraction of Viewing Frustum Planes from the World-View-Projection Matrix
         // http://www.cs.otago.ac.nz/postgrads/alexis/planeExtraction.pdf
         
-        const float* m = viewProjection.data();
-        
         // Left plane
         planes_[2] = Plane(
-            Vector3(m[3] + m[0], m[7] + m[4], m[11] + m[8]).normalized(),
-            m[15] + m[12]
+            Vector3(
+                viewProjection[0][3] + viewProjection[0][0],
+                viewProjection[1][3] + viewProjection[1][0],
+                viewProjection[2][3] + viewProjection[2][0]
+            ).normalized(),
+            viewProjection[3][3] + viewProjection[3][0]
         );
         
         // Right plane
         planes_[3] = Plane(
-            Vector3(m[3] - m[0], m[7] - m[4], m[11] - m[8]).normalized(),
-            m[15] - m[12]
+            Vector3(
+                viewProjection[0][3] - viewProjection[0][0],
+                viewProjection[1][3] - viewProjection[1][0],
+                viewProjection[2][3] - viewProjection[2][0]
+            ).normalized(),
+            viewProjection[3][3] - viewProjection[3][0]
         );
         
         // Bottom plane
         planes_[5] = Plane(
-            Vector3(m[3] + m[1], m[7] + m[5], m[11] + m[9]).normalized(),
-            m[15] + m[13]
+            Vector3(
+                viewProjection[0][3] + viewProjection[0][1],
+                viewProjection[1][3] + viewProjection[1][1],
+                viewProjection[2][3] + viewProjection[2][1]
+            ).normalized(),
+            viewProjection[3][3] + viewProjection[3][1]
         );
         
         // Top plane
         planes_[4] = Plane(
-            Vector3(m[3] - m[1], m[7] - m[5], m[11] - m[9]).normalized(),
-            m[15] - m[13]
+            Vector3(
+                viewProjection[0][3] - viewProjection[0][1],
+                viewProjection[1][3] - viewProjection[1][1],
+                viewProjection[2][3] - viewProjection[2][1]
+            ).normalized(),
+            viewProjection[3][3] - viewProjection[3][1]
         );
         
         // Near plane
         planes_[0] = Plane(
-            Vector3(m[3] + m[2], m[7] + m[6], m[11] + m[10]).normalized(),
-            m[15] + m[14]
+            Vector3(
+                viewProjection[0][3] + viewProjection[0][2],
+                viewProjection[1][3] + viewProjection[1][2],
+                viewProjection[2][3] + viewProjection[2][2]
+            ).normalized(),
+            viewProjection[3][3] + viewProjection[3][2]
         );
         
         // Far plane
         planes_[1] = Plane(
-            Vector3(m[3] - m[2], m[7] - m[6], m[11] - m[10]).normalized(),
-            m[15] - m[14]
+            Vector3(
+                viewProjection[0][3] - viewProjection[0][2],
+                viewProjection[1][3] - viewProjection[1][2],
+                viewProjection[2][3] - viewProjection[2][2]
+            ).normalized(),
+            viewProjection[3][3] - viewProjection[3][2]
         );
         
         // Normalize planes
         for (auto& plane : planes_) {
             float invLen = 1.0f / plane.normal.length();
             plane.normal *= invLen;
-            plane.d *= invLen;
+            plane.distance *= invLen;
         }
     }
 };

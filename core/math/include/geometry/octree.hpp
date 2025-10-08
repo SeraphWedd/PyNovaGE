@@ -20,11 +20,12 @@ public:
     void insert(std::unique_ptr<SpatialObject<T>> object) override {
         const AABB& bounds = object->getBounds();
         if (!root_) {
-            // First object defines initial bounds
+            // First object defines initial bounds (loosened)
             root_ = std::make_unique<Node>();
-            root_->bounds = AABB(bounds.getCenter(),
-                               bounds.getExtent() * config_.looseness);
-        } else if (!root_->bounds.contains(bounds)) {
+            Vector3 c = bounds.center();
+            Vector3 half = bounds.dimensions() * 0.5f * config_.looseness;
+            root_->bounds = AABB(c - half, c + half);
+        } else if (!containsAABB(root_->bounds, bounds)) {
             // Expand root to fit new object
             growTree(bounds);
         }
@@ -123,13 +124,13 @@ private:
         
         // Stop if we've reached max depth or node is too small
         if (calculateDepth(node) >= config_.maxDepth ||
-            node->bounds.getMinExtent() <= config_.minNodeSize) {
+            minExtent(node->bounds) <= config_.minNodeSize) {
             node->objects.push_back(std::move(object));
             return;
         }
         
         // Check if object fits entirely in a child node
-        std::size_t index = getChildIndex(node->bounds, objBounds.getCenter());
+        std::size_t index = getChildIndex(node->bounds, objBounds.center());
         if (node->isLeaf()) {
             if (node->objects.size() >= config_.maxObjectsPerNode) {
                 splitNode(node);
@@ -146,7 +147,7 @@ private:
         }
         
         // Insert into child if object fits entirely
-        if (node->children[index]->bounds.contains(objBounds)) {
+        if (containsAABB(node->children[index]->bounds, objBounds)) {
             insertIntoNode(node->children[index].get(), std::move(object));
         } else {
             // Object spans multiple children, keep it in this node
@@ -203,14 +204,14 @@ private:
         std::vector<std::unique_ptr<SpatialObject<T>>> remainingObjects;
         for (auto& obj : node->objects) {
             const AABB& objBounds = obj->getBounds();
-            std::size_t index = getChildIndex(node->bounds, objBounds.getCenter());
+            std::size_t index = getChildIndex(node->bounds, objBounds.center());
             
             if (!node->children[index]) {
                 node->children[index] = std::make_unique<Node>();
                 node->children[index]->bounds = computeChildBounds(node->bounds, index);
             }
             
-            if (node->children[index]->bounds.contains(objBounds)) {
+            if (containsAABB(node->children[index]->bounds, objBounds)) {
                 node->children[index]->objects.push_back(std::move(obj));
             } else {
                 remainingObjects.push_back(std::move(obj));
@@ -259,16 +260,26 @@ private:
         auto newRoot = std::make_unique<Node>();
         
         // Compute new bounds to contain both old root and new bounds
-        newRoot->bounds = root_->bounds;
-        newRoot->bounds.extend(bounds);
+        // Compute union of bounds
+        Vector3 newMin(
+            std::min(root_->bounds.min.x, bounds.min.x),
+            std::min(root_->bounds.min.y, bounds.min.y),
+            std::min(root_->bounds.min.z, bounds.min.z)
+        );
+        Vector3 newMax(
+            std::max(root_->bounds.max.x, bounds.max.x),
+            std::max(root_->bounds.max.y, bounds.max.y),
+            std::max(root_->bounds.max.z, bounds.max.z)
+        );
+        newRoot->bounds = AABB(newMin, newMax);
         
         // Scale by looseness factor
-        Vector3 center = newRoot->bounds.getCenter();
-        Vector3 extent = newRoot->bounds.getExtent() * config_.looseness;
-        newRoot->bounds = AABB(center, extent);
+        Vector3 c = newRoot->bounds.center();
+        Vector3 half = newRoot->bounds.dimensions() * 0.5f * config_.looseness;
+        newRoot->bounds = AABB(c - half, c + half);
         
         // Move old root to appropriate child position
-        std::size_t index = getChildIndex(newRoot->bounds, root_->bounds.getCenter());
+        std::size_t index = getChildIndex(newRoot->bounds, root_->bounds.center());
         newRoot->children[index] = std::move(root_);
         root_ = std::move(newRoot);
     }
@@ -289,13 +300,13 @@ private:
             if (count != 1) break;
             
             // Only one child contains objects, make it the new root
-            std::unique_ptr<Node> newRoot = std::move(root_->children[getChildIndex(root_->bounds, target->bounds.getCenter())]);
+            std::unique_ptr<Node> newRoot = std::move(root_->children[getChildIndex(root_->bounds, target->bounds.center())]);
             root_ = std::move(newRoot);
         }
     }
     
     static std::size_t getChildIndex(const AABB& parentBounds, const Vector3& point) {
-        const Vector3& center = parentBounds.getCenter();
+        Vector3 center = parentBounds.center();
         std::size_t index = 0;
         if (point.x >= center.x) index |= 1;
         if (point.y >= center.y) index |= 2;
@@ -304,16 +315,19 @@ private:
     }
     
     static AABB computeChildBounds(const AABB& parentBounds, std::size_t index) {
-        const Vector3& center = parentBounds.getCenter();
-        const Vector3& extent = parentBounds.getExtent() * 0.5f;
+        Vector3 pCenter = parentBounds.center();
+        Vector3 pHalf = parentBounds.dimensions() * 0.5f;
+        Vector3 cHalf = pHalf * 0.5f;
         
-        Vector3 offset(
-            (index & 1) ? extent.x : -extent.x,
-            (index & 2) ? extent.y : -extent.y,
-            (index & 4) ? extent.z : -extent.z
+        Vector3 sign(
+            (index & 1) ? 1.0f : -1.0f,
+            (index & 2) ? 1.0f : -1.0f,
+            (index & 4) ? 1.0f : -1.0f
         );
-        
-        return AABB(center + offset * 0.5f, extent);
+        Vector3 cCenter = pCenter + Vector3(sign.x * cHalf.x, sign.y * cHalf.y, sign.z * cHalf.z);
+        Vector3 cMin = cCenter - cHalf;
+        Vector3 cMax = cCenter + cHalf;
+        return AABB(cMin, cMax);
     }
     
     std::size_t calculateDepth(const Node* node) const {
@@ -378,6 +392,17 @@ private:
         return 1 + maxChildDepth;
     }
     
+    static bool containsAABB(const AABB& outer, const AABB& inner) {
+        return outer.min.x <= inner.min.x && outer.max.x >= inner.max.x &&
+               outer.min.y <= inner.min.y && outer.max.y >= inner.max.y &&
+               outer.min.z <= inner.min.z && outer.max.z >= inner.max.z;
+    }
+
+    static float minExtent(const AABB& b) {
+        Vector3 d = b.dimensions();
+        return std::min(d.x, std::min(d.y, d.z));
+    }
+
     void debugDrawNode(const Node* node, const std::function<void(const AABB&)>& drawAABB) const {
         if (!node) return;
         drawAABB(node->bounds);

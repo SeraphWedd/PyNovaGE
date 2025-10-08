@@ -3,6 +3,8 @@
 #include "../../include/matrix4.hpp"
 #include "../../include/vector3.hpp"
 #include <chrono>
+#include <cstdlib>
+using namespace std::chrono_literals;
 
 namespace pynovage {
 namespace math {
@@ -99,11 +101,11 @@ TEST_F(FrustumCullingTest, PointTestPerformance) {
         );
     }
     
-    auto start = std::chrono::high_resolution_clock::now();
+    auto start = std::chrono::steady_clock::now();
     for (const auto& point : points) {
         frustum_->testPoint(point);
     }
-    auto end = std::chrono::high_resolution_clock::now();
+    auto end = std::chrono::steady_clock::now();
     auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
     
     std::cout << "Point test performance: " << duration.count() / static_cast<float>(NUM_TESTS)
@@ -131,22 +133,22 @@ TEST_F(FrustumCullingTest, AABBTestPerformance) {
     }
     
     // Test regular AABB intersection
-    auto start = std::chrono::high_resolution_clock::now();
+    auto start = std::chrono::steady_clock::now();
     for (const auto& box : boxes) {
         frustum_->testAABB(box);
     }
-    auto end = std::chrono::high_resolution_clock::now();
+    auto end = std::chrono::steady_clock::now();
     auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
     
     std::cout << "AABB test performance: " << duration.count() / static_cast<float>(NUM_TESTS)
               << " microseconds per test" << std::endl;
     
     // Test SIMD AABB intersection
-    start = std::chrono::high_resolution_clock::now();
+    start = std::chrono::steady_clock::now();
     for (const auto& box : boxes) {
         frustum_->testAABBSIMD(box);
     }
-    end = std::chrono::high_resolution_clock::now();
+    end = std::chrono::steady_clock::now();
     duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
     
     std::cout << "AABB SIMD test performance: " << duration.count() / static_cast<float>(NUM_TESTS)
@@ -155,34 +157,36 @@ TEST_F(FrustumCullingTest, AABBTestPerformance) {
 
 TEST_F(FrustumCullingTest, HierarchicalCullingTest) {
     // Mock node class for testing
-    class MockNode {
+class MockNode {
     public:
+        using ChildContainer = std::vector<std::unique_ptr<MockNode>>;
         MockNode(const AABB& bounds) : bounds_(bounds) {}
         void addChild(std::unique_ptr<MockNode> child) { children_.push_back(std::move(child)); }
         const AABB& getBounds() const { return bounds_; }
-        const std::vector<std::unique_ptr<MockNode>>& getChildren() const { return children_; }
+        const ChildContainer& getChildren() const { return children_; }
     
     private:
         AABB bounds_;
-        std::vector<std::unique_ptr<MockNode>> children_;
+        ChildContainer children_;
     };
     
     // Create a test hierarchy
-    auto root = std::make_unique<MockNode>(AABB(Vector3(0, 0, 0), Vector3(10, 10, 10)));
+    auto root = std::make_unique<MockNode>(AABB(Vector3(0.0f, 0.0f, 0.0f), Vector3(10.0f, 10.0f, 10.0f)));
     
     // Add some children
-    root->addChild(std::make_unique<MockNode>(AABB(Vector3(-5, 0, 0), Vector3(2, 2, 2))));
-    root->addChild(std::make_unique<MockNode>(AABB(Vector3(5, 0, 0), Vector3(2, 2, 2))));
-    root->addChild(std::make_unique<MockNode>(AABB(Vector3(0, 5, 0), Vector3(2, 2, 2))));
+    root->addChild(std::make_unique<MockNode>(AABB(Vector3(-5.0f, 0.0f, 0.0f), Vector3(2.0f, 2.0f, 2.0f))));
+    root->addChild(std::make_unique<MockNode>(AABB(Vector3(5.0f, 0.0f, 0.0f), Vector3(2.0f, 2.0f, 2.0f))));
+    root->addChild(std::make_unique<MockNode>(AABB(Vector3(0.0f, 5.0f, 0.0f), Vector3(2.0f, 2.0f, 2.0f))));
     
     // Create hierarchical culling
     HierarchicalFrustumCulling hierarchicalCulling(viewProjection_);
     
     // Test culling
     int visibleCount = 0;
-    hierarchicalCulling.testHierarchy(*root, [&visibleCount](const MockNode&) {
+    std::function<void(const MockNode&)> visitor = [&visibleCount](const MockNode& node) {
         visibleCount++;
-    });
+    };
+    hierarchicalCulling.testHierarchy(*root, visitor);
     
     EXPECT_GT(visibleCount, 0);
 }
@@ -204,7 +208,7 @@ TEST_F(FrustumCullingTest, HierarchicalCullingPerformance) {
     // Create a deep hierarchy with many nodes
     std::function<std::unique_ptr<MockNode>(const Vector3&, float, int)> createHierarchy;
     createHierarchy = [&](const Vector3& center, float size, int depth) -> std::unique_ptr<MockNode> {
-        auto node = std::make_unique<MockNode>(AABB(center, Vector3(size)));
+        auto node = std::make_unique<MockNode>(AABB(center, Vector3(size, size, size)));
         
         if (depth > 0) {
             float childSize = size * 0.5f;
@@ -214,7 +218,7 @@ TEST_F(FrustumCullingTest, HierarchicalCullingPerformance) {
             for (int x = -1; x <= 1; x += 2) {
                 for (int y = -1; y <= 1; y += 2) {
                     for (int z = -1; z <= 1; z += 2) {
-                        Vector3 childCenter = center + Vector3(x, y, z) * offset;
+                        Vector3 childCenter = center + Vector3(x * offset, y * offset, z * offset);
                         node->addChild(createHierarchy(childCenter, childSize, depth - 1));
                     }
                 }
@@ -225,20 +229,21 @@ TEST_F(FrustumCullingTest, HierarchicalCullingPerformance) {
     };
     
     // Create a 4-level hierarchy (4^3 = 64 leaf nodes)
-    auto root = createHierarchy(Vector3(0), 10.0f, 4);
+    auto root = createHierarchy(Vector3(0.0f, 0.0f, 0.0f), 10.0f, 4);
     
     // Test performance
     HierarchicalFrustumCulling hierarchicalCulling(viewProjection_);
     
-    auto start = std::chrono::high_resolution_clock::now();
+    auto start = std::chrono::steady_clock::now();
     int visibleCount = 0;
+    std::function<void(const MockNode&)> visitor = [&visibleCount](const MockNode& node) {
+        visibleCount++;
+    };
     for (int i = 0; i < 1000; ++i) {
-        hierarchicalCulling.testHierarchy(*root, [&visibleCount](const MockNode&) {
-            visibleCount++;
-        });
+        hierarchicalCulling.testHierarchy(*root, visitor);
     }
-    auto end = std::chrono::high_resolution_clock::now();
-    auto duration = std::chrono::duration_cast<std::microseconds>(end - start);
+    auto end = std::chrono::steady_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
     
     std::cout << "Hierarchical culling performance: " << duration.count() / 1000.0f
               << " microseconds per traversal" << std::endl;
