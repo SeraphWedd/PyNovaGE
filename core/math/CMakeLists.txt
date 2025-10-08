@@ -140,6 +140,7 @@ add_executable(math_benchmarks
     tests/geometry/bezier_perf_extended_tests.cpp
     tests/geometry/hermite_perf_tests.cpp
     tests/geometry/path_perf_tests.cpp
+    tests/benchmarks/vector_real_world_benchmarks.cpp
     tests/lighting/point_light_perf_tests.cpp
     tests/lighting/directional_light_perf_tests.cpp
     tests/lighting/spot_light_perf_tests.cpp

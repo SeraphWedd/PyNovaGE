@@ -85,15 +85,13 @@ public:
 
     Vector4 operator*(float scalar) const {
         Vector4 result;
-        float scalars[4] = {scalar, scalar, scalar, scalar};
-        SimdUtils::Multiply4f(&x, scalars, &result.x);
+        SimdUtils::Multiply4fScalar(&x, scalar, &result.x);
         return result;
     }
 
     Vector4 operator/(float scalar) const {
         Vector4 result;
-        float scalars[4] = {scalar, scalar, scalar, scalar};
-        SimdUtils::Divide4f(&x, scalars, &result.x);
+        SimdUtils::Divide4fScalar(&x, scalar, &result.x);
         return result;
     }
 
@@ -109,14 +107,12 @@ public:
     }
 
     Vector4& operator*=(float scalar) {
-        float scalars[4] = {scalar, scalar, scalar, scalar};
-        SimdUtils::Multiply4f(&x, scalars, &x);
+        SimdUtils::Multiply4fScalar(&x, scalar, &x);
         return *this;
     }
 
     Vector4& operator/=(float scalar) {
-        float scalars[4] = {scalar, scalar, scalar, scalar};
-        SimdUtils::Divide4f(&x, scalars, &x);
+        SimdUtils::Divide4fScalar(&x, scalar, &x);
         return *this;
     }
 
@@ -134,9 +130,10 @@ public:
     }
 
     void normalize() {
-        float len = length();
-        if (len > 0.0f) {
-            *this /= len;
+        float lenSq = lengthSquared();
+        if (lenSq > 0.0f) {
+            float invLen = 1.0f / std::sqrt(lenSq);
+            SimdUtils::Multiply4fScalar(&x, invLen, &x);
         }
     }
 
@@ -291,21 +288,15 @@ public:
 
     // Min/Max operations
     static Vector4 min(const Vector4& a, const Vector4& b) {
-        return Vector4(
-            std::min(a.x, b.x),
-            std::min(a.y, b.y),
-            std::min(a.z, b.z),
-            std::min(a.w, b.w)
-        );
+        Vector4 result;
+        SimdUtils::Min4f(&a.x, &b.x, &result.x);
+        return result;
     }
 
     static Vector4 max(const Vector4& a, const Vector4& b) {
-        return Vector4(
-            std::max(a.x, b.x),
-            std::max(a.y, b.y),
-            std::max(a.z, b.z),
-            std::max(a.w, b.w)
-        );
+        Vector4 result;
+        SimdUtils::Max4f(&a.x, &b.x, &result.x);
+        return result;
     }
 
     // String conversion

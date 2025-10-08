@@ -1,4 +1,67 @@
 #include "simd_utils.hpp"
+#include <algorithm>
+
+namespace pynovage {
+namespace math {
+
+void SimdUtils::Multiply2fScalar(const float* a, float scalar, float* result) {
+    float scalars[2] = {scalar, scalar};
+    Multiply2f(a, scalars, result);
+}
+
+void SimdUtils::Divide2fScalar(const float* a, float scalar, float* result) {
+    float scalars[2] = {scalar, scalar};
+    Divide2f(a, scalars, result);
+}
+
+void SimdUtils::Multiply3fScalar(const float* a, float scalar, float* result) {
+    float scalars[4] = {scalar, scalar, scalar, 0.0f};
+    Multiply3f(a, scalars, result);
+}
+
+void SimdUtils::Divide3fScalar(const float* a, float scalar, float* result) {
+    float scalars[4] = {scalar, scalar, scalar, 1.0f};
+    Divide3f(a, scalars, result);
+}
+
+void SimdUtils::Multiply4fScalar(const float* a, float scalar, float* result) {
+    float scalars[4] = {scalar, scalar, scalar, scalar};
+    Multiply4f(a, scalars, result);
+}
+
+void SimdUtils::Divide4fScalar(const float* a, float scalar, float* result) {
+    float scalars[4] = {scalar, scalar, scalar, scalar};
+    Divide4f(a, scalars, result);
+}
+
+void SimdUtils::Min4f(const float* a, const float* b, float* result) {
+#if PYNOVAGE_MATH_HAS_SSE
+    __m128 va = _mm_loadu_ps(a);
+    __m128 vb = _mm_loadu_ps(b);
+    __m128 vr = _mm_min_ps(va, vb);
+    _mm_storeu_ps(result, vr);
+#else
+    for (int i = 0; i < 4; ++i) {
+        result[i] = std::min(a[i], b[i]);
+    }
+#endif
+}
+
+void SimdUtils::Max4f(const float* a, const float* b, float* result) {
+#if PYNOVAGE_MATH_HAS_SSE
+    __m128 va = _mm_loadu_ps(a);
+    __m128 vb = _mm_loadu_ps(b);
+    __m128 vr = _mm_max_ps(va, vb);
+    _mm_storeu_ps(result, vr);
+#else
+    for (int i = 0; i < 4; ++i) {
+        result[i] = std::max(a[i], b[i]);
+    }
+#endif
+}
+
+} // namespace math
+} // namespace pynovage
 #include <cmath>
 
 namespace pynovage {

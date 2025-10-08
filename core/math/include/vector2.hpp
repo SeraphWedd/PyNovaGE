@@ -72,15 +72,13 @@ public:
 
     Vector2 operator*(float scalar) const {
         Vector2 result;
-        float scalars[2] = {scalar, scalar};
-        SimdUtils::Multiply2f(&x, scalars, &result.x);
+        SimdUtils::Multiply2fScalar(&x, scalar, &result.x);
         return result;
     }
 
     Vector2 operator/(float scalar) const {
         Vector2 result;
-        float scalars[2] = {scalar, scalar};
-        SimdUtils::Divide2f(&x, scalars, &result.x);
+        SimdUtils::Divide2fScalar(&x, scalar, &result.x);
         return result;
     }
 
@@ -96,14 +94,12 @@ public:
     }
 
     Vector2& operator*=(float scalar) {
-        float scalars[2] = {scalar, scalar};
-        SimdUtils::Multiply2f(&x, scalars, &x);
+        SimdUtils::Multiply2fScalar(&x, scalar, &x);
         return *this;
     }
 
     Vector2& operator/=(float scalar) {
-        float scalars[2] = {scalar, scalar};
-        SimdUtils::Divide2f(&x, scalars, &x);
+        SimdUtils::Divide2fScalar(&x, scalar, &x);
         return *this;
     }
 
@@ -121,9 +117,10 @@ public:
     }
 
     void normalize() {
-        float len = length();
-        if (len > 0.0f) {
-            *this /= len;
+        float lenSq = lengthSquared();
+        if (lenSq > 0.0f) {
+            float invLen = 1.0f / std::sqrt(lenSq);
+            SimdUtils::Multiply2fScalar(&x, invLen, &x);
         }
     }
 

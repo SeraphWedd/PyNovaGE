@@ -219,6 +219,14 @@ public:
     static float DeterminantMatrix2x2(const float* m);
 
     /**
+     * @brief Reciprocal square root of 4 floats using SIMD if available
+     * More efficient than calculating 1.0f/sqrt() separately
+     * @param a Input values
+     * @param result Output values
+     */
+    static void ReciprocalSqrt4f(const float* a, float* result);
+
+    /**
      * @brief Calculates determinant of a 3x3 matrix using SIMD if available
      * @param m Matrix (row-major)
      * @return Determinant value
@@ -323,6 +331,70 @@ public:
      * @param result Result of component-wise division
      */
     static void Divide4f(const float* a, const float* b, float* result);
+
+    /**
+     * @brief Multiplies 2D vector by scalar using SIMD if available
+     * @param a Input vector
+     * @param scalar Scalar value
+     * @param result Result vector
+     */
+    static void Multiply2fScalar(const float* a, float scalar, float* result);
+
+    /**
+     * @brief Divides 2D vector by scalar using SIMD if available
+     * @param a Input vector
+     * @param scalar Scalar value
+     * @param result Result vector
+     */
+    static void Divide2fScalar(const float* a, float scalar, float* result);
+
+    /**
+     * @brief Multiplies 3D vector by scalar using SIMD if available
+     * @param a Input vector
+     * @param scalar Scalar value
+     * @param result Result vector
+     */
+    static void Multiply3fScalar(const float* a, float scalar, float* result);
+
+    /**
+     * @brief Divides 3D vector by scalar using SIMD if available
+     * @param a Input vector
+     * @param scalar Scalar value
+     * @param result Result vector
+     */
+    static void Divide3fScalar(const float* a, float scalar, float* result);
+
+    /**
+     * @brief Multiplies 4D vector by scalar using SIMD if available
+     * @param a Input vector
+     * @param scalar Scalar value
+     * @param result Result vector
+     */
+    static void Multiply4fScalar(const float* a, float scalar, float* result);
+
+    /**
+     * @brief Divides 4D vector by scalar using SIMD if available
+     * @param a Input vector
+     * @param scalar Scalar value
+     * @param result Result vector
+     */
+    static void Divide4fScalar(const float* a, float scalar, float* result);
+
+    /**
+     * @brief Component-wise minimum of 4 floats using SIMD if available
+     * @param a First vector
+     * @param b Second vector
+     * @param result Result vector
+     */
+    static void Min4f(const float* a, const float* b, float* result);
+
+    /**
+     * @brief Component-wise maximum of 4 floats using SIMD if available
+     * @param a First vector
+     * @param b Second vector
+     * @param result Result vector
+     */
+    static void Max4f(const float* a, const float* b, float* result);
 
     /**
      * @brief Calculates dot product of two 4D vectors using SIMD if available

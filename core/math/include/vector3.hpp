@@ -94,15 +94,13 @@ public:
 
     Vector3 operator*(float scalar) const {
         Vector3 result;
-        float scalars[4] = {scalar, scalar, scalar, 0.0f};
-        SimdUtils::Multiply3f(&x, scalars, &result.x);
+        SimdUtils::Multiply3fScalar(&x, scalar, &result.x);
         return result;
     }
 
     Vector3 operator/(float scalar) const {
         Vector3 result;
-        float scalars[4] = {scalar, scalar, scalar, 1.0f};
-        SimdUtils::Divide3f(&x, scalars, &result.x);
+        SimdUtils::Divide3fScalar(&x, scalar, &result.x);
         return result;
     }
 
@@ -118,14 +116,12 @@ public:
     }
 
     Vector3& operator*=(float scalar) {
-        float scalars[4] = {scalar, scalar, scalar, 1.0f};
-        SimdUtils::Multiply3f(&x, scalars, &x);
+        SimdUtils::Multiply3fScalar(&x, scalar, &x);
         return *this;
     }
 
     Vector3& operator/=(float scalar) {
-        float scalars[4] = {scalar, scalar, scalar, 1.0f};
-        SimdUtils::Divide3f(&x, scalars, &x);
+        SimdUtils::Divide3fScalar(&x, scalar, &x);
         return *this;
     }
 
@@ -159,9 +155,10 @@ public:
     }
 
     Vector3& normalize() {
-        float len = length();
-        if (len > 0.0f) {
-            *this /= len;
+        float lenSq = lengthSquared();
+        if (lenSq > 0.0f) {
+            float invLen = 1.0f / std::sqrt(lenSq);
+            SimdUtils::Multiply3fScalar(&x, invLen, &x);
         }
         return *this;
     }
@@ -277,19 +274,15 @@ public:
 
     // Min/Max operations
     static Vector3 min(const Vector3& a, const Vector3& b) {
-        return Vector3(
-            std::min(a.x, b.x),
-            std::min(a.y, b.y),
-            std::min(a.z, b.z)
-        );
+        Vector3 result;
+        SimdUtils::Min4f(&a.x, &b.x, &result.x);
+        return result;
     }
 
     static Vector3 max(const Vector3& a, const Vector3& b) {
-        return Vector3(
-            std::max(a.x, b.x),
-            std::max(a.y, b.y),
-            std::max(a.z, b.z)
-        );
+        Vector3 result;
+        SimdUtils::Max4f(&a.x, &b.x, &result.x);
+        return result;
     }
 
     // Linear interpolation between vectors
