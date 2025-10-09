@@ -199,7 +199,8 @@ TEST(GeometryOpsTest, PlaneConstruction) {
 }
 
 TEST(GeometryOpsTest, PlaneOperations) {
-    Plane<float> plane(Vector3f(1.0f, 0.0f, 0.0f), 2.0f);
+    // Create a plane with normal (1,0,0) at x=2
+    Plane<float> plane(Vector3f(1.0f, 0.0f, 0.0f), -2.0f);
 
     // Test signed distance
     EXPECT_FLOAT_EQ(plane.signedDistance(Vector3f(4.0f, 0.0f, 0.0f)), 2.0f);

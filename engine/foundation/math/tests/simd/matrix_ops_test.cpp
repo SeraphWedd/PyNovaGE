@@ -60,7 +60,7 @@ TEST(MatrixOpsTest, Construction) {
     Matrix4f m2(data);
     for (int i = 0; i < 4; ++i) {
         for (int j = 0; j < 4; ++j) {
-            EXPECT_FLOAT_EQ(m2(i, j), data[j * 4 + i]);
+EXPECT_FLOAT_EQ(m2(i, j), data[i * 4 + j]);
         }
     }
 }

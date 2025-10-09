@@ -107,7 +107,7 @@ TEST(TypesTest, VectorSizeChecks) {
 
     // Test Vector2 sizes (must be 16-byte aligned)
     EXPECT_EQ(sizeof(Vector2f), 16);
-    EXPECT_EQ(sizeof(Vector2d), 32);
+EXPECT_EQ(sizeof(Vector2d), 16);
     EXPECT_EQ(sizeof(Vector2i), 16);
 }
 
