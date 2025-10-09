@@ -12,11 +12,12 @@ namespace SIMD {
     #elif defined(_M_ARM64)
         #define NOVA_ARM64
     #endif
-    
-    #if defined(__AVX2__)
+
+    // MSVC-specific SIMD feature detection
+    #if defined(__AVX2__) || (defined(_M_IX86_FP) && defined(__AVX2__))
         #define NOVA_AVX2_AVAILABLE
     #endif
-    #if defined(__AVX__)
+    #if defined(__AVX__) || (defined(_M_IX86_FP) && defined(__AVX__))
         #define NOVA_AVX_AVAILABLE
     #endif
     #if defined(_M_IX86_FP) && _M_IX86_FP >= 2
@@ -36,18 +37,11 @@ namespace SIMD {
         #define NOVA_ARM64
     #endif
     
-    #if defined(__AVX2__)
-        #define NOVA_AVX2_AVAILABLE
-    #endif
-    #if defined(__AVX__)
-        #define NOVA_AVX_AVAILABLE
-    #endif
-    #if defined(__SSE2__)
-        #define NOVA_SSE2_AVAILABLE
-    #endif
-    #if defined(__SSE4_1__)
-        #define NOVA_SSE4_1_AVAILABLE
-    #endif
+    // Force AVX2 and below since we set /arch:AVX2
+    #define NOVA_AVX2_AVAILABLE
+    #define NOVA_AVX_AVAILABLE
+    #define NOVA_SSE4_1_AVAILABLE
+    #define NOVA_SSE2_AVAILABLE
     #if defined(__ARM_NEON)
         #define NOVA_NEON_AVAILABLE
     #endif

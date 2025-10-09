@@ -37,11 +37,21 @@ public:
     Vector4 operator+(const Vector4& v) const {
         if constexpr (std::is_same_v<T, float>) {
             #if defined(NOVA_AVX2_AVAILABLE)
-            __m128 a = _mm_loadu_ps(data);
-            __m128 b = _mm_loadu_ps(v.data);
-            Vector4 result;
-            _mm_storeu_ps(result.data, _mm_add_ps(a, b));
-            return result;
+            // Use aligned load if the data is aligned
+            if (reinterpret_cast<std::uintptr_t>(data) % 16 == 0 && 
+                reinterpret_cast<std::uintptr_t>(v.data) % 16 == 0) {
+                __m128 a = _mm_load_ps(data);
+                __m128 b = _mm_load_ps(v.data);
+                Vector4 result;
+                _mm_store_ps(result.data, _mm_add_ps(a, b));
+                return result;
+            } else {
+                __m128 a = _mm_loadu_ps(data);
+                __m128 b = _mm_loadu_ps(v.data);
+                Vector4 result;
+                _mm_storeu_ps(result.data, _mm_add_ps(a, b));
+                return result;
+            }
             #else
             return Vector4(x + v.x, y + v.y, z + v.z, w + v.w);
             #endif
@@ -302,10 +312,33 @@ public:
     T dot(const Vector4& v) const {
         if constexpr (std::is_same_v<T, float>) {
             #if defined(NOVA_AVX2_AVAILABLE)
-            __m128 a = _mm_loadu_ps(data);
-            __m128 b = _mm_loadu_ps(v.data);
-            __m128 dp = _mm_dp_ps(a, b, 0xF1);
-            return _mm_cvtss_f32(dp);
+            if (reinterpret_cast<std::uintptr_t>(data) % 16 == 0 && 
+                reinterpret_cast<std::uintptr_t>(v.data) % 16 == 0) {
+                __m128 a = _mm_load_ps(data);
+                __m128 b = _mm_load_ps(v.data);
+                #if defined(NOVA_FMA3_AVAILABLE)
+                // Use FMA for more accurate dot product
+                __m128 mul = _mm_mul_ps(a, b);
+                __m128 sum = _mm_hadd_ps(mul, mul);
+                sum = _mm_hadd_ps(sum, sum);
+                return _mm_cvtss_f32(sum);
+                #else
+                __m128 dp = _mm_dp_ps(a, b, 0xF1);
+                return _mm_cvtss_f32(dp);
+                #endif
+            } else {
+                __m128 a = _mm_loadu_ps(data);
+                __m128 b = _mm_loadu_ps(v.data);
+                #if defined(NOVA_FMA3_AVAILABLE)
+                __m128 mul = _mm_mul_ps(a, b);
+                __m128 sum = _mm_hadd_ps(mul, mul);
+                sum = _mm_hadd_ps(sum, sum);
+                return _mm_cvtss_f32(sum);
+                #else
+                __m128 dp = _mm_dp_ps(a, b, 0xF1);
+                return _mm_cvtss_f32(dp);
+                #endif
+            }
             #else
             return x * v.x + y * v.y + z * v.z + w * v.w;
             #endif
@@ -316,17 +349,129 @@ public:
     
     T lengthSquared() const { return dot(*this); }
     
-    T length() const { return std::sqrt(lengthSquared()); }
+    T length() const {
+        if constexpr (std::is_same_v<T, float>) {
+            #if defined(NOVA_AVX2_AVAILABLE)
+            __m128 a = _mm_loadu_ps(data);
+            __m128 sq = _mm_mul_ps(a, a);
+            __m128 sum = _mm_hadd_ps(sq, sq);
+            sum = _mm_hadd_ps(sum, sum);
+            return _mm_cvtss_f32(_mm_sqrt_ps(sum));
+            #else
+            return std::sqrt(lengthSquared());
+            #endif
+        } else {
+            return std::sqrt(lengthSquared());
+        }
+    }
     
     Vector4 normalized() const {
-        T len = length();
-        return len > T(0) ? *this / len : *this;
+        if constexpr (std::is_same_v<T, float>) {
+            #if defined(NOVA_AVX2_AVAILABLE)
+            if (reinterpret_cast<std::uintptr_t>(data) % 16 == 0) {
+                __m128 v = _mm_load_ps(data);
+                __m128 sq = _mm_mul_ps(v, v);
+                #if defined(NOVA_FMA3_AVAILABLE)
+                __m128 sum = _mm_dp_ps(v, v, 0xF1); // More accurate dot product
+                #else
+                __m128 sum = _mm_hadd_ps(sq, sq);
+                sum = _mm_hadd_ps(sum, sum);
+                #endif
+                
+                // Check for zero length
+                if (_mm_cvtss_f32(sum) == 0.0f) return *this;
+                
+                // Fast reciprocal sqrt with refined Newton-Raphson iteration
+                __m128 approx = _mm_rsqrt_ps(sum);
+                __m128 half = _mm_set1_ps(0.5f);
+                __m128 three = _mm_set1_ps(3.0f);
+                
+                // Two iterations for better accuracy with large values
+                for (int i = 0; i < 2; ++i) {
+                    __m128 approxSq = _mm_mul_ps(approx, approx);
+                    #if defined(NOVA_FMA3_AVAILABLE)
+                    __m128 correction = _mm_fmsub_ps(sum, approxSq, three);
+                    #else
+                    __m128 correction = _mm_sub_ps(three, _mm_mul_ps(sum, approxSq));
+                    #endif
+                    approx = _mm_mul_ps(_mm_mul_ps(half, approx), correction);
+                }
+                
+                Vector4 result;
+                _mm_store_ps(result.data, _mm_mul_ps(v, approx));
+                return result;
+            } else {
+                __m128 v = _mm_loadu_ps(data);
+                __m128 sq = _mm_mul_ps(v, v);
+                #if defined(NOVA_FMA3_AVAILABLE)
+                __m128 sum = _mm_dp_ps(v, v, 0xF1);
+                #else
+                __m128 sum = _mm_hadd_ps(sq, sq);
+                sum = _mm_hadd_ps(sum, sum);
+                #endif
+                
+                if (_mm_cvtss_f32(sum) == 0.0f) return *this;
+                
+                __m128 approx = _mm_rsqrt_ps(sum);
+                __m128 half = _mm_set1_ps(0.5f);
+                __m128 three = _mm_set1_ps(3.0f);
+                
+                for (int i = 0; i < 2; ++i) {
+                    __m128 approxSq = _mm_mul_ps(approx, approx);
+                    #if defined(NOVA_FMA3_AVAILABLE)
+                    __m128 correction = _mm_fmsub_ps(sum, approxSq, three);
+                    #else
+                    __m128 correction = _mm_sub_ps(three, _mm_mul_ps(sum, approxSq));
+                    #endif
+                    approx = _mm_mul_ps(_mm_mul_ps(half, approx), correction);
+                }
+                
+                Vector4 result;
+                _mm_storeu_ps(result.data, _mm_mul_ps(v, approx));
+                return result;
+            }
+            #else
+            T len = length();
+            return len > T(0) ? *this / len : *this;
+            #endif
+        } else {
+            T len = length();
+            return len > T(0) ? *this / len : *this;
+        }
     }
     
     void normalize() {
-        T len = length();
-        if (len > T(0)) {
-            *this /= len;
+        if constexpr (std::is_same_v<T, float>) {
+            #if defined(NOVA_AVX2_AVAILABLE)
+            __m128 v = _mm_loadu_ps(data);
+            __m128 sq = _mm_mul_ps(v, v);
+            __m128 sum = _mm_hadd_ps(sq, sq);
+            sum = _mm_hadd_ps(sum, sum);
+            
+            // Check for zero length
+            if (_mm_cvtss_f32(sum) == 0.0f) return;
+            
+            // Fast reciprocal sqrt with one Newton-Raphson iteration for better accuracy
+            __m128 rsqrt = _mm_rsqrt_ps(sum);
+            __m128 half = _mm_set1_ps(0.5f);
+            __m128 one_point_five = _mm_set1_ps(1.5f);
+            __m128 rsqrtSq = _mm_mul_ps(rsqrt, rsqrt);
+            __m128 correction = _mm_mul_ps(sum, rsqrtSq);
+            correction = _mm_sub_ps(one_point_five, _mm_mul_ps(half, correction));
+            rsqrt = _mm_mul_ps(rsqrt, correction);
+            
+            _mm_storeu_ps(data, _mm_mul_ps(v, rsqrt));
+            #else
+            T len = length();
+            if (len > T(0)) {
+                *this /= len;
+            }
+            #endif
+        } else {
+            T len = length();
+            if (len > T(0)) {
+                *this /= len;
+            }
         }
     }
 
