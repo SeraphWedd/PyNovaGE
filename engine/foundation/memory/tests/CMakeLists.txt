@@ -1,6 +1,4 @@
 # Memory Tests
-find_package(GTest REQUIRED)
-
 set(MEMORY_TEST_SOURCES
     test_allocator.cpp
     test_memory_pool.cpp
@@ -12,8 +10,8 @@ add_executable(memory_tests ${MEMORY_TEST_SOURCES})
 
 target_link_libraries(memory_tests
     memory
-    GTest::gtest
-    GTest::gtest_main
+    gtest
+    gtest_main
 )
 
 target_include_directories(memory_tests PRIVATE

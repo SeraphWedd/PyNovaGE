@@ -5,6 +5,10 @@
 #include <new>
 #include <type_traits>
 
+#ifdef _WIN32
+    #include <malloc.h>
+#endif
+
 namespace PyNovaGE {
 
 /**
@@ -46,8 +50,14 @@ public:
         
         // Allocate buffer aligned for both T and pointers
         constexpr size_t alignment = std::max(alignof(T), alignof(void*));
+        
+#ifdef _WIN32
+        buffer_ = reinterpret_cast<Block*>(
+            _aligned_malloc(sizeof(Block) * pool_size_, alignment));
+#else
         buffer_ = reinterpret_cast<Block*>(
             std::aligned_alloc(alignment, sizeof(Block) * pool_size_));
+#endif
         
         if (!buffer_) {
             throw std::bad_alloc();
@@ -59,7 +69,12 @@ public:
     ~ObjectPool() {
         // Ensure all objects are destroyed
         clear();
+        
+#ifdef _WIN32
+        _aligned_free(buffer_);
+#else
         std::free(buffer_);
+#endif
     }
 
     // Non-copyable

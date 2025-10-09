@@ -19,10 +19,12 @@ TEST(StackAllocatorTest, Markers) {
     StackAllocator allocator(4096);
     
     void* ptr1 = allocator.allocate(1024);
+    (void)ptr1; // Suppress unused variable warning
     size_t marker = allocator.pushMarker();
     EXPECT_NE(marker, SIZE_MAX);
     
     void* ptr2 = allocator.allocate(512);
+    (void)ptr2; // Suppress unused variable warning
     size_t usage_before_pop = allocator.getCurrentUsage();
     
     allocator.popToMarker(marker);

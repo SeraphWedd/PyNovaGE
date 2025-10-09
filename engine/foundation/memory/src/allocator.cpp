@@ -47,10 +47,11 @@ LinearAllocator::LinearAllocator(size_t buffer_size)
     , total_allocated_(0)
     , peak_allocated_(0) {
     
+    // Allocate with larger alignment to support higher alignment requests
 #ifdef _WIN32
-    buffer_ = static_cast<uint8_t*>(_aligned_malloc(buffer_size_, 16));
+    buffer_ = static_cast<uint8_t*>(_aligned_malloc(buffer_size_, 64));
 #else
-    buffer_ = static_cast<uint8_t*>(std::aligned_alloc(16, buffer_size_));
+    buffer_ = static_cast<uint8_t*>(std::aligned_alloc(64, buffer_size_));
 #endif
 
     if (!buffer_) {

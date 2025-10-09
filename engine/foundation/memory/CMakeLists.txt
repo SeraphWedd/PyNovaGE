@@ -29,11 +29,11 @@ else()
 endif()
 
 # Tests
-if(BUILD_TESTS)
+if(PYNOVAGE_BUILD_TESTS)
     add_subdirectory(tests)
 endif()
 
 # Benchmarks
-if(BUILD_BENCHMARKS)
+if(PYNOVAGE_BUILD_BENCHMARKS)
     add_subdirectory(benchmarks)
 endif()
