@@ -211,25 +211,78 @@ static void BM_ParticleSystem_Scalar(benchmark::State& state) {
 }
 BENCHMARK(BM_ParticleSystem_Scalar);
 
+// Structure of Arrays for ray data
+struct RaySOA {
+    std::vector<float, AlignedAllocator<float>> x, y, z, w;
+    
+    RaySOA(size_t count) : 
+        x(count), y(count), z(count), w(count) {}
+};
+
 // Ray Direction Normalization (Dot Product)
 static void BM_RayNormalization_SIMD(benchmark::State& state) {
-    // Setup a batch of ray directions
-    std::vector<Vector<float, 4>> directions;
-    directions.reserve(VERTEX_BATCH_SIZE);
+    // Setup ray data using SoA layout
+    RaySOA directions(VERTEX_BATCH_SIZE);
+    RaySOA normalized(VERTEX_BATCH_SIZE);
     
     // Initialize random directions
     for (size_t i = 0; i < VERTEX_BATCH_SIZE; ++i) {
-        directions.push_back(generateRandomVector4());
+        auto dir = generateRandomVector4();
+        directions.x[i] = dir[0];
+        directions.y[i] = dir[1];
+        directions.z[i] = dir[2];
+        directions.w[i] = dir[3];
     }
     
+    const size_t CHUNK_SIZE = 256;  // Process rays in larger chunks
+    
     for (auto _ : state) {
-        // Normalize all directions using dot product
-        for (auto& dir : directions) {
-            float lenSq = dot(dir, dir);
-            float invLen = 1.0f / std::sqrt(lenSq);
-            dir = dir * invLen;
+        // Process rays in chunks for better cache utilization
+        for (size_t i = 0; i < VERTEX_BATCH_SIZE; i += CHUNK_SIZE) {
+            size_t end = std::min(i + CHUNK_SIZE, VERTEX_BATCH_SIZE);
+            for (size_t j = i; j < end; j += 8) {  // Process 8 rays at a time with AVX
+                // Load ray components
+                __m256 rx = _mm256_load_ps(&directions.x[j]);
+                __m256 ry = _mm256_load_ps(&directions.y[j]);
+                __m256 rz = _mm256_load_ps(&directions.z[j]);
+                
+                // Calculate length squared (rx*rx + ry*ry + rz*rz)
+                __m256 lenSq = _mm256_mul_ps(rx, rx);
+                lenSq = _mm256_fmadd_ps(ry, ry, lenSq);  // FMA for better performance
+                lenSq = _mm256_fmadd_ps(rz, rz, lenSq);
+                
+                // Calculate inverse length using fast reciprocal sqrt
+                __m256 invLen = _mm256_rsqrt_ps(lenSq);
+                
+                // One Newton-Raphson iteration to improve accuracy
+                // invLen = invLen * (1.5f - 0.5f * lenSq * invLen * invLen)
+                __m256 half = _mm256_set1_ps(0.5f);
+                __m256 three_halves = _mm256_set1_ps(1.5f);
+                __m256 invLenSq = _mm256_mul_ps(invLen, invLen);
+                __m256 correction = _mm256_mul_ps(lenSq, invLenSq);
+                correction = _mm256_mul_ps(half, correction);
+                correction = _mm256_sub_ps(three_halves, correction);
+                invLen = _mm256_mul_ps(invLen, correction);
+                
+                // Normalize the components
+                rx = _mm256_mul_ps(rx, invLen);
+                ry = _mm256_mul_ps(ry, invLen);
+                rz = _mm256_mul_ps(rz, invLen);
+                
+                // Store normalized results
+                _mm256_store_ps(&normalized.x[j], rx);
+                _mm256_store_ps(&normalized.y[j], ry);
+                _mm256_store_ps(&normalized.z[j], rz);
+                _mm256_store_ps(&normalized.w[j], _mm256_set1_ps(1.0f));
+            }
         }
-        benchmark::DoNotOptimize(directions);
+        std::swap(directions.x, normalized.x);
+        std::swap(directions.y, normalized.y);
+        std::swap(directions.z, normalized.z);
+        std::swap(directions.w, normalized.w);
+        
+        benchmark::DoNotOptimize(directions.x[0]);
+        benchmark::DoNotOptimize(directions.x[VERTEX_BATCH_SIZE-1]);
     }
     
     state.SetItemsProcessed(state.iterations() * VERTEX_BATCH_SIZE);

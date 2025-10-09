@@ -119,18 +119,29 @@ inline Vector<T, N> normalize(const Vector<T, N>& v) {
     
     #if defined(NOVA_AVX2_AVAILABLE)
     if constexpr (N == 4 && std::is_same_v<T, float>) {
-        // AVX2 path: Use FMA for better performance
-        auto vv = _mm256_castps128_ps256(_mm_loadu_ps(v.data()));
-        auto sq = _mm256_mul_ps(vv, vv);
-        auto sum = _mm256_hadd_ps(sq, sq);
-        sum = _mm256_hadd_ps(sum, sum);
+        // Load vector and compute dot product more efficiently
+        auto vv = _mm_loadu_ps(v.data());
+        auto sq = _mm_mul_ps(vv, vv);
+        auto sum = _mm_add_ps(_mm_movehl_ps(sq, sq), sq);
+        sum = _mm_add_ss(_mm_shuffle_ps(sum, sum, 1), sum);
         
-        if (_mm256_cvtss_f32(sum) == 0.0f) return v;
+        if (_mm_cvtss_f32(sum) == 0.0f) return v;
         
-        auto len_sq = _mm256_broadcastss_ps(_mm256_castps256_ps128(sum));
-        auto rsqrt = _mm256_rsqrt_ps(len_sq);
-        _mm_storeu_ps(result.data(),
-                    _mm256_castps256_ps128(_mm256_mul_ps(vv, rsqrt)));
+        // Broadcast length squared to all elements
+        auto len_sq = _mm_shuffle_ps(sum, sum, 0);
+        
+        // Fast reciprocal square root
+        auto rsqrt = _mm_rsqrt_ps(len_sq);
+        
+        // One Newton-Raphson iteration for better accuracy
+        auto half = _mm_set1_ps(0.5f);
+        auto three = _mm_set1_ps(3.0f);
+        auto rsqrtSq = _mm_mul_ps(rsqrt, rsqrt);
+        auto correction = _mm_mul_ps(len_sq, rsqrtSq);
+        correction = _mm_sub_ps(three, _mm_mul_ps(half, correction));
+        rsqrt = _mm_mul_ps(rsqrt, correction);
+        
+        _mm_storeu_ps(result.data(), _mm_mul_ps(vv, rsqrt));
         return result;
     }
     #elif defined(NOVA_SSE4_1_AVAILABLE)
