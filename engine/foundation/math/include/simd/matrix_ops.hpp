@@ -70,55 +70,7 @@ template<typename T>
 inline Matrix<T, 4> operator*(const Matrix<T, 4>& a, const Matrix<T, 4>& b) {
     Matrix<T, 4> result;
     
-    #if defined(NOVA_AVX2_AVAILABLE) || defined(NOVA_AVX_AVAILABLE)
-    if constexpr (std::is_same_v<T, float>) {
-        for (int i = 0; i < 4; ++i) {
-            __m256 row = _mm256_load_ps(&a.data()[i * 4]);
-            for (int j = 0; j < 4; ++j) {
-                __m256 bCol = _mm256_set_ps(
-                    b(3, j), b(2, j), b(1, j), b(0, j),
-                    b(3, j), b(2, j), b(1, j), b(0, j)
-                );
-                __m256 prod = _mm256_mul_ps(row, bCol);
-                __m256 sum = _mm256_hadd_ps(prod, prod);
-                sum = _mm256_hadd_ps(sum, sum);
-                result(i, j) = _mm256_cvtss_f32(sum);
-            }
-        }
-        return result;
-    }
-    #elif defined(NOVA_SSE2_AVAILABLE)
-    if constexpr (std::is_same_v<T, float>) {
-        for (int i = 0; i < 4; ++i) {
-            __m128 row = _mm_load_ps(&a.data()[i * 4]);
-            for (int j = 0; j < 4; ++j) {
-                __m128 bCol = _mm_set_ps(
-                    b(3, j), b(2, j), b(1, j), b(0, j)
-                );
-                __m128 prod = _mm_mul_ps(row, bCol);
-                __m128 sum = _mm_hadd_ps(prod, prod);
-                sum = _mm_hadd_ps(sum, sum);
-                result(i, j) = _mm_cvtss_f32(sum);
-            }
-        }
-        return result;
-    }
-    #elif defined(NOVA_NEON_AVAILABLE)
-    if constexpr (std::is_same_v<T, float>) {
-        for (int i = 0; i < 4; ++i) {
-            float32x4_t row = vld1q_f32(&a.data()[i * 4]);
-            for (int j = 0; j < 4; ++j) {
-                float32x4_t bCol = {b(0, j), b(1, j), b(2, j), b(3, j)};
-                float32x4_t prod = vmulq_f32(row, bCol);
-                float32x2_t sum = vadd_f32(vget_low_f32(prod), vget_high_f32(prod));
-                result(i, j) = vget_lane_f32(vpadd_f32(sum, sum), 0);
-            }
-        }
-        return result;
-    }
-    #endif
-
-    // Fallback implementation for other sizes or types
+    // Column-major order multiplication
     for (size_t i = 0; i < 4; ++i) {
         for (size_t j = 0; j < 4; ++j) {
             T sum = T(0);
@@ -136,44 +88,7 @@ template<typename T>
 inline Vector<T, 4> operator*(const Matrix<T, 4>& m, const Vector<T, 4>& v) {
     Vector<T, 4> result;
     
-    #if defined(NOVA_AVX2_AVAILABLE) || defined(NOVA_AVX_AVAILABLE)
-    if constexpr (std::is_same_v<T, float>) {
-        __m256 vec = _mm256_broadcast_ps(reinterpret_cast<const __m128*>(v.data()));
-        for (int i = 0; i < 4; ++i) {
-            __m256 row = _mm256_load_ps(&m.data()[i * 4]);
-            __m256 prod = _mm256_mul_ps(row, vec);
-            __m256 sum = _mm256_hadd_ps(prod, prod);
-            sum = _mm256_hadd_ps(sum, sum);
-            result[i] = _mm256_cvtss_f32(sum);
-        }
-        return result;
-    }
-    #elif defined(NOVA_SSE2_AVAILABLE)
-    if constexpr (std::is_same_v<T, float>) {
-        __m128 vec = _mm_load_ps(v.data());
-        for (int i = 0; i < 4; ++i) {
-            __m128 row = _mm_load_ps(&m.data()[i * 4]);
-            __m128 prod = _mm_mul_ps(row, vec);
-            __m128 sum = _mm_hadd_ps(prod, prod);
-            sum = _mm_hadd_ps(sum, sum);
-            result[i] = _mm_cvtss_f32(sum);
-        }
-        return result;
-    }
-    #elif defined(NOVA_NEON_AVAILABLE)
-    if constexpr (std::is_same_v<T, float>) {
-        float32x4_t vec = vld1q_f32(v.data());
-        for (int i = 0; i < 4; ++i) {
-            float32x4_t row = vld1q_f32(&m.data()[i * 4]);
-            float32x4_t prod = vmulq_f32(row, vec);
-            float32x2_t sum = vadd_f32(vget_low_f32(prod), vget_high_f32(prod));
-            result[i] = vget_lane_f32(vpadd_f32(sum, sum), 0);
-        }
-        return result;
-    }
-    #endif
-
-    // Fallback implementation
+    // Column-major order matrix-vector multiplication
     for (size_t i = 0; i < 4; ++i) {
         T sum = T(0);
         for (size_t j = 0; j < 4; ++j) {

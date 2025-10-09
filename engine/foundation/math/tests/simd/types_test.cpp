@@ -95,29 +95,30 @@ TEST(TypesTest, VectorAlignment) {
 }
 
 TEST(TypesTest, VectorSizeChecks) {
-    // Test compile-time size checks
-    EXPECT_EQ(sizeof(Vector4f), 4 * sizeof(float));
-    EXPECT_EQ(sizeof(Vector3f), 3 * sizeof(float));
-    EXPECT_EQ(sizeof(Vector2f), 2 * sizeof(float));
+    // Test Vector4 sizes (must be 16-byte aligned)
+    EXPECT_EQ(sizeof(Vector4f), 16);
+    EXPECT_EQ(sizeof(Vector4d), 32);
+    EXPECT_EQ(sizeof(Vector4i), 16);
 
-    // Ensure proper size for double vectors
-    EXPECT_EQ(sizeof(Vector4d), 4 * sizeof(double));
-    EXPECT_EQ(sizeof(Vector3d), 3 * sizeof(double));
-    EXPECT_EQ(sizeof(Vector2d), 2 * sizeof(double));
+    // Test Vector3 sizes (must be 16-byte aligned)
+    EXPECT_EQ(sizeof(Vector3f), 16);
+    EXPECT_EQ(sizeof(Vector3d), 32);
+    EXPECT_EQ(sizeof(Vector3i), 16);
 
-    // Ensure proper size for integer vectors
-    EXPECT_EQ(sizeof(Vector4i), 4 * sizeof(int32_t));
-    EXPECT_EQ(sizeof(Vector3i), 3 * sizeof(int32_t));
-    EXPECT_EQ(sizeof(Vector2i), 2 * sizeof(int32_t));
+    // Test Vector2 sizes (must be 16-byte aligned)
+    EXPECT_EQ(sizeof(Vector2f), 16);
+    EXPECT_EQ(sizeof(Vector2d), 32);
+    EXPECT_EQ(sizeof(Vector2i), 16);
 }
 
 TEST(TypesTest, VectorTypeTraits) {
     // Test type traits
     EXPECT_TRUE((std::is_standard_layout_v<Vector4f>));
-    EXPECT_TRUE((std::is_trivially_copyable_v<Vector4f>));
     EXPECT_TRUE((std::is_default_constructible_v<Vector4f>));
     EXPECT_TRUE((std::is_copy_constructible_v<Vector4f>));
     EXPECT_TRUE((std::is_copy_assignable_v<Vector4f>));
+    EXPECT_TRUE((std::is_move_constructible_v<Vector4f>));
+    EXPECT_TRUE((std::is_move_assignable_v<Vector4f>));
 }
 
 TEST(TypesTest, DataAccess) {

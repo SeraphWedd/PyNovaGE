@@ -199,13 +199,13 @@ public:
 
     constexpr Plane() : normal(T(0), T(1), T(0)), distance(T(0)) {}
     constexpr Plane(const Vector<T, 3>& normal_, T distance_)
-        : normal(normalize(normal_)), distance(distance_) {}
+        : normal(normalize(normal_)), distance(-distance_) {}
     constexpr Plane(const Vector<T, 3>& normal_, const Vector<T, 3>& point)
-        : normal(normalize(normal_)), distance(-dot(normal_, point)) {}
+        : normal(normalize(normal_)), distance(-dot(normalize(normal_), point)) {}
 
     // Get signed distance from point to plane
     T signedDistance(const Vector<T, 3>& point) const {
-        return dot(normal, point) + distance;
+        return -(dot(normal, point) + distance);
     }
 
     // Check which side of the plane a point is on
