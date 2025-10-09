@@ -25,6 +25,13 @@ inline Vector<T, N> operator+(const Vector<T, N>& a, const Vector<T, N>& b) {
         auto vb = _mm_loadu_ps(b.data());
         _mm_storeu_ps(result.data(), _mm_add_ps(va, vb));
         return result;
+    } else if constexpr (N == 2 && std::is_same_v<T, float>) {
+        // Use unaligned loads/stores safely
+        __m128 va = _mm_castpd_ps(_mm_loadu_pd(reinterpret_cast<const double*>(a.data())));
+        __m128 vb = _mm_castpd_ps(_mm_loadu_pd(reinterpret_cast<const double*>(b.data())));
+        __m128 sum = _mm_add_ps(va, vb);
+        _mm_storeu_pd(reinterpret_cast<double*>(result.data()), _mm_castps_pd(sum));
+        return result;
     }
     #elif defined(NOVA_NEON_AVAILABLE)
     if constexpr (N == 4 && std::is_same_v<T, float>) {
@@ -51,6 +58,12 @@ inline Vector<T, N> operator-(const Vector<T, N>& a, const Vector<T, N>& b) {
         auto va = _mm_loadu_ps(a.data());
         auto vb = _mm_loadu_ps(b.data());
         _mm_storeu_ps(result.data(), _mm_sub_ps(va, vb));
+        return result;
+    } else if constexpr (N == 2 && std::is_same_v<T, float>) {
+        __m128 va = _mm_castpd_ps(_mm_loadu_pd(reinterpret_cast<const double*>(a.data())));
+        __m128 vb = _mm_castpd_ps(_mm_loadu_pd(reinterpret_cast<const double*>(b.data())));
+        __m128 diff = _mm_sub_ps(va, vb);
+        _mm_storeu_pd(reinterpret_cast<double*>(result.data()), _mm_castps_pd(diff));
         return result;
     }
     #elif defined(NOVA_NEON_AVAILABLE)
@@ -83,6 +96,12 @@ inline T dot(const Vector<T, N>& a, const Vector<T, N>& b) {
         shuf = _mm_movehl_ps(shuf, sums);        // High half -> low half
         sums = _mm_add_ss(sums, shuf);           // Add last pair
         return _mm_cvtss_f32(sums);
+    } else if constexpr (N == 2 && std::is_same_v<T, float>) {
+        __m128 va = _mm_castpd_ps(_mm_loadu_pd(reinterpret_cast<const double*>(a.data())));
+        __m128 vb = _mm_castpd_ps(_mm_loadu_pd(reinterpret_cast<const double*>(b.data())));
+        __m128 mul = _mm_mul_ps(va, vb);
+        __m128 sum = _mm_add_ss(mul, _mm_shuffle_ps(mul, mul, 1));
+        return _mm_cvtss_f32(sum);
     }
     #elif defined(NOVA_NEON_AVAILABLE)
     if constexpr (N == 4 && std::is_same_v<T, float>) {
@@ -169,6 +188,17 @@ inline Vector<T, N> normalize(const Vector<T, N>& v) {
         auto len_sq = _mm_shuffle_ps(sum, sum, 0);
         auto rsqrt = _mm_rsqrt_ps(len_sq);
         _mm_storeu_ps(result.data(), _mm_mul_ps(vv, rsqrt));
+        return result;
+    } else if constexpr (N == 2 && std::is_same_v<T, float>) {
+        // SSE2 path for Vector2 with unaligned loads/stores
+        __m128 vv = _mm_castpd_ps(_mm_loadu_pd(reinterpret_cast<const double*>(v.data())));
+        __m128 sq = _mm_mul_ps(vv, vv);
+        __m128 shuf = _mm_shuffle_ps(sq, sq, 1);
+        __m128 sum = _mm_add_ss(sq, shuf);
+        if (_mm_cvtss_f32(sum) == 0.0f) return v;
+        __m128 len_sq = _mm_shuffle_ps(sum, sum, 0);
+        __m128 rsqrt = _mm_rsqrt_ps(len_sq);
+        _mm_storeu_pd(reinterpret_cast<double*>(result.data()), _mm_castps_pd(_mm_mul_ps(vv, rsqrt)));
         return result;
     }
     #endif
