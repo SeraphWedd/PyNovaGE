@@ -1,70 +1,29 @@
-# Build directories and outputs
+# Build
 build/
 out/
-Debug/
-Release/
-x64/
-Win32/
+bin/
+lib/
 
-# IDE specific files
+# IDE
 .vs/
 .vscode/
 .idea/
-*.swp
-*.swo
-*.user
-*.vcxproj
-*.vcxproj.filters
 *.sln
-
-# Compiled files
-## Object files
-*.slo
-*.lo
-*.o
-*.obj
-
-## Dynamic libraries
-*.dll
-*.so
-*.dylib
-
-## Static libraries
-*.lib
-*.lai
-*.la
-*.a
-
-## Executables
-*.exe
-
-## Debug info
-*.pdb
-*.ilk
-
-## Precompiled headers
-*.gch
-*.pch
-
-# CMake files
-CMakeFiles/
-CMakeScripts/
-CMakeCache.txt
-Makefile
-cmake_install.cmake
-install_manifest.txt
-compile_commands.json
-CTestTestfile.cmake
-Testing/
+*.vcxproj*
+cmake-build-*/
 
 # Python
 __pycache__/
 *.py[cod]
-*$py.class
-.Python
-venv/
-ENV/
+*.so
+*.egg*
 
-# Platform-specific
+# CMake
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+compile_commands.json
+
+# OS
 .DS_Store
-Thumb.db
+Thumbs.db
