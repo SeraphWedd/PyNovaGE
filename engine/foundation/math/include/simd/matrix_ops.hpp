@@ -50,11 +50,11 @@ public:
     
     // Access operators
     constexpr T& operator()(size_t row, size_t col) {
-        return data_[col * N + row];
+        return data_[row * N + col];
     }
     
     constexpr const T& operator()(size_t row, size_t col) const {
-        return data_[col * N + row];
+        return data_[row * N + col];
     }
     
     // Raw data access

@@ -69,7 +69,7 @@ public:
     constexpr Vector() : data_{} {}
 
     // Scalar constructor
-    explicit constexpr Vector(T scalar) {
+    explicit constexpr Vector(T scalar) : data_{} {
         for (size_t i = 0; i < N; ++i) {
             data_[i] = scalar;
         }
@@ -79,19 +79,6 @@ public:
     template<typename... Args>
     constexpr Vector(Args... args) : data_{static_cast<T>(args)...} {
         static_assert(sizeof...(Args) == N, "Number of arguments must match vector size");
-    }
-
-    // Copy constructor
-    constexpr Vector(const Vector& other) {
-        std::memcpy(data_, other.data_, sizeof(data_));
-    }
-
-    // Assignment operator
-    constexpr Vector& operator=(const Vector& other) {
-        if (this != &other) {
-            std::memcpy(data_, other.data_, sizeof(data_));
-        }
-        return *this;
     }
 
     // Array subscript operator
