@@ -175,26 +175,32 @@ public:
      * @brief Matrix multiplication operator for Matrix4 * Matrix4
      */
     friend Matrix4 operator*(const Matrix4& lhs, const Matrix4& rhs) {
-        Matrix4 result;
-        SimdUtils::MultiplyMatrix4x4(
-            reinterpret_cast<const float*>(lhs.m),
-            reinterpret_cast<const float*>(rhs.m),
-            reinterpret_cast<float*>(result.m)
-        );
-        return result;
+        Matrix4 temp;
+        for(int i = 0; i < 4; i++) {
+            for(int j = 0; j < 4; j++) {
+                temp.m[i][j] = 0.0f;
+                for(int k = 0; k < 4; k++) {
+                    temp.m[i][j] += lhs.m[i][k] * rhs.m[k][j];
+                }
+            }
+        }
+        return temp;
     }
 
     /**
      * @brief Matrix-vector multiplication operator
      */
     Vector4 operator*(const Vector4& v) const {
-        Vector4 result;
-        SimdUtils::MultiplyMatrix4x4Vec4(
-            reinterpret_cast<const float*>(m),
-            reinterpret_cast<const float*>(&v),
-            reinterpret_cast<float*>(&result)
-        );
-        return result;
+        Vector4 temp;
+        // Perform matrix-vector multiplication manually to ensure correct order
+        for(int i = 0; i < 4; i++) {
+            float sum = 0.0f;
+            for(int j = 0; j < 4; j++) {
+                sum += m[i][j] * v[j];
+            }
+            temp[i] = sum;
+        }
+        return temp;
     }
 
     /**
@@ -290,19 +296,23 @@ public:
      * @param up Up vector
      */
     static Matrix4 lookAt(const Vector3& eye, const Vector3& target, const Vector3& up) {
-        Vector3 zaxis = (target - eye).normalized();  // Forward
-        Vector3 xaxis = up.cross(zaxis).normalized(); // Right
-        Vector3 yaxis = zaxis.cross(xaxis);          // Up
+        Vector3 forward = (target - eye).normalized();  // Forward
+        Vector3 right = up.cross(forward).normalized(); // Right
+        Vector3 newUp = forward.cross(right);          // Up
 
+        // Create rotation matrix (row-major)
         Matrix4 rotation(
-            xaxis.x, xaxis.y, xaxis.z, 0.0f,
-            yaxis.x, yaxis.y, yaxis.z, 0.0f,
-            zaxis.x, zaxis.y, zaxis.z, 0.0f,
-            0.0f,    0.0f,    0.0f,    1.0f
+            right.x,   right.y,   right.z,   0.0f,
+            newUp.x,   newUp.y,   newUp.z,   0.0f,
+            forward.x, forward.y, forward.z, 0.0f,
+            0.0f,      0.0f,      0.0f,      1.0f
         );
 
-        Matrix4 translate = Matrix4::translation(-eye.x, -eye.y, -eye.z);
-        return rotation * translate;
+        // Create translation matrix
+        Matrix4 translation = Matrix4::translation(-eye.x, -eye.y, -eye.z);
+
+        // Combine rotation and translation
+        return rotation * translation;
     }
 
     /**
@@ -319,10 +329,10 @@ public:
         float nf = 1.0f / (near - far);
 
         return Matrix4(
-            f/aspect,   0.0f,       0.0f,                         0.0f,
-            0.0f,       f,          0.0f,                         0.0f,
-            0.0f,       0.0f,       (far+near)*nf,                (2.0f*far*near)*nf,
-            0.0f,       0.0f,       -1.0f,                        0.0f
+            f/aspect,   0.0f,       0.0f,                      0.0f,
+            0.0f,       f,          0.0f,                      0.0f,
+            0.0f,       0.0f,       (far+near)*nf,             2.0f*far*near*nf,
+            0.0f,       0.0f,       -1.0f,                     0.0f
         );
     }
 
@@ -471,7 +481,8 @@ public:
      * @brief Extracts the scale components from the matrix
      */
     Vector3 extractScale() const {
-        // Scale is the length of the basis column vectors
+        // Scale is length of basis vectors
+        // For row-major matrices, the scale components are in each column
         return Vector3(
             Vector3(m[0][0], m[1][0], m[2][0]).length(),
             Vector3(m[0][1], m[1][1], m[2][1]).length(),
@@ -537,50 +548,47 @@ public:
         Vector3 scale = extractScale();
         Matrix4 rotationOnly = *this;
 
-        // Remove scale by normalizing columns
-        rotationOnly[0][0] /= scale.x; rotationOnly[1][0] /= scale.x; rotationOnly[2][0] /= scale.x;
-        rotationOnly[0][1] /= scale.y; rotationOnly[1][1] /= scale.y; rotationOnly[2][1] /= scale.y;
-        rotationOnly[0][2] /= scale.z; rotationOnly[1][2] /= scale.z; rotationOnly[2][2] /= scale.z;
+        // Remove scale by normalizing each column
+        for (int j = 0; j < 3; j++) {
+            float scaleFactor = (j == 0) ? scale.x : ((j == 1) ? scale.y : scale.z);
+            for (int i = 0; i < 3; i++) {
+                rotationOnly.m[i][j] /= scaleFactor;
+            }
+        }
 
-        float trace = rotationOnly[0][0] + rotationOnly[1][1] + rotationOnly[2][2];
+        float trace = rotationOnly.m[0][0] + rotationOnly.m[1][1] + rotationOnly.m[2][2];
         
         if (trace > 0.0f) {
-            float s = std::sqrt(trace + 1.0f) * 2.0f;
-            float invS = 1.0f / s;
+            float s = std::sqrt(trace + 1.0f);
+            float invS = 0.5f / s;
             return Quaternion(
-                s * 0.25f,
-                (rotationOnly[2][1] - rotationOnly[1][2]) * invS,
-                (rotationOnly[0][2] - rotationOnly[2][0]) * invS,
-                (rotationOnly[1][0] - rotationOnly[0][1]) * invS
-            );
-        } else if (rotationOnly[0][0] > rotationOnly[1][1] && rotationOnly[0][0] > rotationOnly[2][2]) {
-            float s = std::sqrt(1.0f + rotationOnly[0][0] - rotationOnly[1][1] - rotationOnly[2][2]) * 2.0f;
-            float invS = 1.0f / s;
-            return Quaternion(
-                (rotationOnly[2][1] - rotationOnly[1][2]) * invS,
-                s * 0.25f,
-                (rotationOnly[0][1] + rotationOnly[1][0]) * invS,
-                (rotationOnly[0][2] + rotationOnly[2][0]) * invS
-            );
-        } else if (rotationOnly[1][1] > rotationOnly[2][2]) {
-            float s = std::sqrt(1.0f + rotationOnly[1][1] - rotationOnly[0][0] - rotationOnly[2][2]) * 2.0f;
-            float invS = 1.0f / s;
-            return Quaternion(
-                (rotationOnly[0][2] - rotationOnly[2][0]) * invS,
-                (rotationOnly[0][1] + rotationOnly[1][0]) * invS,
-                s * 0.25f,
-                (rotationOnly[1][2] + rotationOnly[2][1]) * invS
-            );
-        } else {
-            float s = std::sqrt(1.0f + rotationOnly[2][2] - rotationOnly[0][0] - rotationOnly[1][1]) * 2.0f;
-            float invS = 1.0f / s;
-            return Quaternion(
-                (rotationOnly[1][0] - rotationOnly[0][1]) * invS,
-                (rotationOnly[0][2] + rotationOnly[2][0]) * invS,
-                (rotationOnly[1][2] + rotationOnly[2][1]) * invS,
-                s * 0.25f
+                0.5f * s,
+                (rotationOnly.m[2][1] - rotationOnly.m[1][2]) * invS,
+                (rotationOnly.m[0][2] - rotationOnly.m[2][0]) * invS,
+                (rotationOnly.m[1][0] - rotationOnly.m[0][1]) * invS
             );
         }
+        
+        // Find the largest diagonal element and use it as the basis for decomposition
+        int i = 0;
+        if (rotationOnly.m[1][1] > rotationOnly.m[0][0]) i = 1;
+        if (rotationOnly.m[2][2] > rotationOnly.m[i][i]) i = 2;
+        
+        int j = (i + 1) % 3;
+        int k = (j + 1) % 3;
+        
+        float s = std::sqrt(rotationOnly.m[i][i] - rotationOnly.m[j][j] - rotationOnly.m[k][k] + 1.0f);
+        float invS = 0.5f / s;
+        
+        Quaternion q;
+        q.w = (rotationOnly.m[k][j] - rotationOnly.m[j][k]) * invS;
+        float qv[3];
+        qv[i] = 0.5f * s;
+        qv[j] = (rotationOnly.m[j][i] + rotationOnly.m[i][j]) * invS;
+        qv[k] = (rotationOnly.m[k][i] + rotationOnly.m[i][k]) * invS;
+        q.x = qv[0]; q.y = qv[1]; q.z = qv[2];
+        
+        return q.Normalized();
     }
 
     /**
@@ -608,7 +616,7 @@ public:
      * @brief Performs linear interpolation between two matrices
      */
     static Matrix4 lerp(const Matrix4& a, const Matrix4& b, float t) {
-        // Extract components
+        // Extract components from both matrices
         Vector3 transA = a.extractTranslation();
         Vector3 scaleA = a.extractScale();
         Quaternion rotA = a.extractRotation();
@@ -622,16 +630,22 @@ public:
         Vector3 scale = Vector3::lerp(scaleA, scaleB, t);
         Quaternion rot = Quaternion::Slerp(rotA, rotB, t);
 
-        // Rebuild matrix: apply scale to basis columns
-        Matrix4 result = fromQuaternion(rot);
-        result[0][0] *= scale.x; result[1][0] *= scale.x; result[2][0] *= scale.x;
-        result[0][1] *= scale.y; result[1][1] *= scale.y; result[2][1] *= scale.y;
-        result[0][2] *= scale.z; result[1][2] *= scale.z; result[2][2] *= scale.z;
-        result[0][3] = trans.x;
-        result[1][3] = trans.y;
-        result[2][3] = trans.z;
+        // Create rotation matrix
+        Matrix4 rotMatrix = fromQuaternion(rot);
 
-        return result;
+        // Apply scale to rotated basis vectors
+        for (int i = 0; i < 3; i++) {
+            rotMatrix.m[i][0] *= scale.x;
+            rotMatrix.m[i][1] *= scale.y;
+            rotMatrix.m[i][2] *= scale.z;
+        }
+
+        // Add translation
+        rotMatrix.m[0][3] = trans.x;
+        rotMatrix.m[1][3] = trans.y;
+        rotMatrix.m[2][3] = trans.z;
+
+        return rotMatrix;
     }
 };
 
