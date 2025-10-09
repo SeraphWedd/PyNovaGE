@@ -1,0 +1,348 @@
+#pragma once
+
+#include "../simd/vector_ops.hpp"
+#include "vector3.hpp"
+
+#ifdef _MSC_VER
+#pragma warning(push)
+#pragma warning(disable: 4201)  // nameless struct/union warning
+#pragma warning(disable: 4458)  // declaration hides class member
+#endif
+
+namespace nova {
+
+template<typename T>
+class Vector4 {
+public:
+    union {
+        struct { T x, y, z, w; };
+        struct { T r, g, b, a; };
+        struct { T s, t, p, q; };
+        T data[4];
+    };
+
+    // Constructors
+    constexpr Vector4() : x(T(0)), y(T(0)), z(T(0)), w(T(0)) {}
+    constexpr Vector4(T x, T y, T z, T w) : x(x), y(y), z(z), w(w) {}
+    constexpr explicit Vector4(T v) : x(v), y(v), z(v), w(v) {}
+    
+    // Construct from Vector3
+    constexpr explicit Vector4(const Vector3<T>& vec, T w = T(1)) : x(vec.x), y(vec.y), z(vec.z), w(w) {}
+    
+    // Array subscript operator
+    constexpr T& operator[](size_t i) { return data[i]; }
+    constexpr const T& operator[](size_t i) const { return data[i]; }
+    
+    // Basic arithmetic operators
+    Vector4 operator+(const Vector4& v) const {
+        if constexpr (std::is_same_v<T, float>) {
+            #if defined(NOVA_AVX2_AVAILABLE)
+            __m128 a = _mm_loadu_ps(data);
+            __m128 b = _mm_loadu_ps(v.data);
+            Vector4 result;
+            _mm_storeu_ps(result.data, _mm_add_ps(a, b));
+            return result;
+            #else
+            return Vector4(x + v.x, y + v.y, z + v.z, w + v.w);
+            #endif
+        } else {
+            return Vector4(x + v.x, y + v.y, z + v.z, w + v.w);
+        }
+    }
+
+    Vector4 operator-(const Vector4& v) const {
+        if constexpr (std::is_same_v<T, float>) {
+            #if defined(NOVA_AVX2_AVAILABLE)
+            __m128 a = _mm_loadu_ps(data);
+            __m128 b = _mm_loadu_ps(v.data);
+            Vector4 result;
+            _mm_storeu_ps(result.data, _mm_sub_ps(a, b));
+            return result;
+            #else
+            return Vector4(x - v.x, y - v.y, z - v.z, w - v.w);
+            #endif
+        } else {
+            return Vector4(x - v.x, y - v.y, z - v.z, w - v.w);
+        }
+    }
+
+    Vector4 operator*(const Vector4& v) const {
+        if constexpr (std::is_same_v<T, float>) {
+            #if defined(NOVA_AVX2_AVAILABLE)
+            __m128 a = _mm_loadu_ps(data);
+            __m128 b = _mm_loadu_ps(v.data);
+            Vector4 result;
+            _mm_storeu_ps(result.data, _mm_mul_ps(a, b));
+            return result;
+            #else
+            return Vector4(x * v.x, y * v.y, z * v.z, w * v.w);
+            #endif
+        } else {
+            return Vector4(x * v.x, y * v.y, z * v.z, w * v.w);
+        }
+    }
+
+    Vector4 operator/(const Vector4& v) const {
+        if constexpr (std::is_same_v<T, float>) {
+            #if defined(NOVA_AVX2_AVAILABLE)
+            __m128 a = _mm_loadu_ps(data);
+            __m128 b = _mm_loadu_ps(v.data);
+            Vector4 result;
+            _mm_storeu_ps(result.data, _mm_div_ps(a, b));
+            return result;
+            #else
+            return Vector4(x / v.x, y / v.y, z / v.z, w / v.w);
+            #endif
+        } else {
+            return Vector4(x / v.x, y / v.y, z / v.z, w / v.w);
+        }
+    }
+    
+    Vector4 operator+(T s) const { return Vector4(x + s, y + s, z + s, w + s); }
+    Vector4 operator-(T s) const { return Vector4(x - s, y - s, z - s, w - s); }
+    
+    Vector4 operator*(T s) const {
+        if constexpr (std::is_same_v<T, float>) {
+            #if defined(NOVA_AVX2_AVAILABLE)
+            __m128 a = _mm_loadu_ps(data);
+            __m128 b = _mm_set1_ps(s);
+            Vector4 result;
+            _mm_storeu_ps(result.data, _mm_mul_ps(a, b));
+            return result;
+            #else
+            return Vector4(x * s, y * s, z * s, w * s);
+            #endif
+        } else {
+            return Vector4(x * s, y * s, z * s, w * s);
+        }
+    }
+    
+    Vector4 operator/(T s) const {
+        if constexpr (std::is_same_v<T, float>) {
+            #if defined(NOVA_AVX2_AVAILABLE)
+            __m128 a = _mm_loadu_ps(data);
+            __m128 b = _mm_set1_ps(s);
+            Vector4 result;
+            _mm_storeu_ps(result.data, _mm_div_ps(a, b));
+            return result;
+            #else
+            return Vector4(x / s, y / s, z / s, w / s);
+            #endif
+        } else {
+            return Vector4(x / s, y / s, z / s, w / s);
+        }
+    }
+    
+    // Assignment operators
+    Vector4& operator+=(const Vector4& v) {
+        if constexpr (std::is_same_v<T, float>) {
+            #if defined(NOVA_AVX2_AVAILABLE)
+            __m128 a = _mm_loadu_ps(data);
+            __m128 b = _mm_loadu_ps(v.data);
+            _mm_storeu_ps(data, _mm_add_ps(a, b));
+            #else
+            x += v.x; y += v.y; z += v.z; w += v.w;
+            #endif
+        } else {
+            x += v.x; y += v.y; z += v.z; w += v.w;
+        }
+        return *this;
+    }
+
+    Vector4& operator-=(const Vector4& v) {
+        if constexpr (std::is_same_v<T, float>) {
+            #if defined(NOVA_AVX2_AVAILABLE)
+            __m128 a = _mm_loadu_ps(data);
+            __m128 b = _mm_loadu_ps(v.data);
+            _mm_storeu_ps(data, _mm_sub_ps(a, b));
+            #else
+            x -= v.x; y -= v.y; z -= v.z; w -= v.w;
+            #endif
+        } else {
+            x -= v.x; y -= v.y; z -= v.z; w -= v.w;
+        }
+        return *this;
+    }
+
+    Vector4& operator*=(const Vector4& v) {
+        if constexpr (std::is_same_v<T, float>) {
+            #if defined(NOVA_AVX2_AVAILABLE)
+            __m128 a = _mm_loadu_ps(data);
+            __m128 b = _mm_loadu_ps(v.data);
+            _mm_storeu_ps(data, _mm_mul_ps(a, b));
+            #else
+            x *= v.x; y *= v.y; z *= v.z; w *= v.w;
+            #endif
+        } else {
+            x *= v.x; y *= v.y; z *= v.z; w *= v.w;
+        }
+        return *this;
+    }
+
+    Vector4& operator/=(const Vector4& v) {
+        if constexpr (std::is_same_v<T, float>) {
+            #if defined(NOVA_AVX2_AVAILABLE)
+            __m128 a = _mm_loadu_ps(data);
+            __m128 b = _mm_loadu_ps(v.data);
+            _mm_storeu_ps(data, _mm_div_ps(a, b));
+            #else
+            x /= v.x; y /= v.y; z /= v.z; w /= v.w;
+            #endif
+        } else {
+            x /= v.x; y /= v.y; z /= v.z; w /= v.w;
+        }
+        return *this;
+    }
+    
+    Vector4& operator+=(T s) { x += s; y += s; z += s; w += s; return *this; }
+    Vector4& operator-=(T s) { x -= s; y -= s; z -= s; w -= s; return *this; }
+    
+    Vector4& operator*=(T s) {
+        if constexpr (std::is_same_v<T, float>) {
+            #if defined(NOVA_AVX2_AVAILABLE)
+            __m128 a = _mm_loadu_ps(data);
+            __m128 b = _mm_set1_ps(s);
+            _mm_storeu_ps(data, _mm_mul_ps(a, b));
+            #else
+            x *= s; y *= s; z *= s; w *= s;
+            #endif
+        } else {
+            x *= s; y *= s; z *= s; w *= s;
+        }
+        return *this;
+    }
+    
+    Vector4& operator/=(T s) {
+        if constexpr (std::is_same_v<T, float>) {
+            #if defined(NOVA_AVX2_AVAILABLE)
+            __m128 a = _mm_loadu_ps(data);
+            __m128 b = _mm_set1_ps(s);
+            _mm_storeu_ps(data, _mm_div_ps(a, b));
+            #else
+            x /= s; y /= s; z /= s; w /= s;
+            #endif
+        } else {
+            x /= s; y /= s; z /= s; w /= s;
+        }
+        return *this;
+    }
+    
+    // Comparison operators
+    bool operator==(const Vector4& v) const {
+        if constexpr (std::is_same_v<T, float>) {
+            #if defined(NOVA_AVX2_AVAILABLE)
+            __m128 a = _mm_loadu_ps(data);
+            __m128 b = _mm_loadu_ps(v.data);
+            __m128 cmp = _mm_cmpeq_ps(a, b);
+            return _mm_movemask_ps(cmp) == 0xF;
+            #else
+            return x == v.x && y == v.y && z == v.z && w == v.w;
+            #endif
+        } else {
+            return x == v.x && y == v.y && z == v.z && w == v.w;
+        }
+    }
+    bool operator!=(const Vector4& v) const { return !(*this == v); }
+    
+    // Lexicographical ordering (for containers like std::map, std::set)
+    constexpr bool operator<(const Vector4& v) const { 
+        return (x < v.x) || 
+               (x == v.x && y < v.y) || 
+               (x == v.x && y == v.y && z < v.z) ||
+               (x == v.x && y == v.y && z == v.z && w < v.w); 
+    }
+    constexpr bool operator>(const Vector4& v) const { return v < *this; }
+    constexpr bool operator<=(const Vector4& v) const { return !(v < *this); }
+    constexpr bool operator>=(const Vector4& v) const { return !(*this < v); }
+    
+    // Magnitude comparison (comparing lengths)
+    bool isLongerThan(const Vector4& v) const { return lengthSquared() > v.lengthSquared(); }
+    bool isShorterThan(const Vector4& v) const { return lengthSquared() < v.lengthSquared(); }
+    bool isLongerThanOrEqual(const Vector4& v) const { return lengthSquared() >= v.lengthSquared(); }
+    bool isShorterThanOrEqual(const Vector4& v) const { return lengthSquared() <= v.lengthSquared(); }
+    
+    // SIMD component-wise comparison (returns int mask)
+    int compare(const Vector4& v) const {
+        if constexpr (std::is_same_v<T, float>) {
+            #if defined(NOVA_AVX2_AVAILABLE)
+            __m128 a = _mm_loadu_ps(data);
+            __m128 b = _mm_loadu_ps(v.data);
+            return _mm_movemask_ps(_mm_cmp_ps(a, b, _CMP_GT_OQ));
+            #else
+            return ((x > v.x) ? 1 : 0) |
+                   ((y > v.y) ? 2 : 0) |
+                   ((z > v.z) ? 4 : 0) |
+                   ((w > v.w) ? 8 : 0);
+            #endif
+        } else {
+            return ((x > v.x) ? 1 : 0) |
+                   ((y > v.y) ? 2 : 0) |
+                   ((z > v.z) ? 4 : 0) |
+                   ((w > v.w) ? 8 : 0);
+        }
+    }
+    
+    // Unary operators
+    Vector4 operator-() const {
+        if constexpr (std::is_same_v<T, float>) {
+            #if defined(NOVA_AVX2_AVAILABLE)
+            __m128 a = _mm_loadu_ps(data);
+            Vector4 result;
+            _mm_storeu_ps(result.data, _mm_xor_ps(a, _mm_set1_ps(-0.0f)));
+            return result;
+            #else
+            return Vector4(-x, -y, -z, -w);
+            #endif
+        } else {
+            return Vector4(-x, -y, -z, -w);
+        }
+    }
+    
+    // Common vector operations
+    T dot(const Vector4& v) const {
+        if constexpr (std::is_same_v<T, float>) {
+            #if defined(NOVA_AVX2_AVAILABLE)
+            __m128 a = _mm_loadu_ps(data);
+            __m128 b = _mm_loadu_ps(v.data);
+            __m128 dp = _mm_dp_ps(a, b, 0xF1);
+            return _mm_cvtss_f32(dp);
+            #else
+            return x * v.x + y * v.y + z * v.z + w * v.w;
+            #endif
+        } else {
+            return x * v.x + y * v.y + z * v.z + w * v.w;
+        }
+    }
+    
+    T lengthSquared() const { return dot(*this); }
+    
+    T length() const { return std::sqrt(lengthSquared()); }
+    
+    Vector4 normalized() const {
+        T len = length();
+        return len > T(0) ? *this / len : *this;
+    }
+    
+    void normalize() {
+        T len = length();
+        if (len > T(0)) {
+            *this /= len;
+        }
+    }
+
+    // Data access
+    constexpr T* getData() { return data; }
+    constexpr const T* getData() const { return data; }
+    static constexpr size_t size() { return 4; }
+};
+
+// Common type aliases
+using Vector4f = Vector4<float>;
+using Vector4d = Vector4<double>;
+using Vector4i = Vector4<int>;
+
+} // namespace nova
+
+#ifdef _MSC_VER
+#pragma warning(pop)
+#endif
