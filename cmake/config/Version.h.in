@@ -1,0 +1,54 @@
+#ifndef PYNOVAGE_VERSION_H
+#define PYNOVAGE_VERSION_H
+
+// clang-format off
+#define PYNOVAGE_VERSION_MAJOR @PROJECT_VERSION_MAJOR@
+#define PYNOVAGE_VERSION_MINOR @PROJECT_VERSION_MINOR@
+#define PYNOVAGE_VERSION_PATCH @PROJECT_VERSION_PATCH@
+#define PYNOVAGE_VERSION "@PROJECT_VERSION@"
+#define PYNOVAGE_VERSION_STRING "@PROJECT_VERSION@"
+
+#define PYNOVAGE_NAME "@PROJECT_NAME@"
+#define PYNOVAGE_DESCRIPTION "@PROJECT_DESCRIPTION@"
+
+// Platform information
+#define PYNOVAGE_PLATFORM "@PYNOVAGE_PLATFORM_NAME@"
+#define PYNOVAGE_ARCH "@PYNOVAGE_ARCH@"
+
+// Compiler information
+#cmakedefine PYNOVAGE_COMPILER_MSVC
+#cmakedefine PYNOVAGE_COMPILER_CLANG
+#cmakedefine PYNOVAGE_COMPILER_GCC
+
+// Platform capabilities
+#cmakedefine PYNOVAGE_HAS_AVX
+#cmakedefine PYNOVAGE_HAS_AVX2
+#cmakedefine PYNOVAGE_HAS_NEON
+#cmakedefine PYNOVAGE_HAS_PTHREADS
+#cmakedefine PYNOVAGE_HAS_WIN32_THREADS
+
+// Graphics API support
+#cmakedefine PYNOVAGE_ENABLE_VULKAN
+#cmakedefine PYNOVAGE_ENABLE_OPENGL
+#cmakedefine PYNOVAGE_ENABLE_DX12
+#cmakedefine PYNOVAGE_ENABLE_GLES3
+
+// Build configuration
+#cmakedefine01 PYNOVAGE_BUILD_SHARED
+#cmakedefine01 PYNOVAGE_ENABLE_LTO
+#cmakedefine01 PYNOVAGE_ENABLE_UNITY
+
+namespace pynovage {
+namespace version {
+
+constexpr int major = PYNOVAGE_VERSION_MAJOR;
+constexpr int minor = PYNOVAGE_VERSION_MINOR;
+constexpr int patch = PYNOVAGE_VERSION_PATCH;
+constexpr const char* string = PYNOVAGE_VERSION_STRING;
+constexpr const char* name = PYNOVAGE_NAME;
+constexpr const char* description = PYNOVAGE_DESCRIPTION;
+
+} // namespace version
+} // namespace pynovage
+
+#endif // PYNOVAGE_VERSION_H

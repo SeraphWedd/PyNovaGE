@@ -1,66 +1,122 @@
-# Function to add a new engine component with automatic file detection
-function(add_engine_component NAME)
-    message(STATUS "Configuring component: ${NAME}")
+# Component management module
 
-    # Find all source files
-    file(GLOB_RECURSE SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/src/*.cpp")
-    file(GLOB_RECURSE HEADERS "${CMAKE_CURRENT_SOURCE_DIR}/include/*.hpp")
-    file(GLOB_RECURSE TESTS "${CMAKE_CURRENT_SOURCE_DIR}/tests/*.cpp")
-    file(GLOB_RECURSE BENCHMARKS "${CMAKE_CURRENT_SOURCE_DIR}/benchmarks/*.cpp")
+# Function to add a new engine component
+function(add_engine_component name)
+    set(options)
+    set(oneValueArgs TYPE)
+    set(multiValueArgs SOURCES HEADERS PUBLIC_HEADERS DEPENDENCIES)
+    cmake_parse_arguments(COMPONENT "${options}" "${oneValueArgs}" "${multiValueArgs}" ${ARGN})
 
-    # Create the library from src/ and include/
-    add_library(${NAME} ${SOURCES} ${HEADERS})
-    target_include_directories(${NAME}
+    # Validate component type
+    if(NOT COMPONENT_TYPE)
+        message(FATAL_ERROR "Component type must be specified for ${name}")
+    endif()
+
+    # Create the component library
+    add_library(${name} ${COMPONENT_SOURCES} ${COMPONENT_HEADERS})
+    add_library(PyNovaGE::${name} ALIAS ${name})
+
+    # Set include directories
+    target_include_directories(${name}
         PUBLIC
             $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
             $<INSTALL_INTERFACE:include>
+        PRIVATE
+            ${CMAKE_CURRENT_SOURCE_DIR}/src
     )
 
-    # Set up tests if they exist and testing is enabled
-    if(TESTS AND PYGE_BUILD_TESTS)
-        enable_testing()
-        
-        # Create test executable
-        set(TEST_TARGET "${NAME}_Tests")
-        add_executable(${TEST_TARGET} ${TESTS})
-        
-        # Link against the library and GTest
-        target_link_libraries(${TEST_TARGET}
-            PRIVATE
-                ${NAME}
-                GTest::gtest
-                GTest::gtest_main
+    # Link dependencies
+    if(COMPONENT_DEPENDENCIES)
+        target_link_libraries(${name}
+            PUBLIC
+                ${COMPONENT_DEPENDENCIES}
         )
-        
-        # Add to CTest
-        add_test(NAME ${TEST_TARGET} COMMAND ${TEST_TARGET})
-        
-        message(STATUS "  Added tests for ${NAME}")
     endif()
 
-    # Set up benchmarks if they exist and benchmarking is enabled
-    if(BENCHMARKS AND PYGE_BUILD_BENCHMARKS)
-        # Create benchmark executable
-        set(BENCH_TARGET "${NAME}_Benchmarks")
-        add_executable(${BENCH_TARGET} ${BENCHMARKS})
-        
-        # Link against the library and Google Benchmark
-        target_link_libraries(${BENCH_TARGET}
-            PRIVATE
-                ${NAME}
-                benchmark::benchmark
-        )
-        
-        message(STATUS "  Added benchmarks for ${NAME}")
+    # Set properties
+    set_target_properties(${name} PROPERTIES
+        CXX_VISIBILITY_PRESET hidden
+        VISIBILITY_INLINES_HIDDEN ON
+        POSITION_INDEPENDENT_CODE ON
+    )
+
+    # Add tests if enabled
+    if(PYNOVAGE_BUILD_TESTS AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/tests")
+        add_subdirectory(tests)
     endif()
 
-    # Output configuration summary
-    message(STATUS "  Sources: ${SOURCES}")
-    message(STATUS "  Headers: ${HEADERS}")
-    if(TESTS)
-        message(STATUS "  Tests: ${TESTS}")
+    # Add benchmarks if enabled
+    if(PYNOVAGE_BUILD_BENCHMARKS AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/benchmarks")
+        add_subdirectory(benchmarks)
     endif()
-    if(BENCHMARKS)
-        message(STATUS "  Benchmarks: ${BENCHMARKS}")
+endfunction()
+
+# Function to add component tests
+function(add_component_test name component)
+    set(options)
+    set(oneValueArgs)
+    set(multiValueArgs SOURCES DEPENDENCIES)
+    cmake_parse_arguments(TEST "${options}" "${oneValueArgs}" "${multiValueArgs}" ${ARGN})
+
+    # Create the test executable
+    add_executable(${name} ${TEST_SOURCES})
+
+    # Link with GTest and the component
+    target_link_libraries(${name}
+        PRIVATE
+            ${component}
+            gtest
+            gtest_main
+            ${TEST_DEPENDENCIES}
+    )
+
+    # Add the test
+    add_test(NAME ${name} COMMAND ${name})
+endfunction()
+
+# Function to add component benchmark
+function(add_component_benchmark name component)
+    set(options)
+    set(oneValueArgs)
+    set(multiValueArgs SOURCES DEPENDENCIES)
+    cmake_parse_arguments(BENCH "${options}" "${oneValueArgs}" "${multiValueArgs}" ${ARGN})
+
+    # Create the benchmark executable
+    add_executable(${name} ${BENCH_SOURCES})
+
+    # Link with Google Benchmark and the component
+    target_link_libraries(${name}
+        PRIVATE
+            ${component}
+            benchmark::benchmark
+            ${BENCH_DEPENDENCIES}
+    )
+endfunction()
+
+# Function to automatically find and add source files
+function(auto_add_sources target)
+    set(options)
+    set(oneValueArgs SOURCE_DIR HEADER_DIR)
+    set(multiValueArgs PATTERNS)
+    cmake_parse_arguments(AUTO "${options}" "${oneValueArgs}" "${multiValueArgs}" ${ARGN})
+
+    # Default patterns if none specified
+    if(NOT AUTO_PATTERNS)
+        set(AUTO_PATTERNS "*.cpp" "*.hpp" "*.h")
     endif()
+
+    # Find all source files
+    foreach(pattern ${AUTO_PATTERNS})
+        file(GLOB_RECURSE sources
+            "${AUTO_SOURCE_DIR}/${pattern}"
+            "${AUTO_HEADER_DIR}/${pattern}"
+        )
+        list(APPEND all_sources ${sources})
+    endforeach()
+
+    # Add sources to the target
+    target_sources(${target}
+        PRIVATE
+            ${all_sources}
+    )
 endfunction()

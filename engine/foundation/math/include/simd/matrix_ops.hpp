@@ -1,6 +1,7 @@
 #pragma once
 
 #include "types.hpp"
+#include <cmath>
 #include "types.hpp"
 #include <array>
 #include <initializer_list>

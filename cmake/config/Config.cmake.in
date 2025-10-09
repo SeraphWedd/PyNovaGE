@@ -1,0 +1,64 @@
+@PACKAGE_INIT@
+
+include(CMakeFindDependencyMacro)
+
+# Find dependencies
+find_dependency(Threads)
+
+# Optional dependencies based on enabled features
+if(@PYNOVAGE_ENABLE_VULKAN@)
+    find_dependency(Vulkan)
+endif()
+
+if(@PYNOVAGE_ENABLE_OPENGL@)
+    find_dependency(OpenGL)
+endif()
+
+# Platform-specific dependencies
+if(WIN32)
+    if(@PYNOVAGE_ENABLE_DX12@)
+        find_dependency(D3D12)
+    endif()
+elseif(UNIX AND NOT APPLE AND NOT ANDROID)
+    find_dependency(X11)
+    if(@PYNOVAGE_ENABLE_WAYLAND@)
+        find_dependency(Wayland)
+    endif()
+endif()
+
+# Include targets
+include("${CMAKE_CURRENT_LIST_DIR}/PyNovaGETargets.cmake")
+
+# Check if components are available
+set(_supported_components
+    Core
+    Foundation
+    Systems
+    Window
+    Render
+    Physics
+    Input
+    Audio
+    Scene
+)
+
+foreach(_comp ${PyNovaGE_FIND_COMPONENTS})
+    if(NOT _comp IN_LIST _supported_components)
+        set(PyNovaGE_FOUND False)
+        set(PyNovaGE_NOT_FOUND_MESSAGE "Unsupported component: ${_comp}")
+    endif()
+    if(NOT TARGET PyNovaGE::${_comp})
+        set(PyNovaGE_${_comp}_FOUND False)
+        set(PyNovaGE_FOUND False)
+        set(PyNovaGE_NOT_FOUND_MESSAGE "PyNovaGE component '${_comp}' is missing!")
+    else()
+        set(PyNovaGE_${_comp}_FOUND True)
+    endif()
+endforeach()
+
+# Print feature summary
+include(FeatureSummary)
+set_package_properties(PyNovaGE PROPERTIES
+    URL "https://github.com/yourusername/PyNovaGE"
+    DESCRIPTION "Python Game Engine with modern C++ core"
+)
