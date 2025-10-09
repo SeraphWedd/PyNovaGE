@@ -1,5 +1,6 @@
 #include <gtest/gtest.h>
 #include "../../include/simd/matrix_ops.hpp"
+#include "../../include/simd/vector_ops.hpp"
 #include <cmath>
 
 namespace {
@@ -171,8 +172,8 @@ TEST(MatrixOpsTest, Scale) {
 TEST(MatrixOpsTest, Rotation) {
     // Test rotation around X axis by 90 degrees
     Vector3f x_axis(1.0f, 0.0f, 0.0f);
-    float angle = M_PI / 2.0f;
-    Matrix4f rot_matrix = rotate(x_axis, angle);
+float angle = static_cast<float>(M_PI / 2.0);
+Matrix4f rot_matrix = rotate<float>(x_axis, angle);
     Vector4f point(0.0f, 1.0f, 0.0f, 1.0f);
 
     Vector4f expected(0.0f, 0.0f, 1.0f, 1.0f);
@@ -184,8 +185,8 @@ TEST(MatrixOpsTest, Rotation) {
 TEST(MatrixOpsTest, Consistency) {
     // Test rotation matrix orthogonality
     Vector3f axis(1.0f, 1.0f, 1.0f);
-    float angle = M_PI / 4.0f;
-    Matrix4f rot = rotate(normalize(axis), angle);
+float angle = static_cast<float>(M_PI / 4.0);
+Matrix4f rot = rotate<Vector3f::value_type>(normalize(axis), angle);
     Matrix4f rot_transpose = transpose(rot);
     Matrix4f identity;
 
@@ -229,7 +230,7 @@ TEST(MatrixOpsTest, SIMDAlignment) {
     // Test alignment of operation results
     Matrix4f mult_result = m1 * m2;
     Matrix4f trans_result = transpose(m1);
-    Matrix4f rot_result = rotate(Vector3f(1.0f, 0.0f, 0.0f), M_PI / 2.0f);
+Matrix4f rot_result = rotate<float>(Vector3f(1.0f, 0.0f, 0.0f), static_cast<float>(M_PI / 2.0));
 
     // Verify alignment
     EXPECT_EQ(reinterpret_cast<std::uintptr_t>(mult_result.data()) % 16, 0);

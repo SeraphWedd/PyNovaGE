@@ -1,6 +1,7 @@
 #include <benchmark/benchmark.h>
 #include "../../include/simd/math_ops.hpp"
 #include "../../include/simd/vector_ops.hpp"
+#include "../../include/simd/matrix_ops.hpp"
 #include <random>
 #include <vector>
 
