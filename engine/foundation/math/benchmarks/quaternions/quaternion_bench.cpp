@@ -1,252 +1,253 @@
 #include <benchmark/benchmark.h>
 #include <random>
 #include <vector>
+#include <numeric>
 #include "quaternions/quaternion.hpp"
-#include "matrices/matrices.hpp"
+#include "vectors/vectors.hpp"
 
 using namespace PyNovaGE;
 
 namespace {
-    // Random number generator
-    thread_local std::mt19937 rng(std::random_device{}());
-    std::uniform_real_distribution<float> dist(-1.0f, 1.0f);
-    
-    // Data generator for consistent benchmarking
     class QuaternionDataGenerator {
+    private:
+        mutable std::mt19937 rng;
+        mutable std::uniform_real_distribution<float> dist;
+        
     public:
-        static Quaternionf generateRandomQuaternion() {
-            return Quaternionf{dist(rng), dist(rng), dist(rng), dist(rng)}.normalized();
+        QuaternionDataGenerator() : rng(42), dist(-1.0f, 1.0f) {} // Fixed seed for reproducibility
+        
+        Quaternionf generateRandomQuaternion() const {
+            return Quaternionf(dist(rng), dist(rng), dist(rng), dist(rng)).normalized();
         }
         
-        static Vector3f generateRandomVector() {
-            return Vector3f{dist(rng), dist(rng), dist(rng)};
+        Vector3f generateRandomVector() const {
+            return Vector3f(dist(rng) * 10.0f, dist(rng) * 10.0f, dist(rng) * 10.0f);
         }
         
-        static std::vector<Quaternionf> generateQuaternionBatch(size_t count) {
-            std::vector<Quaternionf> batch;
-            batch.reserve(count);
-            for (size_t i = 0; i < count; ++i) {
-                batch.emplace_back(generateRandomQuaternion());
-            }
-            return batch;
-        }
-        
-        static std::vector<Vector3f> generateVectorBatch(size_t count) {
-            std::vector<Vector3f> batch;
-            batch.reserve(count);
-            for (size_t i = 0; i < count; ++i) {
-                batch.emplace_back(generateRandomVector());
-            }
-            return batch;
+        Quaternionf generateRotationQuaternion() const {
+            // Generate rotation around random axis with random angle
+            Vector3f axis = Vector3f(dist(rng), dist(rng), dist(rng)).normalized();
+            float angle = dist(rng) * 3.14159f; // 0 to PI radians
+            return Quaternionf::AxisAngle(axis, angle);
         }
     };
 }
 
-// Benchmark quaternion multiplication
 static void BM_Quaternion_Multiplication(benchmark::State& state) {
-    const size_t batch_size = state.range(0);
-    auto quaternions_a = QuaternionDataGenerator::generateQuaternionBatch(batch_size);
-    auto quaternions_b = QuaternionDataGenerator::generateQuaternionBatch(batch_size);
+    const size_t N = state.range(0);
+    QuaternionDataGenerator gen;
+    std::vector<Quaternionf> quats_a(N);
+    std::vector<Quaternionf> quats_b(N);
+    std::vector<Quaternionf> results(N);
     
-    size_t index = 0;
-    for (auto _ : state) {
-        Quaternionf result = quaternions_a[index % batch_size] * quaternions_b[index % batch_size];
-        benchmark::DoNotOptimize(result);
-        ++index;
+    for (size_t i = 0; i < N; ++i) {
+        quats_a[i] = gen.generateRandomQuaternion();
+        quats_b[i] = gen.generateRandomQuaternion();
     }
     
-    state.SetItemsProcessed(state.iterations());
-    state.SetBytesProcessed(state.iterations() * sizeof(Quaternionf) * 2);
+    for (auto _ : state) {
+        for (size_t i = 0; i < N; ++i) {
+            results[i] = quats_a[i] * quats_b[i];
+        }
+        benchmark::DoNotOptimize(results);
+    }
+    state.SetItemsProcessed(state.iterations() * N);
 }
 
-// Benchmark vector rotation by quaternion
 static void BM_Quaternion_VectorRotation(benchmark::State& state) {
-    const size_t batch_size = state.range(0);
-    auto quaternions = QuaternionDataGenerator::generateQuaternionBatch(batch_size);
-    auto vectors = QuaternionDataGenerator::generateVectorBatch(batch_size);
+    const size_t N = state.range(0);
+    QuaternionDataGenerator gen;
+    std::vector<Quaternionf> rotations(N);
+    std::vector<Vector3f> vectors(N);
+    std::vector<Vector3f> results(N);
     
-    size_t index = 0;
-    for (auto _ : state) {
-        Vector3f result = quaternions[index % batch_size] * vectors[index % batch_size];
-        benchmark::DoNotOptimize(result);
-        ++index;
+    for (size_t i = 0; i < N; ++i) {
+        rotations[i] = gen.generateRotationQuaternion();
+        vectors[i] = gen.generateRandomVector();
     }
     
-    state.SetItemsProcessed(state.iterations());
-    state.SetBytesProcessed(state.iterations() * (sizeof(Quaternionf) + sizeof(Vector3f)));
+    for (auto _ : state) {
+        for (size_t i = 0; i < N; ++i) {
+            results[i] = rotations[i] * vectors[i];
+        }
+        benchmark::DoNotOptimize(results);
+    }
+    state.SetItemsProcessed(state.iterations() * N);
 }
 
-// Benchmark quaternion normalization
 static void BM_Quaternion_Normalization(benchmark::State& state) {
-    const size_t batch_size = state.range(0);
-    auto quaternions = QuaternionDataGenerator::generateQuaternionBatch(batch_size);
+    const size_t N = state.range(0);
+    QuaternionDataGenerator gen;
+    std::vector<Quaternionf> quaternions(N);
+    std::vector<Quaternionf> results(N);
     
-    size_t index = 0;
-    for (auto _ : state) {
-        Quaternionf result = quaternions[index % batch_size].normalized();
-        benchmark::DoNotOptimize(result);
-        ++index;
+    // Create non-normalized quaternions
+    for (size_t i = 0; i < N; ++i) {
+        quaternions[i] = gen.generateRandomQuaternion() * 2.5f; // Make non-unit
     }
     
-    state.SetItemsProcessed(state.iterations());
-    state.SetBytesProcessed(state.iterations() * sizeof(Quaternionf));
+    for (auto _ : state) {
+        for (size_t i = 0; i < N; ++i) {
+            results[i] = quaternions[i].normalized();
+        }
+        benchmark::DoNotOptimize(results);
+    }
+    state.SetItemsProcessed(state.iterations() * N);
 }
 
-// Benchmark quaternion inverse
 static void BM_Quaternion_Inverse(benchmark::State& state) {
-    const size_t batch_size = state.range(0);
-    auto quaternions = QuaternionDataGenerator::generateQuaternionBatch(batch_size);
+    const size_t N = state.range(0);
+    QuaternionDataGenerator gen;
+    std::vector<Quaternionf> quaternions(N);
+    std::vector<Quaternionf> results(N);
     
-    size_t index = 0;
-    for (auto _ : state) {
-        Quaternionf result = quaternions[index % batch_size].inverse();
-        benchmark::DoNotOptimize(result);
-        ++index;
+    for (size_t i = 0; i < N; ++i) {
+        quaternions[i] = gen.generateRandomQuaternion();
     }
     
-    state.SetItemsProcessed(state.iterations());
-    state.SetBytesProcessed(state.iterations() * sizeof(Quaternionf));
-}
-
-// Temporarily commented out due to circular dependency issues
-/*
-// Benchmark quaternion to matrix conversion
-static void BM_Quaternion_ToMatrix3(benchmark::State& state) {
-    const size_t batch_size = state.range(0);
-    auto quaternions = QuaternionDataGenerator::generateQuaternionBatch(batch_size);
-    
-    size_t index = 0;
     for (auto _ : state) {
-        Matrix3f result = quaternions[index % batch_size].toMatrix3();
-        benchmark::DoNotOptimize(result);
-        ++index;
+        for (size_t i = 0; i < N; ++i) {
+            results[i] = quaternions[i].inverse();
+        }
+        benchmark::DoNotOptimize(results);
     }
-    
-    state.SetItemsProcessed(state.iterations());
-    state.SetBytesProcessed(state.iterations() * sizeof(Quaternionf));
+    state.SetItemsProcessed(state.iterations() * N);
 }
 
-// Benchmark quaternion to 4x4 matrix conversion
-static void BM_Quaternion_ToMatrix4(benchmark::State& state) {
-    const size_t batch_size = state.range(0);
-    auto quaternions = QuaternionDataGenerator::generateQuaternionBatch(batch_size);
-    
-    size_t index = 0;
-    for (auto _ : state) {
-        Matrix4f result = quaternions[index % batch_size].toMatrix4();
-        benchmark::DoNotOptimize(result);
-        ++index;
-    }
-    
-    state.SetItemsProcessed(state.iterations());
-    state.SetBytesProcessed(state.iterations() * sizeof(Quaternionf));
-}
-*/
-
-// Benchmark SLERP interpolation
 static void BM_Quaternion_Slerp(benchmark::State& state) {
-    const size_t batch_size = state.range(0);
-    auto quaternions_a = QuaternionDataGenerator::generateQuaternionBatch(batch_size);
-    auto quaternions_b = QuaternionDataGenerator::generateQuaternionBatch(batch_size);
+    const size_t N = state.range(0);
+    QuaternionDataGenerator gen;
+    std::vector<Quaternionf> quats_a(N);
+    std::vector<Quaternionf> quats_b(N);
+    std::vector<Quaternionf> results(N);
+    std::vector<float> t_values(N);
     
-    size_t index = 0;
-    for (auto _ : state) {
-        float t = 0.5f; // Mid-point interpolation
-        Quaternionf result = Quaternionf::Slerp(
-            quaternions_a[index % batch_size], 
-            quaternions_b[index % batch_size], 
-            t
-        );
-        benchmark::DoNotOptimize(result);
-        ++index;
+    for (size_t i = 0; i < N; ++i) {
+        quats_a[i] = gen.generateRotationQuaternion();
+        quats_b[i] = gen.generateRotationQuaternion();
+        t_values[i] = static_cast<float>(i) / N; // Varying t from 0 to 1
     }
     
-    state.SetItemsProcessed(state.iterations());
-    state.SetBytesProcessed(state.iterations() * sizeof(Quaternionf) * 2);
+    for (auto _ : state) {
+        for (size_t i = 0; i < N; ++i) {
+            results[i] = Quaternionf::Slerp(quats_a[i], quats_b[i], t_values[i]);
+        }
+        benchmark::DoNotOptimize(results);
+    }
+    state.SetItemsProcessed(state.iterations() * N);
 }
 
-// Benchmark Euler angle conversion
 static void BM_Quaternion_ToEulerAngles(benchmark::State& state) {
-    const size_t batch_size = state.range(0);
-    auto quaternions = QuaternionDataGenerator::generateQuaternionBatch(batch_size);
+    const size_t N = state.range(0);
+    QuaternionDataGenerator gen;
+    std::vector<Quaternionf> quaternions(N);
+    std::vector<Vector3f> results(N);
     
-    size_t index = 0;
-    for (auto _ : state) {
-        Vector3f result = quaternions[index % batch_size].toEulerAngles();
-        benchmark::DoNotOptimize(result);
-        ++index;
+    for (size_t i = 0; i < N; ++i) {
+        quaternions[i] = gen.generateRotationQuaternion();
     }
     
-    state.SetItemsProcessed(state.iterations());
-    state.SetBytesProcessed(state.iterations() * sizeof(Quaternionf));
+    for (auto _ : state) {
+        for (size_t i = 0; i < N; ++i) {
+            results[i] = quaternions[i].toEulerAngles();
+        }
+        benchmark::DoNotOptimize(results);
+    }
+    state.SetItemsProcessed(state.iterations() * N);
 }
 
-// Benchmark axis-angle construction
 static void BM_Quaternion_AxisAngleConstruction(benchmark::State& state) {
-    const size_t batch_size = state.range(0);
-    auto axes = QuaternionDataGenerator::generateVectorBatch(batch_size);
-    std::uniform_real_distribution<float> angle_dist(0.0f, 2.0f * M_PI);
+    const size_t N = state.range(0);
+    QuaternionDataGenerator gen;
+    std::vector<Vector3f> axes(N);
+    std::vector<float> angles(N);
+    std::vector<Quaternionf> results(N);
     
-    std::vector<float> angles;
-    angles.reserve(batch_size);
-    for (size_t i = 0; i < batch_size; ++i) {
-        angles.push_back(angle_dist(rng));
+    for (size_t i = 0; i < N; ++i) {
+        axes[i] = gen.generateRandomVector().normalized();
+        angles[i] = gen.generateRandomQuaternion()[0] * 3.14159f; // Random angle
     }
     
-    size_t index = 0;
     for (auto _ : state) {
-        Quaternionf result = Quaternionf::AxisAngle(
-            axes[index % batch_size].normalized(), 
-            angles[index % batch_size]
-        );
-        benchmark::DoNotOptimize(result);
-        ++index;
+        for (size_t i = 0; i < N; ++i) {
+            results[i] = Quaternionf::AxisAngle(axes[i], angles[i]);
+        }
+        benchmark::DoNotOptimize(results);
     }
-    
-    state.SetItemsProcessed(state.iterations());
-    state.SetBytesProcessed(state.iterations() * (sizeof(Vector3f) + sizeof(float)));
+    state.SetItemsProcessed(state.iterations() * N);
 }
 
-// Benchmark typical game object rotation update
+// Typical game object rotation update scenario
 static void BM_Quaternion_TypicalGameObjectUpdate(benchmark::State& state) {
-    const size_t batch_size = state.range(0);
-    auto current_orientations = QuaternionDataGenerator::generateQuaternionBatch(batch_size);
-    auto rotation_deltas = QuaternionDataGenerator::generateQuaternionBatch(batch_size);
-    auto test_vectors = QuaternionDataGenerator::generateVectorBatch(batch_size);
+    const size_t N = state.range(0);
+    QuaternionDataGenerator gen;
+    std::vector<Quaternionf> orientations(N);
+    std::vector<Quaternionf> rotation_deltas(N);
+    std::vector<Vector3f> test_vectors(N);
+    const float dt = 0.016667f; // 60 FPS
     
-    // Simulate a typical game object transformation update
-    size_t index = 0;
-    for (auto _ : state) {
-        size_t i = index % batch_size;
-        
-        // Apply rotation delta
-        Quaternionf new_orientation = current_orientations[i] * rotation_deltas[i];
-        new_orientation.normalize();
-        
-        // Transform a test vector (e.g., forward direction)
-        Vector3f transformed = new_orientation * test_vectors[i];
-        
-        // Update for next iteration
-        current_orientations[i] = new_orientation;
-        
-        benchmark::DoNotOptimize(new_orientation);
-        benchmark::DoNotOptimize(transformed);
-        ++index;
+    for (size_t i = 0; i < N; ++i) {
+        orientations[i] = gen.generateRotationQuaternion();
+        // Small rotation delta for realistic game object movement
+        Vector3f axis = gen.generateRandomVector().normalized();
+        float angle = dt * 0.5f; // 30 degrees per second
+        rotation_deltas[i] = Quaternionf::AxisAngle(axis, angle);
+        test_vectors[i] = gen.generateRandomVector();
     }
     
-    state.SetItemsProcessed(state.iterations());
-    state.SetBytesProcessed(state.iterations() * (sizeof(Quaternionf) * 2 + sizeof(Vector3f)));
+    for (auto _ : state) {
+        for (size_t i = 0; i < N; ++i) {
+            // Apply rotation delta
+            orientations[i] = orientations[i] * rotation_deltas[i];
+            orientations[i].normalize();
+            
+            // Transform a test vector (e.g., forward direction)
+            Vector3f transformed = orientations[i] * test_vectors[i];
+            
+            benchmark::DoNotOptimize(orientations[i]);
+            benchmark::DoNotOptimize(transformed);
+        }
+    }
+    state.SetItemsProcessed(state.iterations() * N);
 }
 
-// Register benchmarks with different batch sizes
-BENCHMARK(BM_Quaternion_Multiplication)->RangeMultiplier(2)->Range(1024, 1048576);
-BENCHMARK(BM_Quaternion_VectorRotation)->RangeMultiplier(2)->Range(1024, 1048576);
-BENCHMARK(BM_Quaternion_Normalization)->RangeMultiplier(2)->Range(1024, 1048576);
-BENCHMARK(BM_Quaternion_Inverse)->RangeMultiplier(2)->Range(1024, 1048576);
-// Temporarily commented out due to circular dependency issues
-//BENCHMARK(BM_Quaternion_ToMatrix3)->RangeMultiplier(2)->Range(1024, 1048576);
-//BENCHMARK(BM_Quaternion_ToMatrix4)->RangeMultiplier(2)->Range(1024, 1048576);
-BENCHMARK(BM_Quaternion_Slerp)->RangeMultiplier(2)->Range(1024, 1048576);
-BENCHMARK(BM_Quaternion_ToEulerAngles)->RangeMultiplier(2)->Range(1024, 1048576);
-BENCHMARK(BM_Quaternion_AxisAngleConstruction)->RangeMultiplier(2)->Range(1024, 1048576);
-BENCHMARK(BM_Quaternion_TypicalGameObjectUpdate)->RangeMultiplier(2)->Range(1024, 1048576);
+// Register benchmarks with different sizes
+BENCHMARK(BM_Quaternion_Multiplication)
+    ->RangeMultiplier(2)
+    ->Range(1<<10, 1<<20)
+    ->Unit(benchmark::kNanosecond);
+
+BENCHMARK(BM_Quaternion_VectorRotation)
+    ->RangeMultiplier(2)
+    ->Range(1<<10, 1<<20)
+    ->Unit(benchmark::kNanosecond);
+
+BENCHMARK(BM_Quaternion_Normalization)
+    ->RangeMultiplier(2)
+    ->Range(1<<10, 1<<20)
+    ->Unit(benchmark::kNanosecond);
+
+BENCHMARK(BM_Quaternion_Inverse)
+    ->RangeMultiplier(2)
+    ->Range(1<<10, 1<<20)
+    ->Unit(benchmark::kNanosecond);
+
+BENCHMARK(BM_Quaternion_Slerp)
+    ->RangeMultiplier(2)
+    ->Range(1<<10, 1<<20)
+    ->Unit(benchmark::kNanosecond);
+
+BENCHMARK(BM_Quaternion_ToEulerAngles)
+    ->RangeMultiplier(2)
+    ->Range(1<<10, 1<<20)
+    ->Unit(benchmark::kNanosecond);
+
+BENCHMARK(BM_Quaternion_AxisAngleConstruction)
+    ->RangeMultiplier(2)
+    ->Range(1<<10, 1<<20)
+    ->Unit(benchmark::kNanosecond);
+
+BENCHMARK(BM_Quaternion_TypicalGameObjectUpdate)
+    ->RangeMultiplier(2)
+    ->Range(1<<10, 1<<20)
+    ->Unit(benchmark::kNanosecond);
