@@ -20,6 +20,7 @@ namespace SIMD {
 
 // Forward declarations
 template<typename T, size_t N> class Vector;
+template<typename T, size_t N> class Matrix;
 
 // Specialized Vector types for different sizes
 using Vector4f = Vector<float, 4>;
@@ -31,6 +32,14 @@ using Vector2d = Vector<double, 2>;
 using Vector4i = Vector<int32_t, 4>;
 using Vector3i = Vector<int32_t, 3>;
 using Vector2i = Vector<int32_t, 2>;
+
+// Matrix type aliases
+using Matrix4f = Matrix<float, 4>;
+using Matrix3f = Matrix<float, 3>;
+using Matrix2f = Matrix<float, 2>;
+using Matrix4d = Matrix<double, 4>;
+using Matrix3d = Matrix<double, 3>;
+using Matrix2d = Matrix<double, 2>;
 
 // SIMD register types based on architecture
 namespace detail {
