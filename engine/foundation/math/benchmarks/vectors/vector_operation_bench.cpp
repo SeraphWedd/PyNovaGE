@@ -144,11 +144,6 @@ public:
 // Vector2 Operation Benchmarks
 
 static void BM_Vector2_Addition(benchmark::State& state) {
-    // Skip large sizes that cause excessive memory pressure
-    if (state.range(0) > 262144) {
-        state.SkipWithError("Skipping large dataset to avoid memory pressure");
-        return;
-    }
     const size_t N = state.range(0);
     VectorDataGenerator<float> gen;
 // Use aligned allocator for SIMD operations
