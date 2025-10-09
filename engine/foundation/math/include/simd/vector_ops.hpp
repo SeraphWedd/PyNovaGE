@@ -11,18 +11,11 @@ namespace SIMD {
 template<typename T, size_t N>
 inline Vector<T, N> operator+(const Vector<T, N>& a, const Vector<T, N>& b) {
     Vector<T, N> result;
-    #if defined(NOVA_AVX2_AVAILABLE) || defined(NOVA_AVX_AVAILABLE)
+    #if defined(NOVA_SSE2_AVAILABLE)
     if constexpr (N == 4 && std::is_same_v<T, float>) {
-        auto va = _mm256_load_ps(a.data());
-        auto vb = _mm256_load_ps(b.data());
-        _mm256_store_ps(result.data(), _mm256_add_ps(va, vb));
-        return result;
-    }
-    #elif defined(NOVA_SSE2_AVAILABLE)
-    if constexpr (N == 4 && std::is_same_v<T, float>) {
-        auto va = _mm_load_ps(a.data());
-        auto vb = _mm_load_ps(b.data());
-        _mm_store_ps(result.data(), _mm_add_ps(va, vb));
+        auto va = _mm_loadu_ps(a.data());
+        auto vb = _mm_loadu_ps(b.data());
+        _mm_storeu_ps(result.data(), _mm_add_ps(va, vb));
         return result;
     }
     #elif defined(NOVA_NEON_AVAILABLE)
@@ -45,18 +38,11 @@ inline Vector<T, N> operator+(const Vector<T, N>& a, const Vector<T, N>& b) {
 template<typename T, size_t N>
 inline Vector<T, N> operator-(const Vector<T, N>& a, const Vector<T, N>& b) {
     Vector<T, N> result;
-    #if defined(NOVA_AVX2_AVAILABLE) || defined(NOVA_AVX_AVAILABLE)
+    #if defined(NOVA_SSE2_AVAILABLE)
     if constexpr (N == 4 && std::is_same_v<T, float>) {
-        auto va = _mm256_load_ps(a.data());
-        auto vb = _mm256_load_ps(b.data());
-        _mm256_store_ps(result.data(), _mm256_sub_ps(va, vb));
-        return result;
-    }
-    #elif defined(NOVA_SSE2_AVAILABLE)
-    if constexpr (N == 4 && std::is_same_v<T, float>) {
-        auto va = _mm_load_ps(a.data());
-        auto vb = _mm_load_ps(b.data());
-        _mm_store_ps(result.data(), _mm_sub_ps(va, vb));
+        auto va = _mm_loadu_ps(a.data());
+        auto vb = _mm_loadu_ps(b.data());
+        _mm_storeu_ps(result.data(), _mm_sub_ps(va, vb));
         return result;
     }
     #elif defined(NOVA_NEON_AVAILABLE)
@@ -78,23 +64,17 @@ inline Vector<T, N> operator-(const Vector<T, N>& a, const Vector<T, N>& b) {
 // Dot product
 template<typename T, size_t N>
 inline T dot(const Vector<T, N>& a, const Vector<T, N>& b) {
-    #if defined(NOVA_AVX2_AVAILABLE) || defined(NOVA_AVX_AVAILABLE)
+    #if defined(NOVA_SSE2_AVAILABLE)
     if constexpr (N == 4 && std::is_same_v<T, float>) {
-        auto va = _mm256_load_ps(a.data());
-        auto vb = _mm256_load_ps(b.data());
-        auto mul = _mm256_mul_ps(va, vb);
-        auto sum = _mm256_hadd_ps(mul, mul);
-        sum = _mm256_hadd_ps(sum, sum);
-        return _mm256_cvtss_f32(sum);
-    }
-    #elif defined(NOVA_SSE2_AVAILABLE)
-    if constexpr (N == 4 && std::is_same_v<T, float>) {
-        auto va = _mm_load_ps(a.data());
-        auto vb = _mm_load_ps(b.data());
+        auto va = _mm_loadu_ps(a.data());
+        auto vb = _mm_loadu_ps(b.data());
         auto mul = _mm_mul_ps(va, vb);
-        auto sum = _mm_hadd_ps(mul, mul);
-        sum = _mm_hadd_ps(sum, sum);
-        return _mm_cvtss_f32(sum);
+        // More efficient horizontal sum using shuffles
+        auto shuf = _mm_movehdup_ps(mul);        // Duplicate odd elements
+        auto sums = _mm_add_ps(mul, shuf);       // Add pairs
+        shuf = _mm_movehl_ps(shuf, sums);        // High half -> low half
+        sums = _mm_add_ss(sums, shuf);           // Add last pair
+        return _mm_cvtss_f32(sums);
     }
     #elif defined(NOVA_NEON_AVAILABLE)
     if constexpr (N == 4 && std::is_same_v<T, float>) {

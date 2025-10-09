@@ -10,7 +10,9 @@ namespace SIMD {
 // AABB (Axis-Aligned Bounding Box)
 template<typename T>
 class AABB {
+    static_assert(std::is_floating_point_v<T>, "AABB only supports floating-point types");
 public:
+    using value_type = T;
     Vector<T, 3> min;
     Vector<T, 3> max;
 
@@ -101,7 +103,9 @@ public:
 // Sphere
 template<typename T>
 class Sphere {
+    static_assert(std::is_floating_point_v<T>, "Sphere only supports floating-point types");
 public:
+    using value_type = T;
     Vector<T, 3> center;
     T radius;
 
@@ -138,7 +142,9 @@ public:
 // Ray
 template<typename T>
 class Ray {
+    static_assert(std::is_floating_point_v<T>, "Ray only supports floating-point types");
 public:
+    using value_type = T;
     Vector<T, 3> origin;
     Vector<T, 3> direction;
 
@@ -193,7 +199,9 @@ public:
 // Plane
 template<typename T>
 class Plane {
+    static_assert(std::is_floating_point_v<T>, "Plane only supports floating-point types");
 public:
+    using value_type = T;
     Vector<T, 3> normal;
     T distance;
 

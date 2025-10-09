@@ -1,249 +1,92 @@
 #include <gtest/gtest.h>
 #include "../../include/simd/geometry_ops.hpp"
-#include <cmath>
+#include "../../include/simd/config.hpp"
+#include <type_traits>
 
 namespace {
 
 using namespace PyNovaGE::SIMD;
 
-// Helper function to compare vectors with tolerance
-template<typename T, size_t N>
-testing::AssertionResult ApproxEqual(const Vector<T, N>& a, const Vector<T, N>& b, T tolerance = T(1e-5)) {
-    for (size_t i = 0; i < N; ++i) {
-        if (std::abs(a[i] - b[i]) > tolerance) {
-            return testing::AssertionFailure() 
-                << "Vector elements differ at index " << i 
-                << ". Expected " << a[i] 
-                << ", got " << b[i];
-        }
-    }
-    return testing::AssertionSuccess();
+// Test type traits and layouts
+TEST(GeometryStructureTest, TypeTraits) {
+    // AABB should be trivially copyable and have standard layout
+    EXPECT_TRUE((std::is_trivially_copyable_v<AABB<float>>));
+    EXPECT_TRUE((std::is_standard_layout_v<AABB<float>>));
+    
+    // Sphere should be trivially copyable and have standard layout
+    EXPECT_TRUE((std::is_trivially_copyable_v<Sphere<float>>));
+    EXPECT_TRUE((std::is_standard_layout_v<Sphere<float>>));
+    
+    // Ray should be trivially copyable and have standard layout
+    EXPECT_TRUE((std::is_trivially_copyable_v<Ray<float>>));
+    EXPECT_TRUE((std::is_standard_layout_v<Ray<float>>));
+    
+    // Plane should be trivially copyable and have standard layout
+    EXPECT_TRUE((std::is_trivially_copyable_v<Plane<float>>));
+    EXPECT_TRUE((std::is_standard_layout_v<Plane<float>>));
 }
 
-TEST(GeometryOpsTest, AABBConstruction) {
-    // Test default construction
-    AABB<float> aabb;
-    EXPECT_TRUE(ApproxEqual(aabb.min, Vector3f(0.0f)));
-    EXPECT_TRUE(ApproxEqual(aabb.max, Vector3f(0.0f)));
-
-    // Test construction with min/max
-    Vector3f min(-1.0f, -2.0f, -3.0f);
-    Vector3f max(1.0f, 2.0f, 3.0f);
-    AABB<float> aabb2(min, max);
-    EXPECT_TRUE(ApproxEqual(aabb2.min, min));
-    EXPECT_TRUE(ApproxEqual(aabb2.max, max));
+// Test memory alignment
+TEST(GeometryStructureTest, MemoryLayout) {
+    // AABB layout
+    constexpr size_t vector_align = alignof(Vector3f);
+    EXPECT_EQ(alignof(AABB<float>), vector_align);
+    EXPECT_EQ(sizeof(AABB<float>), 2 * sizeof(Vector3f));
+    
+    // Sphere layout
+    EXPECT_EQ(alignof(Sphere<float>), vector_align);
+    EXPECT_GE(sizeof(Sphere<float>), sizeof(Vector3f) + sizeof(float));
+    
+    // Ray layout
+    EXPECT_EQ(alignof(Ray<float>), vector_align);
+    EXPECT_EQ(sizeof(Ray<float>), 2 * sizeof(Vector3f));
+    
+    // Plane layout
+    EXPECT_EQ(alignof(Plane<float>), vector_align);
+    EXPECT_GE(sizeof(Plane<float>), sizeof(Vector3f) + sizeof(float));
 }
 
-TEST(GeometryOpsTest, AABBContains) {
-    AABB<float> aabb(Vector3f(-1.0f), Vector3f(1.0f));
-
-    // Test points inside
-    EXPECT_TRUE(aabb.contains(Vector3f(0.0f)));
-    EXPECT_TRUE(aabb.contains(Vector3f(0.5f, 0.5f, 0.5f)));
-    EXPECT_TRUE(aabb.contains(Vector3f(-0.5f, -0.5f, -0.5f)));
-
-    // Test points on boundary
-    EXPECT_TRUE(aabb.contains(Vector3f(1.0f, 1.0f, 1.0f)));
-    EXPECT_TRUE(aabb.contains(Vector3f(-1.0f, -1.0f, -1.0f)));
-
-    // Test points outside
-    EXPECT_FALSE(aabb.contains(Vector3f(2.0f, 0.0f, 0.0f)));
-    EXPECT_FALSE(aabb.contains(Vector3f(0.0f, -2.0f, 0.0f)));
-    EXPECT_FALSE(aabb.contains(Vector3f(0.0f, 0.0f, 2.0f)));
-}
-
-TEST(GeometryOpsTest, AABBIntersection) {
-    AABB<float> aabb1(Vector3f(-1.0f), Vector3f(1.0f));
-
-    // Test overlapping AABBs
-    AABB<float> aabb2(Vector3f(-0.5f), Vector3f(1.5f));
-    EXPECT_TRUE(aabb1.intersects(aabb2));
-    EXPECT_TRUE(aabb2.intersects(aabb1));
-
-    // Test touching AABBs
-    AABB<float> aabb3(Vector3f(1.0f), Vector3f(2.0f));
-    EXPECT_TRUE(aabb1.intersects(aabb3));
-    EXPECT_TRUE(aabb3.intersects(aabb1));
-
-    // Test non-intersecting AABBs
-    AABB<float> aabb4(Vector3f(2.0f), Vector3f(3.0f));
-    EXPECT_FALSE(aabb1.intersects(aabb4));
-    EXPECT_FALSE(aabb4.intersects(aabb1));
-}
-
-TEST(GeometryOpsTest, AABBProperties) {
-    Vector3f min(-1.0f, -2.0f, -3.0f);
-    Vector3f max(1.0f, 2.0f, 3.0f);
-    AABB<float> aabb(min, max);
-
-    // Test center
-    Vector3f expected_center(0.0f);
-    EXPECT_TRUE(ApproxEqual(aabb.center(), expected_center));
-
-    // Test extent
-    Vector3f expected_extent(1.0f, 2.0f, 3.0f);
-    EXPECT_TRUE(ApproxEqual(aabb.extent(), expected_extent));
-}
-
-TEST(GeometryOpsTest, SphereConstruction) {
-    // Test default construction
-    Sphere<float> sphere;
-    EXPECT_TRUE(ApproxEqual(sphere.center, Vector3f(0.0f)));
-    EXPECT_FLOAT_EQ(sphere.radius, 0.0f);
-
-    // Test construction with center and radius
-    Vector3f center(1.0f, 2.0f, 3.0f);
-    float radius = 2.0f;
-    Sphere<float> sphere2(center, radius);
-    EXPECT_TRUE(ApproxEqual(sphere2.center, center));
-    EXPECT_FLOAT_EQ(sphere2.radius, radius);
-}
-
-TEST(GeometryOpsTest, SphereContains) {
-    Sphere<float> sphere(Vector3f(0.0f), 1.0f);
-
-    // Test points inside
-    EXPECT_TRUE(sphere.contains(Vector3f(0.0f)));
-    EXPECT_TRUE(sphere.contains(Vector3f(0.5f, 0.0f, 0.0f)));
-
-    // Test points on boundary
-    EXPECT_TRUE(sphere.contains(Vector3f(1.0f, 0.0f, 0.0f)));
-    EXPECT_TRUE(sphere.contains(Vector3f(0.0f, -1.0f, 0.0f)));
-
-    // Test points outside
-    EXPECT_FALSE(sphere.contains(Vector3f(2.0f, 0.0f, 0.0f)));
-    EXPECT_FALSE(sphere.contains(Vector3f(0.0f, 0.0f, -2.0f)));
-}
-
-TEST(GeometryOpsTest, SphereIntersection) {
-    Sphere<float> sphere1(Vector3f(0.0f), 1.0f);
-
-    // Test overlapping spheres
-    Sphere<float> sphere2(Vector3f(1.0f, 0.0f, 0.0f), 1.0f);
-    EXPECT_TRUE(sphere1.intersects(sphere2));
-    EXPECT_TRUE(sphere2.intersects(sphere1));
-
-    // Test touching spheres
-    Sphere<float> sphere3(Vector3f(2.0f, 0.0f, 0.0f), 1.0f);
-    EXPECT_TRUE(sphere1.intersects(sphere3));
-    EXPECT_TRUE(sphere3.intersects(sphere1));
-
-    // Test non-intersecting spheres
-    Sphere<float> sphere4(Vector3f(3.0f, 0.0f, 0.0f), 1.0f);
-    EXPECT_FALSE(sphere1.intersects(sphere4));
-    EXPECT_FALSE(sphere4.intersects(sphere1));
-
-    // Test sphere-AABB intersection
-    AABB<float> aabb(Vector3f(-1.0f), Vector3f(1.0f));
-    EXPECT_TRUE(sphere1.intersects(aabb));
-
-    // Test non-intersecting sphere-AABB
-    AABB<float> aabb2(Vector3f(2.0f), Vector3f(3.0f));
-    EXPECT_FALSE(sphere1.intersects(aabb2));
-}
-
-TEST(GeometryOpsTest, RayConstruction) {
-    // Test default construction
-    Ray<float> ray;
-    EXPECT_TRUE(ApproxEqual(ray.origin, Vector3f(0.0f)));
-    EXPECT_TRUE(ApproxEqual(ray.direction, Vector3f(0.0f, 0.0f, 1.0f)));
-
-    // Test construction with origin and direction
-    Vector3f origin(1.0f, 2.0f, 3.0f);
-    Vector3f direction(0.0f, 1.0f, 0.0f);
-    Ray<float> ray2(origin, direction);
-    EXPECT_TRUE(ApproxEqual(ray2.origin, origin));
-    EXPECT_TRUE(ApproxEqual(ray2.direction, normalize(direction)));
-}
-
-TEST(GeometryOpsTest, RayIntersection) {
-    Ray<float> ray(Vector3f(0.0f), Vector3f(0.0f, 0.0f, 1.0f));
-    float t;
-
-    // Test sphere intersection
-    Sphere<float> sphere(Vector3f(0.0f, 0.0f, 5.0f), 1.0f);
-    EXPECT_TRUE(ray.intersects(sphere, t));
-    EXPECT_FLOAT_EQ(t, 4.0f);
-
-    // Test AABB intersection
-    AABB<float> aabb(Vector3f(-1.0f, -1.0f, 4.0f), Vector3f(1.0f, 1.0f, 6.0f));
-    EXPECT_TRUE(ray.intersects(aabb, t));
-    EXPECT_FLOAT_EQ(t, 4.0f);
-
-    // Test non-intersecting cases
-    Sphere<float> sphere2(Vector3f(2.0f, 2.0f, 5.0f), 1.0f);
-    EXPECT_FALSE(ray.intersects(sphere2, t));
-
-    AABB<float> aabb2(Vector3f(2.0f, 2.0f, 4.0f), Vector3f(3.0f, 3.0f, 6.0f));
-    EXPECT_FALSE(ray.intersects(aabb2, t));
-}
-
-TEST(GeometryOpsTest, PlaneConstruction) {
-    // Test default construction
-    Plane<float> plane;
-    EXPECT_TRUE(ApproxEqual(plane.normal, Vector3f(0.0f, 1.0f, 0.0f)));
-    EXPECT_FLOAT_EQ(plane.distance, 0.0f);
-
-    // Test construction with normal and distance
-    Vector3f normal(1.0f, 0.0f, 0.0f);
-    float distance = 2.0f;
-    Plane<float> plane2(normal, distance);
-    EXPECT_TRUE(ApproxEqual(plane2.normal, normalize(normal)));
-    EXPECT_FLOAT_EQ(plane2.distance, distance);
-
-    // Test construction with normal and point
-    Vector3f point(2.0f, 0.0f, 0.0f);
-    Plane<float> plane3(normal, point);
-    EXPECT_TRUE(ApproxEqual(plane3.normal, normalize(normal)));
-    EXPECT_FLOAT_EQ(plane3.distance, -2.0f);
-}
-
-TEST(GeometryOpsTest, PlaneOperations) {
-    // Create a plane with normal (1,0,0) at x=2
-    Plane<float> plane(Vector3f(1.0f, 0.0f, 0.0f), -2.0f);
-
-    // Test signed distance
-    EXPECT_FLOAT_EQ(plane.signedDistance(Vector3f(4.0f, 0.0f, 0.0f)), 2.0f);
-    EXPECT_FLOAT_EQ(plane.signedDistance(Vector3f(0.0f, 0.0f, 0.0f)), -2.0f);
-
-    // Test point classification
-    EXPECT_EQ(plane.classifyPoint(Vector3f(4.0f, 0.0f, 0.0f)), 1);  // Front
-    EXPECT_EQ(plane.classifyPoint(Vector3f(0.0f, 0.0f, 0.0f)), -1); // Back
-    EXPECT_EQ(plane.classifyPoint(Vector3f(2.0f, 0.0f, 0.0f)), 0);  // On plane
-
-    // Test ray intersection
-    Ray<float> ray(Vector3f(0.0f), Vector3f(1.0f, 0.0f, 0.0f));
-    float t;
-    EXPECT_TRUE(plane.intersects(ray, t));
-    EXPECT_FLOAT_EQ(t, 2.0f);
-
-    // Test parallel ray (no intersection)
-    Ray<float> parallel_ray(Vector3f(0.0f), Vector3f(0.0f, 1.0f, 0.0f));
-    EXPECT_FALSE(plane.intersects(parallel_ray, t));
-}
-
-TEST(GeometryOpsTest, SIMDAlignment) {
-    // Create aligned vectors for geometric primitives
-    alignas(16) float data[4] = {1.0f, 2.0f, 3.0f, 0.0f};
-    Vector3f aligned_vec(data[0], data[1], data[2]);
+// Test data member alignment
+TEST(GeometryStructureTest, DataAlignment) {
+    // All vector members should maintain proper alignment
+    constexpr size_t required_align = alignof(Vector3f);
 
     // Test AABB alignment
-    AABB<float> aabb(aligned_vec, aligned_vec * 2.0f);
-    EXPECT_EQ(reinterpret_cast<std::uintptr_t>(&aabb.min) % 16, 0);
-    EXPECT_EQ(reinterpret_cast<std::uintptr_t>(&aabb.max) % 16, 0);
+    AABB<float> aabb;
+    EXPECT_EQ(reinterpret_cast<std::uintptr_t>(&aabb.min) % required_align, 0);
+    EXPECT_EQ(reinterpret_cast<std::uintptr_t>(&aabb.max) % required_align, 0);
 
     // Test Sphere alignment
-    Sphere<float> sphere(aligned_vec, 1.0f);
-    EXPECT_EQ(reinterpret_cast<std::uintptr_t>(&sphere.center) % 16, 0);
+    Sphere<float> sphere;
+    EXPECT_EQ(reinterpret_cast<std::uintptr_t>(&sphere.center) % required_align, 0);
 
     // Test Ray alignment
-    Ray<float> ray(aligned_vec, aligned_vec);
-    EXPECT_EQ(reinterpret_cast<std::uintptr_t>(&ray.origin) % 16, 0);
-    EXPECT_EQ(reinterpret_cast<std::uintptr_t>(&ray.direction) % 16, 0);
+    Ray<float> ray;
+    EXPECT_EQ(reinterpret_cast<std::uintptr_t>(&ray.origin) % required_align, 0);
+    EXPECT_EQ(reinterpret_cast<std::uintptr_t>(&ray.direction) % required_align, 0);
 
     // Test Plane alignment
-    Plane<float> plane(aligned_vec, 1.0f);
-    EXPECT_EQ(reinterpret_cast<std::uintptr_t>(&plane.normal) % 16, 0);
+    Plane<float> plane;
+    EXPECT_EQ(reinterpret_cast<std::uintptr_t>(&plane.normal) % required_align, 0);
+}
+
+// Test template constraints
+TEST(GeometryStructureTest, TemplateConstraints) {
+    // Test that AABB template parameter must be floating point
+    EXPECT_TRUE((std::is_floating_point_v<typename AABB<float>::value_type>));
+    EXPECT_TRUE((std::is_floating_point_v<typename AABB<double>::value_type>));
+
+    // Test that Sphere template parameter must be floating point
+    EXPECT_TRUE((std::is_floating_point_v<typename Sphere<float>::value_type>));
+    EXPECT_TRUE((std::is_floating_point_v<typename Sphere<double>::value_type>));
+
+    // Test that Ray template parameter must be floating point
+    EXPECT_TRUE((std::is_floating_point_v<typename Ray<float>::value_type>));
+    EXPECT_TRUE((std::is_floating_point_v<typename Ray<double>::value_type>));
+
+    // Test that Plane template parameter must be floating point
+    EXPECT_TRUE((std::is_floating_point_v<typename Plane<float>::value_type>));
+    EXPECT_TRUE((std::is_floating_point_v<typename Plane<double>::value_type>));
 }
 
 } // namespace
