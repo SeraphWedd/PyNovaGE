@@ -6,17 +6,34 @@ namespace {
 
 using namespace PyNovaGE::SIMD;
 
+// Helper function to compare vectors with tolerance
+template<typename T, size_t N>
+testing::AssertionResult ApproxEqual(const Vector<T, N>& a, const Vector<T, N>& b, T tolerance = T(1e-5)) {
+    for (size_t i = 0; i < N; ++i) {
+        if (std::abs(a[i] - b[i]) > tolerance) {
+            return testing::AssertionFailure() 
+                << "Vector elements differ at index " << i 
+                << ". Expected " << a[i] 
+                << ", got " << b[i];
+        }
+    }
+    return testing::AssertionSuccess();
+}
+
 // Helper function to compare matrices with tolerance
 template<typename T, size_t N>
-bool ApproxEqual(const Matrix<T, N>& a, const Matrix<T, N>& b, T tolerance = T(1e-5)) {
+testing::AssertionResult ApproxEqual(const Matrix<T, N>& a, const Matrix<T, N>& b, T tolerance = T(1e-5)) {
     for (size_t i = 0; i < N; ++i) {
         for (size_t j = 0; j < N; ++j) {
             if (std::abs(a(i, j) - b(i, j)) > tolerance) {
-                return false;
+                return testing::AssertionFailure() 
+                    << "Matrix elements differ at (" << i << ", " << j 
+                    << "). Expected " << a(i, j) 
+                    << ", got " << b(i, j);
             }
         }
     }
-    return true;
+    return testing::AssertionSuccess();
 }
 
 TEST(MatrixOpsTest, Construction) {

@@ -98,25 +98,39 @@ inline Vector<T, N> max(const Vector<T, N>& a, const Vector<T, N>& b) {
 namespace detail {
     template<typename T>
     inline Vector<T, 4> sqrt_impl(const Vector<T, 4>& v) {
+        Vector<T, 4> result;
         #if defined(NOVA_AVX2_AVAILABLE) || defined(NOVA_AVX_AVAILABLE)
             if constexpr (std::is_same_v<T, float>) {
-                return Vector<T, 4>(_mm256_sqrt_ps(*reinterpret_cast<const __m256*>(v.data())));
+                auto va = _mm256_load_ps(v.data());
+                _mm256_store_ps(result.data(), _mm256_sqrt_ps(va));
+                return result;
             } else if constexpr (std::is_same_v<T, double>) {
-                return Vector<T, 4>(_mm256_sqrt_pd(*reinterpret_cast<const __m256d*>(v.data())));
+                auto va = _mm256_load_pd(v.data());
+                _mm256_store_pd(result.data(), _mm256_sqrt_pd(va));
+                return result;
             }
         #elif defined(NOVA_SSE2_AVAILABLE)
             if constexpr (std::is_same_v<T, float>) {
-                return Vector<T, 4>(_mm_sqrt_ps(*reinterpret_cast<const __m128*>(v.data())));
+                auto va = _mm_load_ps(v.data());
+                _mm_store_ps(result.data(), _mm_sqrt_ps(va));
+                return result;
             } else if constexpr (std::is_same_v<T, double>) {
-                return Vector<T, 4>(_mm_sqrt_pd(*reinterpret_cast<const __m128d*>(v.data())));
+                auto va = _mm_load_pd(v.data());
+                _mm_store_pd(result.data(), _mm_sqrt_pd(va));
+                return result;
             }
         #elif defined(NOVA_NEON_AVAILABLE)
             if constexpr (std::is_same_v<T, float>) {
-                return Vector<T, 4>(vsqrtq_f32(*reinterpret_cast<const float32x4_t*>(v.data())));
+                auto va = vld1q_f32(v.data());
+                vst1q_f32(result.data(), vsqrtq_f32(va));
+                return result;
             }
         #endif
         // Fallback implementation
-        return sqrt<T, 4>(v);
+        for (size_t i = 0; i < 4; ++i) {
+            result[i] = std::sqrt(v[i]);
+        }
+        return result;
     }
 
     // Similar implementations for rsqrt_impl, abs_impl, min_impl, and max_impl...

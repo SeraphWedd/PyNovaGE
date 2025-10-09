@@ -8,13 +8,16 @@ using namespace PyNovaGE::SIMD;
 
 // Helper function to compare vectors with tolerance
 template<typename T, size_t N>
-bool ApproxEqual(const Vector<T, N>& a, const Vector<T, N>& b, T tolerance = T(1e-5)) {
+testing::AssertionResult ApproxEqual(const Vector<T, N>& a, const Vector<T, N>& b, T tolerance = T(1e-5)) {
     for (size_t i = 0; i < N; ++i) {
         if (std::abs(a[i] - b[i]) > tolerance) {
-            return false;
+            return testing::AssertionFailure() 
+                << "Vector elements differ at index " << i 
+                << ". Expected " << a[i] 
+                << ", got " << b[i];
         }
     }
-    return true;
+    return testing::AssertionSuccess();
 }
 
 TEST(GeometryOpsTest, AABBConstruction) {

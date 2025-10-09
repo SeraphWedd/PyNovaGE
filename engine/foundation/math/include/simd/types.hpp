@@ -107,6 +107,29 @@ public:
     T* data() { return data_; }
     const T* data() const { return data_; }
 
+    // Scalar multiplication
+    friend constexpr Vector operator*(const Vector& v, T scalar) {
+        Vector result;
+        for (size_t i = 0; i < N; ++i) {
+            result[i] = v[i] * scalar;
+        }
+        return result;
+    }
+
+    friend constexpr Vector operator*(T scalar, const Vector& v) {
+        return v * scalar;
+    }
+
+    // Scalar division
+    friend constexpr Vector operator/(const Vector& v, T scalar) {
+        Vector result;
+        T inv_scalar = T(1) / scalar;
+        for (size_t i = 0; i < N; ++i) {
+            result[i] = v[i] * inv_scalar;
+        }
+        return result;
+    }
+
     // Component access for common vector sizes
     template<size_t M = N>
     constexpr std::enable_if_t<M >= 1, T&> x() { return data_[0]; }

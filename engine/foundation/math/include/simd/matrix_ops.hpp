@@ -1,8 +1,13 @@
 #pragma once
 
 #include "types.hpp"
-#include "vector_ops.hpp"
+#include "types.hpp"
 #include <array>
+#include <initializer_list>
+
+#ifndef M_PI
+#define M_PI 3.14159265358979323846
+#endif
 
 namespace PyNovaGE {
 namespace SIMD {
@@ -33,6 +38,14 @@ public:
     // Construct from array
     explicit constexpr Matrix(const T* data) {
         std::copy(data, data + N * N, data_);
+    }
+
+    // Construct from initializer list
+    constexpr Matrix(std::initializer_list<T> init) {
+        auto it = init.begin();
+        for (size_t i = 0; i < N * N && it != init.end(); ++i, ++it) {
+            data_[i] = *it;
+        }
     }
     
     // Access operators
