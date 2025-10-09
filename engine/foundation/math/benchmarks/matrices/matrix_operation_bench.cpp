@@ -8,6 +8,7 @@
 #include <vector>
 #include <random>
 #include <memory>
+#include <immintrin.h>
 
 namespace {
 
@@ -224,36 +225,138 @@ static void BM_Matrix3_Determinant(benchmark::State& state) {
     state.SetItemsProcessed(state.iterations() * N);
 }
 
+// SoA layout for better cache utilization
+struct TransformSoA {
+    std::vector<float, AlignedAllocator<float>> m00, m01, m02;
+    std::vector<float, AlignedAllocator<float>> m10, m11, m12;
+    std::vector<float, AlignedAllocator<float>> m20, m21, m22;
+
+    explicit TransformSoA(size_t size) : 
+        m00(size), m01(size), m02(size),
+        m10(size), m11(size), m12(size),
+        m20(size), m21(size), m22(size) {}
+
+    void setFromMatrix3(size_t idx, const Matrix3<float>& mat) {
+        m00[idx] = mat[0][0]; m01[idx] = mat[0][1]; m02[idx] = mat[0][2];
+        m10[idx] = mat[1][0]; m11[idx] = mat[1][1]; m12[idx] = mat[1][2];
+        m20[idx] = mat[2][0]; m21[idx] = mat[2][1]; m22[idx] = mat[2][2];
+    }
+};
+
+struct Vector3SoA {
+    std::vector<float, AlignedAllocator<float>> x, y, z;
+    
+    explicit Vector3SoA(size_t size) : x(size), y(size), z(size) {}
+    
+    void setFromVector3(size_t idx, const Vector3<float>& vec) {
+        x[idx] = vec[0]; y[idx] = vec[1]; z[idx] = vec[2];
+    }
+};
+
 static void BM_Matrix3_TypicalFrameUpdate(benchmark::State& state) {
     const size_t N = state.range(0);
     MatrixDataGenerator<float> gen;
-    std::vector<Matrix3<float>> transforms(N);
-    std::vector<Vector3<float>> positions(N);
-    std::vector<Vector3<float>> velocities(N);
-    const float dt = 0.016667f;  // 60 FPS
     
+    // Use SoA layout
+    TransformSoA transforms(N);
+    Vector3SoA positions(N);
+    Vector3SoA velocities(N);
+    Vector3SoA results(N);
+    
+    // Initialize data
     for (size_t i = 0; i < N; ++i) {
-        transforms[i] = gen.generateTransformMatrix3();
-        positions[i] = Vector3f(gen.generateRandomMatrix3()[0]);
-        velocities[i] = Vector3f(gen.generateRandomMatrix3()[0]);
+        transforms.setFromMatrix3(i, gen.generateTransformMatrix3());
+        Vector3f pos = Vector3f(gen.generateRandomMatrix3()[0]);
+        Vector3f vel = Vector3f(gen.generateRandomMatrix3()[0]);
+        positions.setFromVector3(i, pos);
+        velocities.setFromVector3(i, vel);
     }
     
+    // Pre-compute rotation matrix values
+    const float dt = 0.016667f;  // 60 FPS
+    const float angle = dt * 0.5f;  // 30 degrees per second
+    const float cos_angle = std::cos(angle);
+    const float sin_angle = std::sin(angle);
+    
+    // Create vectors for SIMD operations
+    const __m256 dt_vec = _mm256_set1_ps(dt);
+    const __m256 cos_vec = _mm256_set1_ps(cos_angle);
+    const __m256 sin_vec = _mm256_set1_ps(sin_angle);
+    
     for (auto _ : state) {
-        for (size_t i = 0; i < N; ++i) {
-            // Update position
-            positions[i] += velocities[i] * dt;
+        // Process in chunks of 8 for AVX
+        for (size_t i = 0; i < N; i += 8) {
+            const size_t chunk = std::min(size_t(8), N - i);
             
-            // Apply transform
-Vector3<float> transformed = transforms[i] * positions[i];
+            // Update positions using SIMD
+            for (size_t j = 0; j < chunk; j += 8) {
+                __m256 px = _mm256_load_ps(&positions.x[i+j]);
+                __m256 py = _mm256_load_ps(&positions.y[i+j]);
+                __m256 pz = _mm256_load_ps(&positions.z[i+j]);
+                
+                __m256 vx = _mm256_load_ps(&velocities.x[i+j]);
+                __m256 vy = _mm256_load_ps(&velocities.y[i+j]);
+                __m256 vz = _mm256_load_ps(&velocities.z[i+j]);
+                
+                // p += v * dt
+                px = _mm256_fmadd_ps(vx, dt_vec, px);
+                py = _mm256_fmadd_ps(vy, dt_vec, py);
+                pz = _mm256_fmadd_ps(vz, dt_vec, pz);
+                
+                _mm256_store_ps(&positions.x[i+j], px);
+                _mm256_store_ps(&positions.y[i+j], py);
+                _mm256_store_ps(&positions.z[i+j], pz);
+            }
             
-            // Update transform with slight rotation
-            float angle = dt * 0.5f;  // 30 degrees per second
-Matrix3<float> rotation = Matrix3<float>::Rotation(angle);
-            transforms[i] = rotation * transforms[i];
-            
-            benchmark::DoNotOptimize(transformed);
-            benchmark::DoNotOptimize(transforms[i]);
+            // Update transforms using SIMD
+            for (size_t j = 0; j < chunk; j += 8) {
+                // Load transform rows
+                __m256 m00 = _mm256_load_ps(&transforms.m00[i+j]);
+                __m256 m01 = _mm256_load_ps(&transforms.m01[i+j]);
+                __m256 m02 = _mm256_load_ps(&transforms.m02[i+j]);
+                __m256 m10 = _mm256_load_ps(&transforms.m10[i+j]);
+                __m256 m11 = _mm256_load_ps(&transforms.m11[i+j]);
+                __m256 m12 = _mm256_load_ps(&transforms.m12[i+j]);
+                __m256 m20 = _mm256_load_ps(&transforms.m20[i+j]);
+                __m256 m21 = _mm256_load_ps(&transforms.m21[i+j]);
+                __m256 m22 = _mm256_load_ps(&transforms.m22[i+j]);
+                
+                // Apply rotation: R * M
+                __m256 new_m00 = _mm256_fmadd_ps(cos_vec, m00, _mm256_mul_ps(sin_vec, m10));
+                __m256 new_m01 = _mm256_fmadd_ps(cos_vec, m01, _mm256_mul_ps(sin_vec, m11));
+                __m256 new_m02 = _mm256_fmadd_ps(cos_vec, m02, _mm256_mul_ps(sin_vec, m12));
+                
+                __m256 new_m10 = _mm256_fnmadd_ps(sin_vec, m00, _mm256_mul_ps(cos_vec, m10));
+                __m256 new_m11 = _mm256_fnmadd_ps(sin_vec, m01, _mm256_mul_ps(cos_vec, m11));
+                __m256 new_m12 = _mm256_fnmadd_ps(sin_vec, m02, _mm256_mul_ps(cos_vec, m12));
+                
+                // Store results
+                _mm256_store_ps(&transforms.m00[i+j], new_m00);
+                _mm256_store_ps(&transforms.m01[i+j], new_m01);
+                _mm256_store_ps(&transforms.m02[i+j], new_m02);
+                _mm256_store_ps(&transforms.m10[i+j], new_m10);
+                _mm256_store_ps(&transforms.m11[i+j], new_m11);
+                _mm256_store_ps(&transforms.m12[i+j], new_m12);
+                _mm256_store_ps(&transforms.m20[i+j], m20);
+                _mm256_store_ps(&transforms.m21[i+j], m21);
+                _mm256_store_ps(&transforms.m22[i+j], m22);
+                
+                // Transform positions
+                __m256 px = _mm256_load_ps(&positions.x[i+j]);
+                __m256 py = _mm256_load_ps(&positions.y[i+j]);
+                __m256 pz = _mm256_load_ps(&positions.z[i+j]);
+                
+                __m256 rx = _mm256_fmadd_ps(m00, px, _mm256_fmadd_ps(m01, py, _mm256_mul_ps(m02, pz)));
+                __m256 ry = _mm256_fmadd_ps(m10, px, _mm256_fmadd_ps(m11, py, _mm256_mul_ps(m12, pz)));
+                __m256 rz = _mm256_fmadd_ps(m20, px, _mm256_fmadd_ps(m21, py, _mm256_mul_ps(m22, pz)));
+                
+                _mm256_store_ps(&results.x[i+j], rx);
+                _mm256_store_ps(&results.y[i+j], ry);
+                _mm256_store_ps(&results.z[i+j], rz);
+            }
         }
+        benchmark::DoNotOptimize(results.x[0]);
+        benchmark::DoNotOptimize(transforms.m00[0]);
     }
     state.SetItemsProcessed(state.iterations() * N);
 }
