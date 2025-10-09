@@ -24,17 +24,37 @@ endif()
 # Enable SIMD instructions based on platform
 if(PYNOVAGE_COMPILER_MSVC)
     # Enable all instruction sets
-    add_compile_options(/arch:AVX2)    # This enables AVX2, AVX, SSE4.2, SSE4.1, SSE3, SSE2
+    add_compile_options(/arch:AVX2)    # AVX2, AVX, SSE4.2, SSE4.1, SSE3, SSE2
     
-    # Enable enhanced instruction sets for Release builds
-    add_compile_options($<$<CONFIG:Release>:/fp:fast>)  # Fast floating point model
-    add_compile_options($<$<CONFIG:Release>:/GL>)       # Whole program optimization
-    add_compile_options($<$<CONFIG:Release>:/Oi>)       # Enable intrinsic functions
-    add_compile_options($<$<CONFIG:Release>:/Ot>)       # Favor fast code
-    add_compile_options($<$<CONFIG:Release>:/Qpar>)     # Auto-Parallelizer
+    # Enable enhanced instruction sets and optimizations
+    add_compile_options(/fp:fast)       # Fast floating point model always
+    add_compile_options(/GL)            # Whole program optimization
+    add_compile_options(/Oi)            # Enable intrinsic functions
+    add_compile_options(/Ot)            # Favor fast code
+    add_compile_options(/Qpar)          # Auto-Parallelizer
+    add_compile_options(/Qvec-report:2) # Show auto-vectorization report
+    add_compile_options(/GT)            # Fiber-safe optimizations
+    add_compile_options(/GS-)           # Disable buffer security check for performance
+    add_compile_options(/Zo)            # Enhanced debugging info
     
-    # Linker optimizations for Release
-    add_link_options($<$<CONFIG:Release>:/LTCG>)        # Link-time code generation
+    # Additional Release optimizations
+    add_compile_options($<$<CONFIG:Release>:/O2>)        # Maximum optimization
+    add_compile_options($<$<CONFIG:Release>:/Ob3>)      # Most aggressive inlining
+    add_compile_options($<$<CONFIG:Release>:/Oy>)       # Frame pointer omission
+    add_compile_options($<$<CONFIG:Release>:/favor:INTEL64>) # Optimize for modern Intel
+    
+    # Memory alignment for SIMD
+    add_compile_definitions(ALIGN_MALLOC)
+    add_compile_definitions(_ENABLE_EXTENDED_ALIGNED_STORAGE)
+    
+    # Enable enhanced CPU features
+    add_compile_definitions(__FMA__)
+    add_compile_definitions(__F16C__)
+    
+    # Linker optimizations
+    add_link_options(/LTCG:INCREMENTAL) # Incremental LTCG
+    add_link_options(/OPT:REF)          # Remove unused functions
+    add_link_options(/OPT:ICF)          # Fold identical functions
 else()
     # GCC/Clang SIMD flags - enable all available
     add_compile_options(-msse2 -msse3 -mssse3 -msse4.1 -msse4.2 -mavx -mavx2)
@@ -43,17 +63,19 @@ endif()
 
 # Set optimization levels per configuration
 if(PYNOVAGE_COMPILER_MSVC)
-    # MSVC-specific optimizations
-    add_compile_options($<$<CONFIG:Release>:/O2>)  # Maximum optimization
+    # Debug configuration
     add_compile_options($<$<CONFIG:Debug>:/Od>)   # Disable optimization
+    add_compile_options($<$<CONFIG:Debug>:/Ob0>)  # Disable inlining
     
     # Enable Multi-processor compilation
     add_compile_options(/MP)
     
-    # Function and data optimization
+    # Code generation optimizations
     add_compile_options(/Gy)     # Function-level linking
     add_compile_options(/GA)     # Optimize for Windows Application
     add_compile_options(/GF)     # String pooling
+    add_compile_options(/Gw)     # Global data optimization
+    add_compile_options(/Zc:inline) # Remove unreferenced functions
 else()
     # GCC/Clang optimizations
     add_compile_options($<$<CONFIG:Release>:-O3>)
