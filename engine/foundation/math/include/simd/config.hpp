@@ -22,6 +22,9 @@ namespace SIMD {
     #if defined(_M_IX86_FP) && _M_IX86_FP >= 2
         #define NOVA_SSE2_AVAILABLE
     #endif
+    #if defined(__SSE4_1__) || defined(__AVX__)
+        #define NOVA_SSE4_1_AVAILABLE
+    #endif
     #if defined(__ARM_NEON)
         #define NOVA_NEON_AVAILABLE
     #endif
@@ -42,6 +45,9 @@ namespace SIMD {
     #if defined(__SSE2__)
         #define NOVA_SSE2_AVAILABLE
     #endif
+    #if defined(__SSE4_1__)
+        #define NOVA_SSE4_1_AVAILABLE
+    #endif
     #if defined(__ARM_NEON)
         #define NOVA_NEON_AVAILABLE
     #endif
@@ -52,6 +58,8 @@ namespace SIMD {
     constexpr size_t SIMD_WIDTH = 32;
 #elif defined(NOVA_AVX_AVAILABLE)
     constexpr size_t SIMD_WIDTH = 32;
+#elif defined(NOVA_SSE4_1_AVAILABLE)
+    constexpr size_t SIMD_WIDTH = 16;
 #elif defined(NOVA_SSE2_AVAILABLE) || defined(NOVA_NEON_AVAILABLE)
     constexpr size_t SIMD_WIDTH = 16;
 #else
@@ -77,6 +85,14 @@ constexpr bool HasAVX() {
 
 constexpr bool HasSSE2() {
     #if defined(NOVA_SSE2_AVAILABLE)
+        return true;
+    #else
+        return false;
+    #endif
+}
+
+constexpr bool HasSSE4_1() {
+    #if defined(NOVA_SSE4_1_AVAILABLE)
         return true;
     #else
         return false;

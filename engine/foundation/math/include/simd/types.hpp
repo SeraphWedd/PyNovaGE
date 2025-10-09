@@ -7,6 +7,8 @@
 // Include SIMD headers based on available features
 #if defined(NOVA_AVX2_AVAILABLE) || defined(NOVA_AVX_AVAILABLE)
     #include <immintrin.h>
+#elif defined(NOVA_SSE4_1_AVAILABLE)
+    #include <smmintrin.h>
 #elif defined(NOVA_SSE2_AVAILABLE)
     #include <emmintrin.h>
 #elif defined(NOVA_NEON_AVAILABLE)

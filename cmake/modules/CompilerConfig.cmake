@@ -23,22 +23,37 @@ endif()
 
 # Enable SIMD instructions based on platform
 if(PYNOVAGE_COMPILER_MSVC)
-    add_compile_options(/arch:AVX2)
+    # Enable all instruction sets
+    add_compile_options(/arch:AVX2)    # This enables AVX2, AVX, SSE4.2, SSE4.1, SSE3, SSE2
+    
+    # Enable enhanced instruction sets for Release builds
+    add_compile_options($<$<CONFIG:Release>:/fp:fast>)  # Fast floating point model
+    add_compile_options($<$<CONFIG:Release>:/GL>)       # Whole program optimization
+    add_compile_options($<$<CONFIG:Release>:/Oi>)       # Enable intrinsic functions
+    add_compile_options($<$<CONFIG:Release>:/Ot>)       # Favor fast code
+    add_compile_options($<$<CONFIG:Release>:/Qpar>)     # Auto-Parallelizer
+    
+    # Linker optimizations for Release
+    add_link_options($<$<CONFIG:Release>:/LTCG>)        # Link-time code generation
 else()
-    add_compile_options(-mavx2)
+    # GCC/Clang SIMD flags - enable all available
+    add_compile_options(-msse2 -msse3 -mssse3 -msse4.1 -msse4.2 -mavx -mavx2)
+    add_compile_options($<$<CONFIG:Release>:-ffast-math>)
 endif()
 
 # Set optimization levels per configuration
 if(PYNOVAGE_COMPILER_MSVC)
     # MSVC-specific optimizations
-    add_compile_options($<$<CONFIG:Release>:/O2>)
-    add_compile_options($<$<CONFIG:Debug>:/Od>)
+    add_compile_options($<$<CONFIG:Release>:/O2>)  # Maximum optimization
+    add_compile_options($<$<CONFIG:Debug>:/Od>)   # Disable optimization
     
     # Enable Multi-processor compilation
     add_compile_options(/MP)
     
-    # Enable function-level linking
-    add_compile_options(/Gy)
+    # Function and data optimization
+    add_compile_options(/Gy)     # Function-level linking
+    add_compile_options(/GA)     # Optimize for Windows Application
+    add_compile_options(/GF)     # String pooling
 else()
     # GCC/Clang optimizations
     add_compile_options($<$<CONFIG:Release>:-O3>)

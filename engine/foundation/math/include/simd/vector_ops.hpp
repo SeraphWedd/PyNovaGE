@@ -11,7 +11,15 @@ namespace SIMD {
 template<typename T, size_t N>
 inline Vector<T, N> operator+(const Vector<T, N>& a, const Vector<T, N>& b) {
     Vector<T, N> result;
-    #if defined(NOVA_SSE2_AVAILABLE)
+    #if defined(NOVA_AVX2_AVAILABLE)
+    if constexpr (N == 4 && std::is_same_v<T, float>) {
+        auto va = _mm256_castps128_ps256(_mm_loadu_ps(a.data()));
+        auto vb = _mm256_castps128_ps256(_mm_loadu_ps(b.data()));
+        _mm_storeu_ps(result.data(),
+                    _mm256_castps256_ps128(_mm256_add_ps(va, vb)));
+        return result;
+    }
+    #elif defined(NOVA_SSE2_AVAILABLE)
     if constexpr (N == 4 && std::is_same_v<T, float>) {
         auto va = _mm_loadu_ps(a.data());
         auto vb = _mm_loadu_ps(b.data());
@@ -107,11 +115,57 @@ inline Vector<T, 3> cross(const Vector<T, 3>& a, const Vector<T, 3>& b) {
 // Vector normalization
 template<typename T, size_t N>
 inline Vector<T, N> normalize(const Vector<T, N>& v) {
-    T length_sq = dot(v, v);
-    if (length_sq == T(0)) {
-        return v;
+    Vector<T, N> result;
+    
+    #if defined(NOVA_AVX2_AVAILABLE)
+    if constexpr (N == 4 && std::is_same_v<T, float>) {
+        // AVX2 path: Use FMA for better performance
+        auto vv = _mm256_castps128_ps256(_mm_loadu_ps(v.data()));
+        auto sq = _mm256_mul_ps(vv, vv);
+        auto sum = _mm256_hadd_ps(sq, sq);
+        sum = _mm256_hadd_ps(sum, sum);
+        
+        if (_mm256_cvtss_f32(sum) == 0.0f) return v;
+        
+        auto len_sq = _mm256_broadcastss_ps(_mm256_castps256_ps128(sum));
+        auto rsqrt = _mm256_rsqrt_ps(len_sq);
+        _mm_storeu_ps(result.data(),
+                    _mm256_castps256_ps128(_mm256_mul_ps(vv, rsqrt)));
+        return result;
     }
-    return v * rsqrt(Vector<T, 1>(length_sq))[0];
+    #elif defined(NOVA_SSE4_1_AVAILABLE)
+    if constexpr (N == 4 && std::is_same_v<T, float>) {
+        // SSE4.1 path: Use dp for dot product
+        auto vv = _mm_loadu_ps(v.data());
+        auto len_sq = _mm_dp_ps(vv, vv, 0xFF);
+        
+        if (_mm_cvtss_f32(len_sq) == 0.0f) return v;
+        
+        auto rsqrt = _mm_rsqrt_ps(len_sq);
+        _mm_storeu_ps(result.data(), _mm_mul_ps(vv, rsqrt));
+        return result;
+    }
+    #elif defined(NOVA_SSE2_AVAILABLE)
+    if constexpr (N == 4 && std::is_same_v<T, float>) {
+        // SSE2 path: Manual dot product
+        auto vv = _mm_loadu_ps(v.data());
+        auto sq = _mm_mul_ps(vv, vv);
+        auto sum = _mm_add_ps(_mm_movehl_ps(sq, sq), sq);
+        sum = _mm_add_ss(_mm_shuffle_ps(sum, sum, 1), sum);
+        
+        if (_mm_cvtss_f32(sum) == 0.0f) return v;
+        
+        auto len_sq = _mm_shuffle_ps(sum, sum, 0);
+        auto rsqrt = _mm_rsqrt_ps(len_sq);
+        _mm_storeu_ps(result.data(), _mm_mul_ps(vv, rsqrt));
+        return result;
+    }
+    #endif
+    
+    // Non-SIMD fallback
+    T length_sq = dot(v, v);
+    if (length_sq == T(0)) return v;
+    return v * (T(1) / std::sqrt(length_sq));
 }
 
 // Vector length

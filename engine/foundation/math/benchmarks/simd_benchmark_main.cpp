@@ -11,9 +11,12 @@ using namespace PyNovaGE::SIMD;
 //------------------------------------------------------------------------------
 
 // Batch sizes for different scenarios
-const size_t VERTEX_BATCH_SIZE = 10000;     // For vertex processing (typical mesh size)
-const size_t COLLISION_OBJECT_COUNT = 1000;   // For broad-phase collision (typical scene size)
-const size_t PARTICLE_COUNT = 10000;         // For particle systems (typical particle count)
+const size_t VERTEX_BATCH_SIZE = 100000;     // For vertex processing (larger mesh size)
+const size_t COLLISION_OBJECT_COUNT = 10000;   // For broad-phase collision (larger scene size)
+const size_t PARTICLE_COUNT = 100000;         // For particle systems (larger particle count)
+
+// SIMD alignment
+const size_t SIMD_ALIGNMENT = 32;  // AVX alignment requirement
 
 // Random number generation
 static std::mt19937 rng(std::random_device{}());
@@ -61,45 +64,110 @@ public:
 // Vector Operation Benchmarks
 //------------------------------------------------------------------------------
 
+// Aligned allocator for SIMD operations
+template<typename T>
+class AlignedAllocator {
+public:
+    using value_type = T;
+    
+    AlignedAllocator() noexcept {}
+    
+    template<typename U>
+    AlignedAllocator(const AlignedAllocator<U>&) noexcept {}
+    
+    T* allocate(std::size_t n) {
+        if (n == 0) return nullptr;
+        void* ptr = _aligned_malloc(n * sizeof(T), SIMD_ALIGNMENT);
+        if (!ptr) throw std::bad_alloc();
+        return static_cast<T*>(ptr);
+    }
+    
+    void deallocate(T* p, std::size_t) noexcept {
+        _aligned_free(p);
+    }
+};
+
+template<typename T, typename U>
+bool operator==(const AlignedAllocator<T>&, const AlignedAllocator<U>&) noexcept {
+    return true;
+}
+
+template<typename T, typename U>
+bool operator!=(const AlignedAllocator<T>&, const AlignedAllocator<U>&) noexcept {
+    return false;
+}
+
+// Structure of Arrays for particle data
+struct ParticleSOA {
+    std::vector<float, AlignedAllocator<float>> x, y, z, w;
+    
+    ParticleSOA(size_t count) : 
+        x(count), y(count), z(count), w(count) {}
+};
+
 // Particle System Position Update (Vector Addition)
 static void BM_ParticleSystem_SIMD(benchmark::State& state) {
-    // Setup particle data
-    std::vector<Vector<float, 4>> positions;
-    std::vector<Vector<float, 4>> velocities;
-    positions.reserve(PARTICLE_COUNT);
-    velocities.reserve(PARTICLE_COUNT);
+    // Setup particle data using SoA layout
+    ParticleSOA positions(PARTICLE_COUNT);
+    ParticleSOA velocities(PARTICLE_COUNT);
+    ParticleSOA results(PARTICLE_COUNT);
     
-    // Pre-allocate result vector
-    std::vector<Vector<float, 4>> results;
-    positions.reserve(PARTICLE_COUNT);
-    velocities.reserve(PARTICLE_COUNT);
-    results.reserve(PARTICLE_COUNT);
-    
-    // Initialize particles in chunks for better cache utilization
+    // Initialize particles
     for (size_t i = 0; i < PARTICLE_COUNT; ++i) {
-        positions.push_back(generateRandomVector4());
-        velocities.push_back(Vector<float, 4>(
-            smallPosDist(rng),
-            smallPosDist(rng),
-            smallPosDist(rng),
-            0.0f
-        ));
-        results.push_back(Vector<float, 4>());  // Reserve space
+        auto pos = generateRandomVector4();
+        positions.x[i] = pos[0];
+        positions.y[i] = pos[1];
+        positions.z[i] = pos[2];
+        positions.w[i] = pos[3];
+        
+        velocities.x[i] = smallPosDist(rng);
+        velocities.y[i] = smallPosDist(rng);
+        velocities.z[i] = smallPosDist(rng);
+        velocities.w[i] = 0.0f;
     }
     
     const float dt = 1.0f / 60.0f;  // 60 FPS simulation
+    const size_t CHUNK_SIZE = 256;  // Process more particles per chunk
     
     for (auto _ : state) {
-        // Update particles in chunks for better cache utilization
-        for (size_t i = 0; i < PARTICLE_COUNT; i += 64) {
-            size_t end = std::min(i + 64, PARTICLE_COUNT);
-            for (size_t j = i; j < end; ++j) {
-                results[j] = positions[j] + (velocities[j] * dt);
+        // Update particles in larger chunks
+        for (size_t i = 0; i < PARTICLE_COUNT; i += CHUNK_SIZE) {
+            size_t end = std::min(i + CHUNK_SIZE, PARTICLE_COUNT);
+            for (size_t j = i; j < end; j += 8) {  // Process 8 particles at a time with AVX
+                // Load position and velocity data
+                __m256 px = _mm256_load_ps(&positions.x[j]);
+                __m256 py = _mm256_load_ps(&positions.y[j]);
+                __m256 pz = _mm256_load_ps(&positions.z[j]);
+                
+                __m256 vx = _mm256_load_ps(&velocities.x[j]);
+                __m256 vy = _mm256_load_ps(&velocities.y[j]);
+                __m256 vz = _mm256_load_ps(&velocities.z[j]);
+                
+                // Scale velocities by dt
+                __m256 dt_vec = _mm256_set1_ps(dt);
+                vx = _mm256_mul_ps(vx, dt_vec);
+                vy = _mm256_mul_ps(vy, dt_vec);
+                vz = _mm256_mul_ps(vz, dt_vec);
+                
+                // Add scaled velocities to positions
+                __m256 rx = _mm256_add_ps(px, vx);
+                __m256 ry = _mm256_add_ps(py, vy);
+                __m256 rz = _mm256_add_ps(pz, vz);
+                
+                // Store results
+                _mm256_store_ps(&results.x[j], rx);
+                _mm256_store_ps(&results.y[j], ry);
+                _mm256_store_ps(&results.z[j], rz);
+                _mm256_store_ps(&results.w[j], _mm256_set1_ps(1.0f));
             }
         }
-        std::swap(positions, results);
-        benchmark::DoNotOptimize(positions[0]);
-        benchmark::DoNotOptimize(positions[PARTICLE_COUNT-1]);
+        std::swap(positions.x, results.x);
+        std::swap(positions.y, results.y);
+        std::swap(positions.z, results.z);
+        std::swap(positions.w, results.w);
+        
+        benchmark::DoNotOptimize(positions.x[0]);
+        benchmark::DoNotOptimize(positions.x[PARTICLE_COUNT-1]);
     }
     
     state.SetItemsProcessed(state.iterations() * PARTICLE_COUNT);
