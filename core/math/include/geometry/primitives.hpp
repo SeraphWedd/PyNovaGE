@@ -61,7 +61,22 @@ Ray3D() : origin(0.0f, 0.0f, 0.0f), direction(1.0f, 0.0f, 0.0f) {}
      * @return Point at distance t
      */
     Vector3 getPoint(float t) const {
+#if PYNOVAGE_MATH_HAS_FMA
+        alignas(16) float scalarArr[4] = {t, t, t, 0.0f};
+        alignas(16) float temp[4];
+        SimdUtils::MultiplyAndAdd4f(direction.xyzw, scalarArr, origin.xyzw, temp);
+        return Vector3(temp[0], temp[1], temp[2]);
+#elif PYNOVAGE_MATH_HAS_SSE
+        __m128 dir = _mm_load_ps(direction.xyzw);
+        __m128 orig = _mm_load_ps(origin.xyzw);
+        __m128 scalar = _mm_set1_ps(t);
+        __m128 result = _mm_add_ps(orig, _mm_mul_ps(dir, scalar));
+        alignas(16) float temp[4];
+        _mm_store_ps(temp, result);
+        return Vector3(temp[0], temp[1], temp[2]);
+#else
         return origin + direction * t;
+#endif
     }
 
     /**
@@ -153,21 +168,50 @@ AABB() : min(0.0f, 0.0f, 0.0f), max(0.0f, 0.0f, 0.0f) {}
      * @brief Returns the center point of the AABB
      */
     Vector3 center() const {
+#if PYNOVAGE_MATH_HAS_SSE
+        __m128 vmin = _mm_load_ps(min.xyzw);
+        __m128 vmax = _mm_load_ps(max.xyzw);
+        __m128 sum = _mm_add_ps(vmin, vmax);
+        __m128 result = _mm_mul_ps(sum, _mm_set1_ps(0.5f));
+        alignas(16) float temp[4];
+        _mm_store_ps(temp, result);
+        return Vector3(temp[0], temp[1], temp[2]);
+#else
         return (min + max) * 0.5f;
+#endif
     }
 
     /**
      * @brief Returns the dimensions (width, height, depth) of the AABB
      */
     Vector3 dimensions() const {
+#if PYNOVAGE_MATH_HAS_SSE
+        __m128 vmin = _mm_load_ps(min.xyzw);
+        __m128 vmax = _mm_load_ps(max.xyzw);
+        __m128 result = _mm_sub_ps(vmax, vmin);
+        alignas(16) float temp[4];
+        _mm_store_ps(temp, result);
+        return Vector3(temp[0], temp[1], temp[2]);
+#else
         return max - min;
+#endif
     }
 
     /**
      * @brief Returns the half-extents (half width, height, depth) of the AABB
      */
     Vector3 halfExtents() const {
+#if PYNOVAGE_MATH_HAS_SSE
+        __m128 vmin = _mm_load_ps(min.xyzw);
+        __m128 vmax = _mm_load_ps(max.xyzw);
+        __m128 diff = _mm_sub_ps(vmax, vmin);
+        __m128 result = _mm_mul_ps(diff, _mm_set1_ps(0.5f));
+        alignas(16) float temp[4];
+        _mm_store_ps(temp, result);
+        return Vector3(temp[0], temp[1], temp[2]);
+#else
         return (max - min) * 0.5f;
+#endif
     }
 
     /**
