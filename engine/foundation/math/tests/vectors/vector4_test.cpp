@@ -3,7 +3,7 @@
 #include <cmath>
 #include <sstream>
 
-using namespace nova;
+using namespace PyNovaGE;
 
 class Vector4Test : public ::testing::Test {
 protected:

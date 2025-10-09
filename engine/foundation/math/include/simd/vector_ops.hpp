@@ -11,7 +11,20 @@ namespace SIMD {
 template<typename T, size_t N>
 inline Vector<T, N> operator+(const Vector<T, N>& a, const Vector<T, N>& b) {
     Vector<T, N> result;
-    #if defined(NOVA_AVX2_AVAILABLE)
+#if defined(NOVA_SSE2_AVAILABLE)
+    if constexpr (N == 3 && std::is_same_v<T, float>) {
+        // Safely load 3D vectors by padding the 4th lane with 0
+        __m128 va = _mm_setr_ps(a[0], a[1], a[2], 0.0f);
+        __m128 vb = _mm_setr_ps(b[0], b[1], b[2], 0.0f);
+        __m128 sum = _mm_add_ps(va, vb);
+        // Store to a temporary buffer and copy first 3 components
+        alignas(16) float tmp[4];
+        _mm_storeu_ps(tmp, sum);
+        result[0] = tmp[0];
+        result[1] = tmp[1];
+        result[2] = tmp[2];
+        return result;
+    }
     if constexpr (N == 4 && std::is_same_v<T, float>) {
         auto va = _mm256_castps128_ps256(_mm_loadu_ps(a.data()));
         auto vb = _mm256_castps128_ps256(_mm_loadu_ps(b.data()));
@@ -85,7 +98,19 @@ inline Vector<T, N> operator-(const Vector<T, N>& a, const Vector<T, N>& b) {
 // Dot product
 template<typename T, size_t N>
 inline T dot(const Vector<T, N>& a, const Vector<T, N>& b) {
-    #if defined(NOVA_SSE2_AVAILABLE)
+#if defined(NOVA_SSE2_AVAILABLE)
+    if constexpr (N == 3 && std::is_same_v<T, float>) {
+        // Safely pack xyz with a zero w
+        __m128 va = _mm_setr_ps(a[0], a[1], a[2], 0.0f);
+        __m128 vb = _mm_setr_ps(b[0], b[1], b[2], 0.0f);
+        __m128 mul = _mm_mul_ps(va, vb);
+        // Horizontal sum (uses SSE3 intrinsics already used elsewhere)
+        __m128 shuf = _mm_movehdup_ps(mul);
+        __m128 sums = _mm_add_ps(mul, shuf);
+        shuf = _mm_movehl_ps(shuf, sums);
+        sums = _mm_add_ss(sums, shuf);
+        return _mm_cvtss_f32(sums);
+    }
     if constexpr (N == 4 && std::is_same_v<T, float>) {
         auto va = _mm_loadu_ps(a.data());
         auto vb = _mm_loadu_ps(b.data());
@@ -121,9 +146,51 @@ inline T dot(const Vector<T, N>& a, const Vector<T, N>& b) {
     return result;
 }
 
+// Forward declarations for PyNovaGE namespace
+namespace PyNovaGE {
+    template<typename T> class Vector3;
+}
+
+// Remove double nesting of namespace PyNovaGE for cross product function
+namespace PyNovaGE::SIMD {
+    template<typename T>
+    inline Vector<T, 3> cross(const Vector<T, 3>& a, const Vector<T, 3>& b);
+}
+
 // Cross product (only for 3D vectors)
 template<typename T>
 inline Vector<T, 3> cross(const Vector<T, 3>& a, const Vector<T, 3>& b) {
+    Vector<T, 3> result;
+    #if defined(NOVA_SSE2_AVAILABLE)
+    if constexpr (std::is_same_v<T, float>) {
+        // Load vectors with zero w component
+        __m128 va = _mm_setr_ps(a[0], a[1], a[2], 0.0f);
+        __m128 vb = _mm_setr_ps(b[0], b[1], b[2], 0.0f);
+        
+        // Shuffle for cross product: (a.y, a.z, a.x, _) and (b.z, b.x, b.y, _)
+        __m128 va_yzx = _mm_shuffle_ps(va, va, _MM_SHUFFLE(3, 0, 2, 1));
+        __m128 vb_zxy = _mm_shuffle_ps(vb, vb, _MM_SHUFFLE(3, 1, 0, 2));
+        
+        // Shuffle for second part: (a.z, a.x, a.y, _) and (b.y, b.z, b.x, _)
+        __m128 va_zxy = _mm_shuffle_ps(va, va, _MM_SHUFFLE(3, 1, 0, 2));
+        __m128 vb_yzx = _mm_shuffle_ps(vb, vb, _MM_SHUFFLE(3, 0, 2, 1));
+        
+        // Cross product calculation
+        __m128 mul1 = _mm_mul_ps(va_yzx, vb_zxy);
+        __m128 mul2 = _mm_mul_ps(va_zxy, vb_yzx);
+        __m128 cross = _mm_sub_ps(mul1, mul2);
+        
+        // Store result
+        alignas(16) float tmp[4];
+        _mm_storeu_ps(tmp, cross);
+        result[0] = tmp[0];
+        result[1] = tmp[1];
+        result[2] = tmp[2];
+        return result;
+    }
+    #endif
+    
+    // Fallback scalar implementation
     return Vector<T, 3>(
         a[1] * b[2] - a[2] * b[1],
         a[2] * b[0] - a[0] * b[2],
@@ -135,6 +202,27 @@ inline Vector<T, 3> cross(const Vector<T, 3>& a, const Vector<T, 3>& b) {
 template<typename T, size_t N>
 inline Vector<T, N> normalize(const Vector<T, N>& v) {
     Vector<T, N> result;
+    
+    #if defined(NOVA_SSE2_AVAILABLE)
+    if constexpr (N == 3 && std::is_same_v<T, float>) {
+        // Pack xyz with zero
+        __m128 vv = _mm_setr_ps(v[0], v[1], v[2], 0.0f);
+        // Compute v dot v
+        __m128 sq = _mm_mul_ps(vv, vv);
+        __m128 sum = _mm_add_ps(_mm_movehl_ps(sq, sq), sq);
+        sum = _mm_add_ss(_mm_shuffle_ps(sum, sum, 1), sum);
+        if (_mm_cvtss_f32(sum) == 0.0f) return v;
+        __m128 len_sq = _mm_shuffle_ps(sum, sum, 0);
+        __m128 rsqrt = _mm_rsqrt_ps(len_sq);
+        __m128 norm = _mm_mul_ps(vv, rsqrt);
+        alignas(16) float tmp[4];
+        _mm_storeu_ps(tmp, norm);
+        result[0] = tmp[0];
+        result[1] = tmp[1];
+        result[2] = tmp[2];
+        return result;
+    }
+    #endif
     
     #if defined(NOVA_AVX2_AVAILABLE)
     if constexpr (N == 4 && std::is_same_v<T, float>) {
@@ -226,6 +314,7 @@ template<typename T, size_t N>
 inline Vector<T, N> lerp(const Vector<T, N>& a, const Vector<T, N>& b, T t) {
     return a + (b - a) * t;
 }
+
 
 } // namespace SIMD
 } // namespace PyNovaGE

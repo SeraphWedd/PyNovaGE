@@ -8,7 +8,7 @@
 #pragma warning(disable: 4458)  // declaration hides class member
 #endif
 
-namespace nova {
+namespace PyNovaGE {
 
 template<typename T>
 class Vector2 {
@@ -101,7 +101,7 @@ using Vector2f = Vector2<float>;
 using Vector2d = Vector2<double>;
 using Vector2i = Vector2<int>;
 
-} // namespace nova
+} // namespace PyNovaGE
 
 #ifdef _MSC_VER
 #pragma warning(pop)

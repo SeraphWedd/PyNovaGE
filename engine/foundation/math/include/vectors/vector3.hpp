@@ -8,7 +8,7 @@
 #pragma warning(disable: 4458)  // declaration hides class member
 #endif
 
-namespace nova {
+namespace PyNovaGE {
 
 template<typename T>
 class Vector3 {
@@ -76,7 +76,38 @@ public:
     
     // Common vector operations
     constexpr T dot(const Vector3& v) const { return x * v.x + y * v.y + z * v.z; }
-    Vector3 cross(const Vector3& v) const {
+Vector3 cross(const Vector3& v) const {
+        #if defined(NOVA_SSE2_AVAILABLE)
+        if constexpr (std::is_same_v<T, float>) {
+            Vector3 result;
+            // Load vectors with zero w component
+            __m128 va = _mm_setr_ps(x, y, z, 0.0f);
+            __m128 vb = _mm_setr_ps(v.x, v.y, v.z, 0.0f);
+            
+            // Shuffle for cross product: (a.y, a.z, a.x, _) and (b.z, b.x, b.y, _)
+            __m128 va_yzx = _mm_shuffle_ps(va, va, _MM_SHUFFLE(3, 0, 2, 1));
+            __m128 vb_zxy = _mm_shuffle_ps(vb, vb, _MM_SHUFFLE(3, 1, 0, 2));
+            
+            // Shuffle for second part: (a.z, a.x, a.y, _) and (b.y, b.z, b.x, _)
+            __m128 va_zxy = _mm_shuffle_ps(va, va, _MM_SHUFFLE(3, 1, 0, 2));
+            __m128 vb_yzx = _mm_shuffle_ps(vb, vb, _MM_SHUFFLE(3, 0, 2, 1));
+            
+            // Cross product calculation
+            __m128 mul1 = _mm_mul_ps(va_yzx, vb_zxy);
+            __m128 mul2 = _mm_mul_ps(va_zxy, vb_yzx);
+            __m128 cross = _mm_sub_ps(mul1, mul2);
+            
+            // Store result
+            alignas(16) float tmp[4];
+            _mm_storeu_ps(tmp, cross);
+            result.x = tmp[0];
+            result.y = tmp[1];
+            result.z = tmp[2];
+            return result;
+        }
+        #endif
+        
+        // Fallback scalar implementation
         return Vector3(
             y * v.z - z * v.y,
             z * v.x - x * v.z,
@@ -111,7 +142,7 @@ using Vector3f = Vector3<float>;
 using Vector3d = Vector3<double>;
 using Vector3i = Vector3<int>;
 
-} // namespace nova
+} // namespace PyNovaGE
 
 #ifdef _MSC_VER
 #pragma warning(pop)

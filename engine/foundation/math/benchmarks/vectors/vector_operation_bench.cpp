@@ -4,7 +4,7 @@
 #include <random>
 #include <algorithm>
 
-using namespace nova;
+using namespace PyNovaGE;
 
 namespace {
 // Helper to generate semi-random data that mimics real-world patterns
