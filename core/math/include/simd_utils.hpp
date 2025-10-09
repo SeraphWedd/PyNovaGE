@@ -29,6 +29,13 @@
     #define PYNOVAGE_MATH_HAS_AVX 0
 #endif
 
+// Check for FMA support
+#if defined(__FMA__) || (defined(_MSC_FULL_VER) && defined(__AVX2__))
+    #define PYNOVAGE_MATH_HAS_FMA 1
+#else
+    #define PYNOVAGE_MATH_HAS_FMA 0
+#endif
+
 namespace pynovage {
 namespace math {
 
@@ -323,6 +330,16 @@ public:
      * @param result Result of component-wise multiplication
      */
     static void Multiply4f(const float* a, const float* b, float* result);
+
+    /**
+     * @brief Performs fused multiply-add operation: result = a * b + c
+     * Uses FMA instruction when available, falls back to separate multiply and add
+     * @param a First operand
+     * @param b Second operand (multiplier)
+     * @param c Third operand (addend)
+     * @param result Output array
+     */
+    static void MultiplyAndAdd4f(const float* a, const float* b, const float* c, float* result);
 
     /**
      * @brief Performs four float divisions using SIMD if available

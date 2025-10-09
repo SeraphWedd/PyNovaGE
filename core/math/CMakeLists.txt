@@ -36,9 +36,23 @@ target_include_directories(pynovage_math
 
 # Enable SIMD instructions based on platform
 if(MSVC)
-    target_compile_options(pynovage_math PRIVATE /arch:SSE2)
+    # Check if AVX is supported
+    include(CheckCXXCompilerFlag)
+    check_cxx_compiler_flag("/arch:AVX" COMPILER_SUPPORTS_AVX)
+    
+    if(COMPILER_SUPPORTS_AVX)
+        target_compile_options(pynovage_math PRIVATE /arch:AVX)
+    else()
+        target_compile_options(pynovage_math PRIVATE /arch:SSE2)
+    endif()
 else()
-    target_compile_options(pynovage_math PRIVATE -msse2)
+    check_cxx_compiler_flag("-mavx" COMPILER_SUPPORTS_AVX)
+    
+    if(COMPILER_SUPPORTS_AVX)
+        target_compile_options(pynovage_math PRIVATE -mavx)
+    else()
+        target_compile_options(pynovage_math PRIVATE -msse2)
+    endif()
 endif()
 
 # Add test executable

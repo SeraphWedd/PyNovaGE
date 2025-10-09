@@ -466,6 +466,28 @@ void SimdUtils::Divide4f(const float* a, const float* b, float* result) {
 #endif
 }
 
+void SimdUtils::MultiplyAndAdd4f(const float* a, const float* b, const float* c, float* result) {
+#if PYNOVAGE_MATH_HAS_FMA
+    __m128 va = _mm_load_ps(a);
+    __m128 vb = _mm_load_ps(b);
+    __m128 vc = _mm_load_ps(c);
+    __m128 vr = _mm_fmadd_ps(va, vb, vc);  // a * b + c in one instruction
+    _mm_store_ps(result, vr);
+#elif PYNOVAGE_MATH_HAS_SSE
+    __m128 va = _mm_load_ps(a);
+    __m128 vb = _mm_load_ps(b);
+    __m128 vc = _mm_load_ps(c);
+    __m128 mul = _mm_mul_ps(va, vb);
+    __m128 vr = _mm_add_ps(mul, vc);
+    _mm_store_ps(result, vr);
+#else
+    result[0] = a[0] * b[0] + c[0];
+    result[1] = a[1] * b[1] + c[1];
+    result[2] = a[2] * b[2] + c[2];
+    result[3] = a[3] * b[3] + c[3];
+#endif
+}
+
 void SimdUtils::ReciprocalSqrt4f(const float* a, float* result) {
 #if PYNOVAGE_MATH_HAS_SSE
     __m128 va = _mm_loadu_ps(a);
