@@ -40,8 +40,8 @@ public:
         last_frame_time_ = std::chrono::high_resolution_clock::now();
         
         // Configure camera for nice viewing
-        camera_.SetPosition(Vector3f(32.0f, 40.0f, 32.0f));
-        camera_.SetRotation(45.0f, -20.0f);
+        camera_.SetPosition(Vector3f(32.0f, 10.0f, 32.0f));  // Lower the camera
+        camera_.SetRotation(0.0f, -45.0f);                   // Look down more
         camera_.SetPerspective(75.0f, 16.0f/9.0f, 0.1f, 500.0f);
         camera_.SetMovementSpeed(25.0f);
         camera_.SetMouseSensitivity(0.2f);
@@ -108,8 +108,9 @@ public:
         
         // Configure renderer for best performance
         VoxelRenderConfig render_config;
-        render_config.enable_frustum_culling = true;
-        render_config.enable_multithreaded_meshing = false;  // Disable for now to test
+        render_config.enable_frustum_culling = false;  // Disable to test mesh visibility
+        render_config.enable_multithreaded_meshing = true;   // Re-enable with single thread
+        render_config.mesh_worker_threads = 1;               // Use just 1 thread to test
         render_config.max_render_distance = 200.0f;
         render_config.max_remesh_per_frame = 4;
         render_config.max_upload_per_frame = 2;
@@ -173,6 +174,7 @@ public:
             UpdatePerformanceStats(delta_time);
             
             frame_count++;
+            total_frame_count_++;
             if (frame_count == 1) {
                 std::cout << "First frame completed successfully!" << std::endl;
             }
@@ -193,6 +195,10 @@ private:
         
         // The SimpleVoxelWorld already generates terrain in constructor
         // Let's add some variety to make it more interesting
+        
+        // Debug: Check if world has chunks
+        auto world_chunks = world_.GetAllChunks();
+        std::cout << "World created with " << world_chunks.size() << " chunks" << std::endl;
         
         // Add some structures and patterns
         for (int cx = 0; cx < 8; ++cx) {
@@ -365,6 +371,15 @@ private:
         if (show_performance_stats_ && fps_timer_ >= 0.9f) {
             PrintPerformanceStats();
         }
+        
+        // Debug: Print render stats on first few frames
+        if (total_frame_count_ <= 5) {
+            auto stats = renderer_.GetStats();
+            std::cout << "Frame " << total_frame_count_ << ": Total chunks: " << stats.total_chunks 
+                      << ", Visible: " << stats.visible_chunks 
+                      << ", Rendered: " << stats.rendered_chunks 
+                      << ", Remeshed: " << stats.chunks_remeshed << std::endl;
+        }
     }
     
     void UpdatePerformanceStats(float delta_time) {
@@ -407,8 +422,8 @@ private:
     }
     
     void ResetCamera() {
-        camera_.SetPosition(Vector3f(32.0f, 40.0f, 32.0f));
-        camera_.SetRotation(45.0f, -20.0f);
+        camera_.SetPosition(Vector3f(32.0f, 10.0f, 32.0f));
+        camera_.SetRotation(0.0f, -45.0f);
         std::cout << "📷 Camera reset to default position" << std::endl;
     }
     
@@ -447,6 +462,7 @@ private:
     int frame_count_ = 0;
     float current_fps_ = 0.0f;
     std::deque<float> frame_times_;
+    int total_frame_count_ = 0;  // Total frames since start
     
     // Input state
     bool first_mouse_ = true;
