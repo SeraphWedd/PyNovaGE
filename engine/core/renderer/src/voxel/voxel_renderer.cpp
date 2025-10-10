@@ -255,8 +255,30 @@ void VoxelRenderer::UploadMeshesToGPU() {
         completed_meshes_.pop();
         
         // Find the corresponding chunk render data
-        // TODO: Match task_id to chunk render data
-        // For now, we'll need to store the task_id->world_pos mapping
+        // Simple approach: find first chunk that needs_remesh and has no mesh
+        for (auto& [key, render_data] : chunk_render_data_) {
+            if (!render_data->mesh && render_data->needs_remesh) {
+                // Create VoxelMesh from mesh_data
+                if (!mesh_data.vertices.empty()) {
+                    auto mesh = std::make_unique<VoxelMesh>();
+                    
+                    // Convert Vertex to VoxelVertex if needed
+                    std::vector<VoxelVertex> voxel_vertices;
+                    voxel_vertices.reserve(mesh_data.vertices.size());
+                    for (const auto& v : mesh_data.vertices) {
+                        voxel_vertices.push_back(v);
+                    }
+                    
+                    // Upload to GPU
+                    mesh->UploadData(voxel_vertices, mesh_data.indices);
+                    
+                    // Assign to render data
+                    render_data->mesh = std::move(mesh);
+                    render_data->needs_remesh = false;
+                }
+                break; // Only process one chunk per mesh
+            }
+        }
         
         uploaded++;
         stats_.chunks_remeshed++;
