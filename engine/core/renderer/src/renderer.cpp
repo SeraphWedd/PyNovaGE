@@ -1,7 +1,9 @@
 #include "renderer/renderer.hpp"
+#include "renderer/shader.hpp"
+#include "renderer/texture.hpp"
 #include "renderer/sprite_renderer.hpp"
 #include "renderer/batch_renderer.hpp"
-#include <glad/glad.h>
+#include <glad/gl.h>
 #include <iostream>
 #include <sstream>
 #include <chrono>
@@ -23,7 +25,7 @@ bool Renderer::Initialize(const RendererConfig& config) {
     }
     
     // Load OpenGL functions
-    if (!gladLoadGL()) {
+    if (!gladLoaderLoadGL()) {
         std::cerr << "Failed to initialize OpenGL function pointers!" << std::endl;
         return false;
     }

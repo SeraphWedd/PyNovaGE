@@ -191,6 +191,11 @@ public:
     const std::string& GetFilePath() const { return filepath_; }
     
     /**
+     * @brief Get texture name (for debugging)
+     */
+    const std::string& GetName() const { return name_; }
+    
+    /**
      * @brief Generate mipmaps for this texture
      */
     void GenerateMipmaps();

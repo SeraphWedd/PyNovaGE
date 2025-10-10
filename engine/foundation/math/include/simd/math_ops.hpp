@@ -4,6 +4,19 @@
 #include <cmath>
 #include <algorithm>
 
+// Undefine Windows min/max macros to prevent conflicts
+#ifdef min
+#undef min
+#endif
+#ifdef max
+#undef max
+#endif
+
+// Prevent Windows.h from defining min/max macros
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+
 namespace PyNovaGE {
 namespace SIMD {
 

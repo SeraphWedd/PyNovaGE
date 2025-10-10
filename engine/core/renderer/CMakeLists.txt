@@ -4,16 +4,10 @@ cmake_minimum_required(VERSION 3.20)
 # Find OpenGL
 find_package(OpenGL REQUIRED)
 
-# Find GLAD (we'll need to add this as a dependency)
-# For now, we'll use a simple approach and include GLAD sources directly
+# GLAD OpenGL loader
 set(GLAD_SOURCES
-    ${CMAKE_CURRENT_SOURCE_DIR}/../../../third_party/glad/src/glad.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../../third_party/glad/src/gl.c
 )
-
-# Check if GLAD sources exist, if not we'll create a simple stub
-if(NOT EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/../../../third_party/glad/src/glad.c)
-    message(STATUS "GLAD sources not found, will create minimal OpenGL loader")
-endif()
 
 # Renderer library
 add_library(renderer STATIC
