@@ -2,6 +2,7 @@
 #include <chrono>
 #include <algorithm>
 #include <cmath>
+#include <iostream>
 
 namespace PyNovaGE {
 namespace Renderer {
@@ -541,9 +542,12 @@ void SimpleVoxelWorld::GenerateTestWorld() {
             Vector3f chunk_pos(static_cast<float>(x * CHUNK_SIZE), 0.0f, static_cast<float>(z * CHUNK_SIZE));
             size_t key = hasher_(chunk_pos);
             
-            auto chunk = std::make_unique<Chunk>();
+            // Create chunk with proper coordinates
+            ChunkCoord2D chunk_coord(x, z);
+            auto chunk = std::make_unique<Chunk>(chunk_coord);
             
             // Fill with test pattern
+            int solid_voxels = 0;
             for (int cy = 0; cy < CHUNK_SIZE; ++cy) {
                 for (int cz = 0; cz < CHUNK_SIZE; ++cz) {
                     for (int cx = 0; cx < CHUNK_SIZE; ++cx) {
@@ -552,15 +556,23 @@ void SimpleVoxelWorld::GenerateTestWorld() {
                         // Ground layer
                         if (cy < 2) {
                             voxel = VoxelType::STONE;
+                            solid_voxels++;
                         }
                         // Grass layer
                         else if (cy == 2) {
                             voxel = VoxelType::DIRT; // Or grass when available
+                            solid_voxels++;
                         }
                         
                         chunk->SetVoxel({cx, cy, cz}, voxel);
                     }
                 }
+            }
+            
+            // Debug: Print voxel count for first chunk
+            if (x == 0 && z == 0) {
+                std::cout << "  Chunk (0,0) has " << solid_voxels << " solid voxels out of " 
+                          << (CHUNK_SIZE * CHUNK_SIZE * CHUNK_SIZE) << " total" << std::endl;
             }
             
             chunks_[key] = std::move(chunk);

@@ -40,8 +40,8 @@ public:
         last_frame_time_ = std::chrono::high_resolution_clock::now();
         
         // Configure camera for nice viewing
-        camera_.SetPosition(Vector3f(32.0f, 10.0f, 32.0f));  // Lower the camera
-        camera_.SetRotation(0.0f, -45.0f);                   // Look down more
+        camera_.SetPosition(Vector3f(32.0f, 5.0f, 32.0f));   // Even lower camera
+        camera_.SetRotation(0.0f, -30.0f);                   // Look down less steep
         camera_.SetPerspective(75.0f, 16.0f/9.0f, 0.1f, 500.0f);
         camera_.SetMovementSpeed(25.0f);
         camera_.SetMouseSensitivity(0.2f);
@@ -114,6 +114,7 @@ public:
         render_config.max_render_distance = 200.0f;
         render_config.max_remesh_per_frame = 4;
         render_config.max_upload_per_frame = 2;
+        render_config.enable_face_culling = false;           // Disable face culling to see all faces
         
         renderer_.SetConfig(render_config);
         renderer_.SetWorld(&world_);
@@ -199,6 +200,13 @@ private:
         // Debug: Check if world has chunks
         auto world_chunks = world_.GetAllChunks();
         std::cout << "World created with " << world_chunks.size() << " chunks" << std::endl;
+        
+        // Debug: Print first few chunk positions
+        std::cout << "First 4 chunk positions:" << std::endl;
+        for (size_t i = 0; i < std::min(size_t(4), world_chunks.size()); ++i) {
+            const auto& [chunk, pos] = world_chunks[i];
+            std::cout << "  Chunk " << i << ": (" << pos.x << ", " << pos.y << ", " << pos.z << ")" << std::endl;
+        }
         
         // Add some structures and patterns
         for (int cx = 0; cx < 8; ++cx) {
@@ -350,9 +358,9 @@ private:
         // Begin frame
         PyNovaGE::Renderer::Renderer::BeginFrame();
         
-        // Clear screen with sky blue
-        PyNovaGE::Vector4f sky_color(0.53f, 0.81f, 0.98f, 1.0f);
-        PyNovaGE::Renderer::Renderer::Clear(sky_color);
+        // Clear screen with dark color to see voxels better
+        PyNovaGE::Vector4f clear_color(0.1f, 0.1f, 0.2f, 1.0f);  // Dark blue/purple
+        PyNovaGE::Renderer::Renderer::Clear(clear_color);
         
         // Wireframe mode
         if (wireframe_mode_) {
@@ -375,10 +383,13 @@ private:
         // Debug: Print render stats on first few frames
         if (total_frame_count_ <= 5) {
             auto stats = renderer_.GetStats();
+            auto cam_pos = camera_.GetPosition();
             std::cout << "Frame " << total_frame_count_ << ": Total chunks: " << stats.total_chunks 
                       << ", Visible: " << stats.visible_chunks 
                       << ", Rendered: " << stats.rendered_chunks 
                       << ", Remeshed: " << stats.chunks_remeshed << std::endl;
+            std::cout << "  Camera pos: (" << cam_pos.x << ", " << cam_pos.y << ", " << cam_pos.z << ")" << std::endl;
+            std::cout << "  Draw calls: " << stats.draw_calls << ", Vertices: " << stats.vertices_rendered << std::endl;
         }
     }
     
@@ -422,8 +433,8 @@ private:
     }
     
     void ResetCamera() {
-        camera_.SetPosition(Vector3f(32.0f, 10.0f, 32.0f));
-        camera_.SetRotation(0.0f, -45.0f);
+        camera_.SetPosition(Vector3f(32.0f, 5.0f, 32.0f));
+        camera_.SetRotation(0.0f, -30.0f);
         std::cout << "📷 Camera reset to default position" << std::endl;
     }
     
@@ -472,7 +483,7 @@ private:
     
     // Display options
     bool show_performance_stats_ = false;
-    bool wireframe_mode_ = false;
+    bool wireframe_mode_ = true;  // Start in wireframe to see geometry
 };
 
 int main() {
