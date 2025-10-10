@@ -1,12 +1,22 @@
 # Physics System CMakeLists.txt
 cmake_minimum_required(VERSION 3.20)
 
-# Physics library
-add_library(physics
-    src/collision_shapes.cpp
-    src/rigid_body.cpp
-    src/physics_world.cpp
+# Collect source files automatically
+file(GLOB_RECURSE PHYSICS_HEADERS
+    CONFIGURE_DEPENDS
+    "${CMAKE_CURRENT_SOURCE_DIR}/include/*.hpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/include/*.h"
 )
+
+file(GLOB_RECURSE PHYSICS_SOURCES
+    CONFIGURE_DEPENDS
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/*.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/*.hpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/*.h"
+)
+
+# Physics library
+add_library(physics STATIC ${PHYSICS_SOURCES})
 
 # Create alias for consistent naming
 add_library(PyNovaGE::Physics ALIAS physics)
@@ -18,19 +28,15 @@ set_target_properties(physics PROPERTIES
     POSITION_INDEPENDENT_CODE ON
 )
 
-# Include directories
+# Configure include directories
 target_include_directories(physics
     PUBLIC
-        ${CMAKE_CURRENT_SOURCE_DIR}/include
-    PRIVATE
-        ${CMAKE_CURRENT_SOURCE_DIR}/src
+        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+        $<INSTALL_INTERFACE:include>
 )
 
-# Add math headers as interface include directory
-target_include_directories(physics
-    PUBLIC
-        ${CMAKE_SOURCE_DIR}/engine/foundation/math/include
-)
+# Link dependencies
+target_link_libraries(physics PUBLIC math)
 
 # Compiler-specific optimizations
 if(MSVC)
@@ -64,121 +70,58 @@ endif()
 
 # SIMD feature detection is handled by the math library headers
 
-# Tests
-if(BUILD_TESTING)
-    # Physics unit tests
-    add_executable(physics_tests
-        tests/test_collision_shapes.cpp
-        tests/test_physics_complete.cpp
-        tests/test_physics_integration.cpp
+# Configure tests if enabled
+if(PYNOVAGE_BUILD_TESTS AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/tests")
+    file(GLOB_RECURSE TEST_SOURCES
+        CONFIGURE_DEPENDS
+        "${CMAKE_CURRENT_SOURCE_DIR}/tests/*.cpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/tests/*.hpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/tests/*.h"
     )
     
-    target_link_libraries(physics_tests
-        PRIVATE
-            physics
-            gtest
-            gtest_main
-    )
+    # Filter out benchmark files from tests
+    list(FILTER TEST_SOURCES EXCLUDE REGEX ".*benchmarks?.*")
     
-    # Copy test properties from physics library
-    set_target_properties(physics_tests PROPERTIES
-        CXX_STANDARD 20
-        CXX_STANDARD_REQUIRED ON
-    )
-    
-    # Add the same compiler optimizations to tests
-    if(MSVC)
-        target_compile_options(physics_tests PRIVATE
-            /W4 /WX- /wd4702 /arch:AVX2 /fp:fast /Ob3 /favor:INTEL64
-        )
-    elseif(GCC OR Clang)
-        target_compile_options(physics_tests PRIVATE
-            -Wall -Wextra -march=native -O3 -ffast-math
+    if(TEST_SOURCES)
+        add_executable(physics_tests ${TEST_SOURCES})
+        target_link_libraries(physics_tests PRIVATE physics GTest::gtest GTest::gtest_main)
+        
+        # Add tests to CTest
+        gtest_discover_tests(physics_tests
+            WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/tests
+            PROPERTIES LABELS "Physics"
         )
     endif()
-    
-    # Register the test
-    include(GoogleTest)
-    gtest_discover_tests(physics_tests)
-    
-    # Add custom test target
-    add_custom_target(run_physics_tests
-        COMMAND physics_tests
-        DEPENDS physics_tests
-        COMMENT "Running physics system unit tests"
-    )
 endif()
 
-# Benchmarks
-if(BUILD_BENCHMARKING)
-    # Physics benchmarks  
-    add_executable(physics_benchmarks
-        tests/physics_benchmarks.cpp
+# Configure benchmarks if enabled
+if(PYNOVAGE_BUILD_BENCHMARKS AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/benchmarks")
+    file(GLOB_RECURSE BENCH_SOURCES
+        CONFIGURE_DEPENDS
+        "${CMAKE_CURRENT_SOURCE_DIR}/benchmarks/*.cpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/benchmarks/*.hpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/benchmarks/*.h"
     )
     
-    target_link_libraries(physics_benchmarks
-        PRIVATE
-            physics
-            benchmark
-            benchmark_main
+    # Also check for benchmark files in tests directory
+    file(GLOB_RECURSE TEST_BENCH_SOURCES
+        CONFIGURE_DEPENDS
+        "${CMAKE_CURRENT_SOURCE_DIR}/tests/*benchmarks*.cpp"
     )
     
-    # Copy properties and optimizations
-    set_target_properties(physics_benchmarks PROPERTIES
-        CXX_STANDARD 20
-        CXX_STANDARD_REQUIRED ON
-    )
+    list(APPEND BENCH_SOURCES ${TEST_BENCH_SOURCES})
     
-    if(MSVC)
-        target_compile_options(physics_benchmarks PRIVATE
-            /W4 /WX- /wd4702 /arch:AVX2 /fp:fast /Ob3 /favor:INTEL64 /Qpar
-        )
-    elseif(GCC OR Clang) 
-        target_compile_options(physics_benchmarks PRIVATE
-            -Wall -Wextra -march=native -O3 -ffast-math -funroll-loops
-        )
+    if(BENCH_SOURCES)
+        add_executable(physics_benchmarks ${BENCH_SOURCES})
+        target_link_libraries(physics_benchmarks PRIVATE physics benchmark::benchmark benchmark::benchmark_main)
     endif()
-    
-    # Add custom benchmark target
-    add_custom_target(run_physics_benchmarks
-        COMMAND physics_benchmarks
-        DEPENDS physics_benchmarks
-        COMMENT "Running physics system benchmarks"
-    )
 endif()
 
-# Install targets (if needed)
-if(INSTALL_PYNOVAGE)
-    install(TARGETS physics
-        EXPORT PyNovaGETargets
-        LIBRARY DESTINATION lib
-        ARCHIVE DESTINATION lib
-        RUNTIME DESTINATION bin
-    )
-    
-    install(DIRECTORY include/
-        DESTINATION include
-        FILES_MATCHING PATTERN "*.hpp"
-    )
-endif()
-
-# Development helper targets
-add_custom_target(physics_dev
-    DEPENDS physics
-    COMMENT "Building physics system"
+# Export and install the target
+install(TARGETS physics
+    EXPORT PyNovaGETargets
+    RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
+    LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
+    ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
+    INCLUDES DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
 )
-
-if(BUILD_TESTING)
-    add_dependencies(physics_dev physics_tests)
-endif()
-
-if(BUILD_BENCHMARKING) 
-    add_dependencies(physics_dev physics_benchmarks)
-endif()
-
-# Print configuration info
-message(STATUS "Physics system configuration:")
-message(STATUS "  - SIMD optimizations: Enabled (AVX2/AVX/SSE2)")
-message(STATUS "  - Tests: ${BUILD_TESTING}")
-message(STATUS "  - Benchmarks: ${BUILD_BENCHMARKING}")
-message(STATUS "  - Compiler optimizations: Enabled")

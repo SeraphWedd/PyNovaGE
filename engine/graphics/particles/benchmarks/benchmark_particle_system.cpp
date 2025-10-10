@@ -22,7 +22,7 @@ public:
         system_->Initialize();
     }
     
-    void TearDown(const ::benchmark::State& state) override {
+    void TearDown(const ::benchmark::State&) override {
         system_->Shutdown();
         system_.reset();
     }
@@ -149,7 +149,7 @@ BENCHMARK_DEFINE_F(ParticleSystemBenchmark, RadialForceApplication)(benchmark::S
     
     int side = static_cast<int>(std::sqrt(state.range(0)));
     for (int y = 0; y < side; ++y) {
-        for (int x = 0; x < side && system_->GetActiveParticleCount() < state.range(0); ++x) {
+        for (int x = 0; x < side && system_->GetActiveParticleCount() < static_cast<size_t>(state.range(0)); ++x) {
             init_data.position = Vector2f(x * 2.0f - side, y * 2.0f - side);
             system_->SpawnParticle(init_data);
         }
@@ -258,7 +258,7 @@ BENCHMARK_DEFINE_F(ParticleSystemBenchmark, ExplosionEffect)(benchmark::State& s
         state.ResumeTiming();
         
         // Trigger explosion
-        emitter->EmitBurst(state.range(0));
+        emitter->EmitBurst(static_cast<int>(state.range(0)));
         
         // Simulate for a short time
         for (int i = 0; i < 30; ++i) { // 0.5 seconds
@@ -371,12 +371,12 @@ static void CustomCounters(benchmark::State& state) {
     
     const auto& stats = system.GetStats();
     
-    state.counters["ActiveParticles"] = stats.active_particles;
-    state.counters["PeakParticles"] = stats.peak_active_particles;
-    state.counters["TotalSpawned"] = stats.total_particles_spawned;
+    state.counters["ActiveParticles"] = static_cast<double>(stats.active_particles);
+    state.counters["PeakParticles"] = static_cast<double>(stats.peak_active_particles);
+    state.counters["TotalSpawned"] = static_cast<double>(stats.total_particles_spawned);
     state.counters["PoolUtilization"] = benchmark::Counter(
         static_cast<double>(stats.active_particles) / config.max_particles * 100.0,
-        benchmark::Counter::kDefaults, "%");
+        benchmark::Counter::kDefaults);
     state.counters["UpdateTimeMs"] = stats.update_time_ms;
 }
 BENCHMARK(CustomCounters)->Unit(benchmark::kMicrosecond);
