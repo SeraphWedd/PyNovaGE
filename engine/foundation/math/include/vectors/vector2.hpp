@@ -51,7 +51,9 @@ public:
     constexpr Vector2 operator+(T s) const { return Vector2(x + s, y + s); }
     constexpr Vector2 operator-(T s) const { return Vector2(x - s, y - s); }
     constexpr Vector2 operator*(T s) const { return Vector2(x * s, y * s); }
-    constexpr Vector2 operator/(T s) const { return Vector2(x / s, y / s); }
+    constexpr Vector2 operator/(T s) const { 
+        return (s != T(0)) ? Vector2(x / s, y / s) : Vector2(x, y);
+    }
     
     // Assignment operators
     constexpr Vector2& operator+=(const Vector2& v) { x += v.x; y += v.y; return *this; }
@@ -62,7 +64,12 @@ public:
     constexpr Vector2& operator+=(T s) { x += s; y += s; return *this; }
     constexpr Vector2& operator-=(T s) { x -= s; y -= s; return *this; }
     constexpr Vector2& operator*=(T s) { x *= s; y *= s; return *this; }
-    constexpr Vector2& operator/=(T s) { x /= s; y /= s; return *this; }
+    constexpr Vector2& operator/=(T s) { 
+        if (s != T(0)) {
+            x /= s; y /= s; 
+        }
+        return *this; 
+    }
     
     // Comparison operators
     constexpr bool operator==(const Vector2& v) const { return x == v.x && y == v.y; }
@@ -92,12 +99,15 @@ public:
     
     Vector2 normalized() const {
         T len = length();
-        return len > T(0) ? *this / len : *this;
+        if (len > T(1e-6)) {
+            return Vector2(x / len, y / len);
+        }
+        return *this;
     }
     
     void normalize() {
         T len = length();
-        if (len > T(0)) {
+        if (len > T(1e-6)) {
             x /= len;
             y /= len;
         }

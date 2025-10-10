@@ -14,6 +14,10 @@ if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/systems/CMakeLists.txt")
     add_subdirectory(systems)
 endif()
 
+if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/graphics/CMakeLists.txt")
+    add_subdirectory(graphics)
+endif()
+
 # Create interface library for the entire engine
 add_library(engine INTERFACE)
 add_library(PyNovaGE::Engine ALIAS engine)

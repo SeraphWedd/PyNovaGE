@@ -3,8 +3,21 @@
 #include <algorithm>
 #include <unordered_set>
 
+#ifdef _MSC_VER
+#pragma warning(push)
+#pragma warning(disable: 4723)  // potential divide by 0
+#endif
+
 namespace PyNovaGE {
 namespace Physics {
+
+// Safe division function to avoid compiler warnings about divide-by-zero
+static Vector2<float> safeDivide(const Vector2<float>& vector, float divisor) {
+    if (divisor > 1e-6f || divisor < -1e-6f) {
+        return Vector2<float>(vector.x / divisor, vector.y / divisor);
+    }
+    return vector;
+}
 
 PhysicsWorld::PhysicsWorld(const PhysicsConfig& config) 
     : config_(config) {
@@ -258,7 +271,7 @@ PhysicsWorld::RaycastHit PhysicsWorld::raycast(const Vector2<float>& start, cons
         return result; // Invalid ray
     }
     
-    direction = direction * (1.0f / maxDistance);  // Avoid division operator
+    direction = safeDivide(direction, maxDistance);
     result.distance = maxDistance;
     
     // Simple raycast against all body AABBs
@@ -282,9 +295,8 @@ PhysicsWorld::RaycastHit PhysicsWorld::raycast(const Vector2<float>& start, cons
             Vector2<float> center = body->getPosition();
             Vector2<float> toHit = result.point - center;
             float len = toHit.length();
-            if (len > 0.0001f) {
-                result.normal = toHit * (1.0f / len);  // Avoid division operator
-            } else {
+            result.normal = safeDivide(toHit, len);
+            if (result.normal.lengthSquared() < 1e-12f) {
                 result.normal = Vector2<float>(1.0f, 0.0f);
             }
         }
@@ -303,7 +315,7 @@ std::vector<PhysicsWorld::RaycastHit> PhysicsWorld::raycastAll(const Vector2<flo
         return results; // Invalid ray
     }
     
-    direction = direction * (1.0f / maxDistance);  // Avoid division operator
+    direction = safeDivide(direction, maxDistance);
     
     // Raycast against all bodies
     for (const auto& body : bodies_) {
@@ -327,9 +339,8 @@ std::vector<PhysicsWorld::RaycastHit> PhysicsWorld::raycastAll(const Vector2<flo
             Vector2<float> center = body->getPosition();
             Vector2<float> toHit = hit.point - center;
             float len = toHit.length();
-            if (len > 0.0001f) {
-                hit.normal = toHit * (1.0f / len);  // Avoid division operator
-            } else {
+            hit.normal = safeDivide(toHit, len);
+            if (hit.normal.lengthSquared() < 1e-12f) {
                 hit.normal = Vector2<float>(1.0f, 0.0f);
             }
             
@@ -461,9 +472,9 @@ void PhysicsWorld::solvePositionConstraints() {
         
         // Calculate mass-weighted correction
         float totalInverseMass = bodyA->getInverseMass() + bodyB->getInverseMass();
-        if (totalInverseMass <= 0.0f) continue; // Both bodies are static
+        if (totalInverseMass <= 0.0001f) continue; // Both bodies are static or nearly infinite mass
         
-        float correctionMagnitude = (contact.manifold.penetration * POSITION_CORRECTION_PERCENT) / totalInverseMass;
+        float correctionMagnitude = totalInverseMass > 0.0001f ? (contact.manifold.penetration * POSITION_CORRECTION_PERCENT) / totalInverseMass : 0.0f;
         Vector2<float> correction = contact.manifold.normal * correctionMagnitude;
         
         // Apply position correction
@@ -509,3 +520,7 @@ void PhysicsWorld::updateActiveBodyList() {
 
 } // namespace Physics
 } // namespace PyNovaGE
+
+#ifdef _MSC_VER
+#pragma warning(pop)
+#endif
