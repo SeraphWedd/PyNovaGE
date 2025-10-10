@@ -29,6 +29,7 @@ enum class ShaderType {
  * with automatic uniform location caching and type-safe uniform setting.
  */
 class Shader {
+    friend class ShaderLibrary;
 public:
     /**
      * @brief Default constructor creates invalid shader

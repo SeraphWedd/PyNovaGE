@@ -10,6 +10,7 @@ if(BUILD_EXAMPLES)
     # Add example subdirectories
     add_subdirectory(basic_window)
     add_subdirectory(interactive_demo)
+    add_subdirectory(shader_test)
     
     message(STATUS "Examples configured successfully")
 else()
