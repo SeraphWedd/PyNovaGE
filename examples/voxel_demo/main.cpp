@@ -20,9 +20,11 @@
 
 // Engine includes
 #include <window/window.hpp>
+#include <renderer/renderer.hpp>
 #include <renderer/voxel/voxel_renderer.hpp>
 #include <renderer/voxel/camera.hpp>
 #include <renderer/voxel/voxel_types.hpp>
+#include <vectors/vector4.hpp>
 
 // GLFW for input handling
 #include <GLFW/glfw3.h>
@@ -34,7 +36,7 @@ using namespace PyNovaGE::Renderer::Voxel;
  */
 class VoxelDemo {
 public:
-    VoxelDemo() : window_(nullptr), camera_(), renderer_(), world_(8) {
+    VoxelDemo() : window_(nullptr), camera_(), renderer_("shaders/voxel/"), world_(8) {
         last_frame_time_ = std::chrono::high_resolution_clock::now();
         
         // Configure camera for nice viewing
@@ -68,20 +70,46 @@ public:
         window_config.vsync = true;
         
         window_ = std::make_unique<PyNovaGE::Window::Window>(window_config);
+        std::cout << "✅ Window created successfully!" << std::endl;
+        
+        // Make OpenGL context current
+        window_->MakeContextCurrent();
+        
+        // Initialize main renderer system
+        PyNovaGE::Renderer::RendererConfig renderer_config;
+        renderer_config.enable_vsync = true;
+        renderer_config.enable_depth_test = true;
+        renderer_config.enable_blend = true;
+        
+        renderer_guard_ = std::make_unique<PyNovaGE::Renderer::RendererGuard>(renderer_config);
+        if (!renderer_guard_->IsInitialized()) {
+            std::cerr << "❌ Failed to initialize main renderer!" << std::endl;
+            return false;
+        }
+        
+        std::cout << "✅ Main renderer initialized!" << std::endl;
+        std::cout << "Renderer Info: " << PyNovaGE::Renderer::Renderer::GetRendererInfo() << std::endl;
+        
+        // Set viewport to match window size
+        auto window_size = window_->GetFramebufferSize();
+        PyNovaGE::Renderer::Renderer::SetViewport(0, 0, window_size.x, window_size.y);
+        std::cout << "Viewport set to: " << window_size.x << "x" << window_size.y << std::endl;
         
         // Setup input callbacks
         SetupInputCallbacks();
         
-        // Initialize renderer
+        // Initialize voxel renderer
+        std::cout << "Initializing voxel renderer..." << std::endl;
         if (!renderer_.Initialize()) {
             std::cerr << "❌ Failed to initialize voxel renderer!" << std::endl;
             return false;
         }
+        std::cout << "✅ Voxel renderer initialized!" << std::endl;
         
         // Configure renderer for best performance
         VoxelRenderConfig render_config;
         render_config.enable_frustum_culling = true;
-        render_config.enable_multithreaded_meshing = true;
+        render_config.enable_multithreaded_meshing = false;  // Disable for now to test
         render_config.max_render_distance = 200.0f;
         render_config.max_remesh_per_frame = 4;
         render_config.max_upload_per_frame = 2;
@@ -102,19 +130,40 @@ public:
     void Run() {
         std::cout << "🚀 Starting voxel demo main loop..." << std::endl;
         
+        int frame_count = 0;
         while (!window_->ShouldClose()) {
+            if (frame_count == 0) {
+                std::cout << "Entering first frame..." << std::endl;
+            }
+            
             auto current_time = std::chrono::high_resolution_clock::now();
             float delta_time = std::chrono::duration<float>(current_time - last_frame_time_).count();
             last_frame_time_ = current_time;
             
+            if (frame_count == 0) {
+                std::cout << "Processing input..." << std::endl;
+            }
+            
             // Handle input
             ProcessInput(delta_time);
+            
+            if (frame_count == 0) {
+                std::cout << "Updating systems..." << std::endl;
+            }
             
             // Update systems
             Update(delta_time);
             
+            if (frame_count == 0) {
+                std::cout << "Rendering frame..." << std::endl;
+            }
+            
             // Render frame
             Render();
+            
+            if (frame_count == 0) {
+                std::cout << "Swapping buffers..." << std::endl;
+            }
             
             // Swap buffers and poll events
             window_->SwapBuffers();
@@ -122,6 +171,17 @@ public:
             
             // Update performance stats
             UpdatePerformanceStats(delta_time);
+            
+            frame_count++;
+            if (frame_count == 1) {
+                std::cout << "First frame completed successfully!" << std::endl;
+            }
+            if (frame_count == 2) {
+                std::cout << "Second frame completed successfully!" << std::endl;
+            }
+            if (frame_count % 60 == 0) {
+                std::cout << "Frame " << frame_count << " completed" << std::endl;
+            }
         }
         
         std::cout << "👋 Voxel demo shutting down..." << std::endl;
@@ -281,12 +341,12 @@ private:
     }
     
     void Render() {
-        // Clear screen
-        glClearColor(0.53f, 0.81f, 0.98f, 1.0f); // Sky blue
-        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+        // Begin frame
+        PyNovaGE::Renderer::Renderer::BeginFrame();
         
-        // Enable depth testing
-        glEnable(GL_DEPTH_TEST);
+        // Clear screen with sky blue
+        PyNovaGE::Vector4f sky_color(0.53f, 0.81f, 0.98f, 1.0f);
+        PyNovaGE::Renderer::Renderer::Clear(sky_color);
         
         // Wireframe mode
         if (wireframe_mode_) {
@@ -297,6 +357,9 @@ private:
         
         // Render voxel world
         renderer_.Render(camera_);
+        
+        // End frame
+        PyNovaGE::Renderer::Renderer::EndFrame();
         
         // Print performance stats to console periodically
         if (show_performance_stats_ && fps_timer_ >= 0.9f) {
@@ -373,6 +436,7 @@ private:
     // Core systems
     std::unique_ptr<PyNovaGE::Window::WindowSystemGuard> window_system_guard_;
     std::unique_ptr<PyNovaGE::Window::Window> window_;
+    std::unique_ptr<PyNovaGE::Renderer::RendererGuard> renderer_guard_;
     Camera camera_;
     VoxelRenderer renderer_;
     SimpleVoxelWorld world_;

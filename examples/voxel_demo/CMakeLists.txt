@@ -29,3 +29,11 @@ set_target_properties(voxel_demo
     PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin
 )
+
+# Copy shaders to output directory
+add_custom_command(TARGET voxel_demo POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_directory
+        ${CMAKE_SOURCE_DIR}/engine/core/renderer/shaders/voxel
+        ${CMAKE_BINARY_DIR}/bin/shaders/voxel
+    COMMENT "Copying voxel shaders to output directory"
+)
