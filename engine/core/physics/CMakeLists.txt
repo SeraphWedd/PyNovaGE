@@ -5,6 +5,7 @@ cmake_minimum_required(VERSION 3.20)
 add_library(physics
     src/collision_shapes.cpp
     src/rigid_body.cpp
+    src/physics_world.cpp
 )
 
 # Create alias for consistent naming
@@ -68,6 +69,7 @@ if(BUILD_TESTING)
     # Physics unit tests
     add_executable(physics_tests
         tests/test_collision_shapes.cpp
+        tests/test_physics_complete.cpp
     )
     
     target_link_libraries(physics_tests

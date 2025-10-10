@@ -1,4 +1,5 @@
-#include "physics_world.hpp"
+#include "physics/physics_world.hpp"
+#include <chrono>
 #include <algorithm>
 #include <unordered_set>
 
@@ -9,228 +10,264 @@ PhysicsWorld::PhysicsWorld(const PhysicsConfig& config)
     : config_(config) {
 }
 
-void PhysicsWorld::addRigidBody(std::shared_ptr<RigidBody> body) {
-    if (body && std::find(rigid_bodies_.begin(), rigid_bodies_.end(), body) == rigid_bodies_.end()) {
-        rigid_bodies_.push_back(body);
+void PhysicsWorld::addBody(std::shared_ptr<RigidBody> body) {
+    if (body && std::find(bodies_.begin(), bodies_.end(), body) == bodies_.end()) {
+        bodies_.push_back(body);
+        updateActiveBodyList();
     }
 }
 
-void PhysicsWorld::removeRigidBody(std::shared_ptr<RigidBody> body) {
-    auto it = std::find(rigid_bodies_.begin(), rigid_bodies_.end(), body);
-    if (it != rigid_bodies_.end()) {
-        rigid_bodies_.erase(it);
+void PhysicsWorld::removeBody(std::shared_ptr<RigidBody> body) {
+    auto it = std::find(bodies_.begin(), bodies_.end(), body);
+    if (it != bodies_.end()) {
+        bodies_.erase(it);
+        updateActiveBodyList();
     }
+}
+
+void PhysicsWorld::removeBody(RigidBody* body) {
+    auto it = std::find_if(bodies_.begin(), bodies_.end(),
+        [body](const std::shared_ptr<RigidBody>& ptr) {
+            return ptr && ptr.get() == body;
+        });
+    if (it != bodies_.end()) {
+        bodies_.erase(it);
+        updateActiveBodyList();
+    }
+}
+
+void PhysicsWorld::clear() {
+    bodies_.clear();
+    contacts_.clear();
+    active_body_indices_.clear();
+    broad_phase_pairs_.clear();
 }
 
 void PhysicsWorld::step(float deltaTime) {
     if (deltaTime <= 0.0f) return;
     
-    // Clamp deltaTime to prevent instability
-    deltaTime = std::min(deltaTime, config_.maxTimeStep);
+    auto start = std::chrono::high_resolution_clock::now();
     
-    // Accumulate time for fixed timestep
-    accumulated_time_ += deltaTime;
+    // Scale time
+    deltaTime *= config_.time_scale;
     
-    while (accumulated_time_ >= config_.timeStep) {
-        stepSimulation(config_.timeStep);
-        accumulated_time_ -= config_.timeStep;
+    // Fixed timestep accumulation
+    time_accumulator_ += deltaTime;
+    
+    // Process fixed timesteps
+    while (time_accumulator_ >= FIXED_TIME_STEP) {
+        integrate(FIXED_TIME_STEP);
+        broadPhaseCollision();
+        narrowPhaseCollision();
+        solveConstraints(FIXED_TIME_STEP);
+        updateSleepingBodies(FIXED_TIME_STEP);
+        
+        time_accumulator_ -= FIXED_TIME_STEP;
+    }
+    
+    // Update statistics
+    auto end = std::chrono::high_resolution_clock::now();
+    stats_.step_time = std::chrono::duration<float>(end - start).count();
+    stats_.active_bodies = 0;
+    stats_.sleeping_bodies = 0;
+    
+    for (const auto& body : bodies_) {
+        if (body->isAwake()) {
+            stats_.active_bodies++;
+        } else {
+            stats_.sleeping_bodies++;
+        }
     }
 }
 
-void PhysicsWorld::stepSimulation(float dt) {
-    // Apply gravity to dynamic bodies
-    applyGravity(dt);
-    
-    // Integrate forces to velocities
-    integrateForces(dt);
-    
-    // Broad phase collision detection
-    auto collisionPairs = broadPhaseCollision();
-    
-    // Narrow phase collision detection and manifold generation
-    std::vector<CollisionManifold> manifolds;
-    for (const auto& pair : collisionPairs) {
-        if (pair.first->isAwake() || pair.second->isAwake()) {
-            auto manifold = narrowPhaseCollision(*pair.first, *pair.second);
-            if (manifold.hasCollision) {
-                manifolds.push_back(manifold);
-            }
-        }
-    }
-    
-    // Solve constraints (collision resolution)
-    for (int i = 0; i < config_.velocityIterations; ++i) {
-        for (auto& manifold : manifolds) {
-            solveVelocityConstraints(manifold);
-        }
-    }
-    
-    // Integrate velocities to positions
-    integrateVelocities(dt);
-    
-    // Position correction
-    for (int i = 0; i < config_.positionIterations; ++i) {
-        for (const auto& manifold : manifolds) {
-            solvePositionConstraints(manifold);
-        }
-    }
-    
-    // Update sleep states
-    updateSleepStates(dt);
-}
-
-void PhysicsWorld::applyGravity(float dt) {
-    for (auto& body : rigid_bodies_) {
-        if (body->getType() == BodyType::Dynamic && body->isAwake()) {
+// Physics simulation implementation methods
+void PhysicsWorld::integrate(float deltaTime) {
+    // Apply gravity to dynamic bodies first
+    for (auto& body : bodies_) {
+        if (body->getBodyType() == BodyType::Dynamic && body->isAwake()) {
             Vector2<float> gravityForce = config_.gravity * body->getMass();
             body->applyForce(gravityForce);
         }
     }
-}
-
-void PhysicsWorld::integrateForces(float dt) {
-    for (auto& body : rigid_bodies_) {
-        if (body->getType() == BodyType::Dynamic && body->isAwake()) {
-            // Integration is handled by RigidBody::integrate
-            // This is where we could add additional force integration if needed
-        }
-    }
-}
-
-void PhysicsWorld::integrateVelocities(float dt) {
-    for (auto& body : rigid_bodies_) {
-        if (body->getType() == BodyType::Dynamic && body->isAwake()) {
-            body->integrate(dt);
-        }
-    }
-}
-
-void PhysicsWorld::updateSleepStates(float dt) {
-    // Sleep state updates are handled by each RigidBody during integration
-    // This is where we could add additional sleep logic if needed
-}
-
-std::vector<std::pair<std::shared_ptr<RigidBody>, std::shared_ptr<RigidBody>>>
-PhysicsWorld::broadPhaseCollision() {
-    std::vector<std::pair<std::shared_ptr<RigidBody>, std::shared_ptr<RigidBody>>> pairs;
     
-    // Simple O(n²) broad phase - can be optimized with spatial partitioning later
-    for (size_t i = 0; i < rigid_bodies_.size(); ++i) {
-        for (size_t j = i + 1; j < rigid_bodies_.size(); ++j) {
-            auto& bodyA = rigid_bodies_[i];
-            auto& bodyB = rigid_bodies_[j];
+    // Integrate all dynamic bodies
+    for (auto& body : bodies_) {
+        if (body->getBodyType() == BodyType::Dynamic && body->isAwake()) {
+            body->integrate(deltaTime);
+        }
+    }
+}
+
+void PhysicsWorld::broadPhaseCollision() {
+    auto start = std::chrono::high_resolution_clock::now();
+    
+    broad_phase_pairs_.clear();
+    
+    // Simple O(n²) broad phase using SIMD AABB tests
+    for (size_t i = 0; i < bodies_.size(); ++i) {
+        for (size_t j = i + 1; j < bodies_.size(); ++j) {
+            auto& bodyA = bodies_[i];
+            auto& bodyB = bodies_[j];
             
-            // Skip if both bodies are static
-            if (bodyA->getType() == BodyType::Static && bodyB->getType() == BodyType::Static) {
+            if (!isValidPair(*bodyA, *bodyB)) {
                 continue;
             }
             
-            // Skip if both bodies are sleeping
-            if (!bodyA->isAwake() && !bodyB->isAwake()) {
-                continue;
-            }
-            
-            // Check AABB overlap
+            // Check AABB overlap using existing SIMD implementation
             auto boundsA = bodyA->getWorldBounds();
             auto boundsB = bodyB->getWorldBounds();
             
             if (boundsA.intersects(boundsB)) {
-                pairs.emplace_back(bodyA, bodyB);
+                broad_phase_pairs_.push_back({i, j});
             }
         }
     }
     
-    return pairs;
+    auto end = std::chrono::high_resolution_clock::now();
+    stats_.broad_phase_time = std::chrono::duration<float>(end - start).count();
+    stats_.broad_phase_pairs = broad_phase_pairs_.size();
 }
 
-CollisionDetection::CollisionManifold 
-PhysicsWorld::narrowPhaseCollision(const RigidBody& bodyA, const RigidBody& bodyB) {
-    auto shapeA = bodyA.getCollisionShape();
-    auto shapeB = bodyB.getCollisionShape();
+void PhysicsWorld::narrowPhaseCollision() {
+    auto start = std::chrono::high_resolution_clock::now();
     
-    if (!shapeA || !shapeB) {
-        return CollisionDetection::CollisionManifold(); // No collision
+    clearContacts();
+    
+    // Generate collision manifolds for each broad-phase pair
+    for (const auto& pair : broad_phase_pairs_) {
+        auto& bodyA = bodies_[pair.index1];
+        auto& bodyB = bodies_[pair.index2];
+        
+        // Generate collision manifold
+        auto manifold = CollisionDetection::generateManifold(
+            bodyA->getCollisionShape(), bodyA->getPosition(),
+            bodyB->getCollisionShape(), bodyB->getPosition()
+        );
+        
+        if (manifold.hasCollision) {
+            Contact contact;
+            contact.body1 = bodyA.get();
+            contact.body2 = bodyB.get();
+            contact.manifold = manifold;
+            
+            contacts_.push_back(contact);
+        }
     }
     
-    return CollisionDetection::generateManifold(*shapeA, bodyA.getPosition(), 
-                                               *shapeB, bodyB.getPosition());
+    auto end = std::chrono::high_resolution_clock::now();
+    stats_.narrow_phase_time = std::chrono::duration<float>(end - start).count();
+    stats_.contacts = contacts_.size();
 }
 
-void PhysicsWorld::solveVelocityConstraints(CollisionDetection::CollisionManifold& manifold) {
-    // This is a simplified constraint solver
-    // A more robust implementation would use iterative methods
+void PhysicsWorld::solveConstraints(float) {
+    auto start = std::chrono::high_resolution_clock::now();
     
-    // For now, this method doesn't do additional work since 
-    // collision resolution is handled in RigidBody::resolveCollision
+    // Warm start contacts
+    warmStartContacts();
+    
+    // Solve velocity constraints
+    for (int i = 0; i < config_.velocity_iterations; ++i) {
+        solveVelocityConstraints();
+    }
+    
+    // Solve position constraints
+    for (int i = 0; i < config_.position_iterations; ++i) {
+        solvePositionConstraints();
+    }
+    
+    auto end = std::chrono::high_resolution_clock::now();
+    stats_.solve_time = std::chrono::duration<float>(end - start).count();
 }
 
-void PhysicsWorld::solvePositionConstraints(const CollisionDetection::CollisionManifold& manifold) {
-    // Position correction is also handled in RigidBody::resolveCollision
-    // This method could implement additional position-based corrections
+void PhysicsWorld::updateSleepingBodies(float) {
+    // Sleep state updates are handled by each RigidBody during integration
+    // This method ensures that bodies wake up when they should
+    for (auto& body : bodies_) {
+        if (body->getBodyType() == BodyType::Dynamic) {
+            // Bodies are woken up during collision resolution
+            // Additional sleep logic could go here if needed
+        }
+    }
 }
 
 // Query methods
-std::vector<std::shared_ptr<RigidBody>> 
-PhysicsWorld::queryRegion(const AABB<float>& region) const {
-    std::vector<std::shared_ptr<RigidBody>> results;
+std::vector<RigidBody*> PhysicsWorld::queryAABB(const AABB<float>& bounds) const {
+    std::vector<RigidBody*> results;
     
-    for (const auto& body : rigid_bodies_) {
-        if (body->getWorldBounds().intersects(region)) {
-            results.push_back(body);
+    for (const auto& body : bodies_) {
+        if (body->getWorldBounds().intersects(bounds)) {
+            results.push_back(body.get());
         }
     }
     
     return results;
 }
 
-std::shared_ptr<RigidBody> 
-PhysicsWorld::queryPoint(const Vector2<float>& point) const {
-    for (const auto& body : rigid_bodies_) {
-        auto shape = body->getCollisionShape();
-        if (shape && shape->contains(point, body->getPosition())) {
-            return body;
+std::vector<RigidBody*> PhysicsWorld::queryPoint(const Vector2<float>& point) const {
+    std::vector<RigidBody*> results;
+    
+    for (const auto& body : bodies_) {
+        auto bounds = body->getWorldBounds();
+        SIMD::Vector<float, 3> point3d(point.x, point.y, 0.0f);
+        
+        if (bounds.contains(point3d)) {
+            // Additional precise point-in-shape test could go here
+            results.push_back(body.get());
         }
     }
     
-    return nullptr;
+    return results;
 }
 
-PhysicsWorld::RaycastResult 
-PhysicsWorld::raycast(const Vector2<float>& origin, const Vector2<float>& direction, float maxDistance) const {
-    RaycastResult result;
-    result.hit = false;
-    result.distance = maxDistance;
+std::vector<RigidBody*> PhysicsWorld::queryShape(const CollisionShape& shape, const Vector2<float>& position) const {
+    std::vector<RigidBody*> results;
     
-    Vector2<float> normalizedDir = direction;
-    float dirLength = direction.length();
-    if (dirLength > 0.0001f) {
-        normalizedDir = direction / dirLength;
-    } else {
-        return result; // Invalid direction
+    for (const auto& body : bodies_) {
+        if (body->getCollisionShape().intersects(shape, body->getPosition(), position)) {
+            results.push_back(body.get());
+        }
     }
     
-    for (const auto& body : rigid_bodies_) {
-        // Simple raycast implementation - can be optimized
-        // For now, we'll check against AABB and then do detailed shape testing
+    return results;
+}
+
+PhysicsWorld::RaycastHit PhysicsWorld::raycast(const Vector2<float>& start, const Vector2<float>& end) const {
+    RaycastHit result;
+    result.hasHit = false;
+    
+    Vector2<float> direction = end - start;
+    float maxDistance = direction.length();
+    
+    if (maxDistance < 0.0001f) {
+        return result; // Invalid ray
+    }
+    
+    direction = direction * (1.0f / maxDistance);  // Avoid division operator
+    result.distance = maxDistance;
+    
+    // Simple raycast against all body AABBs
+    for (const auto& body : bodies_) {
         auto bounds = body->getWorldBounds();
         
-        // Create a ray in 3D for SIMD operations
-        SIMD::Ray<float> ray(SIMD::Vector<float, 3>(origin.x, origin.y, 0.0f), 
-                           SIMD::Vector<float, 3>(normalizedDir.x, normalizedDir.y, 0.0f));
+        // Create 3D ray for SIMD operations
+        SIMD::Ray<float> ray(
+            SIMD::Vector<float, 3>(start.x, start.y, 0.0f),
+            SIMD::Vector<float, 3>(direction.x, direction.y, 0.0f)
+        );
         
         float t;
-        if (ray.intersects(bounds, t) && t < result.distance) {
-            // More detailed intersection test with actual shape could go here
-            result.hit = true;
+        if (ray.intersects(bounds, t) && t < result.distance && t >= 0.0f) {
+            result.hasHit = true;
             result.distance = t;
-            result.point = origin + normalizedDir * t;
-            result.body = body;
+            result.point = start + direction * t;
+            result.body = body.get();
             
-            // Simple normal calculation (could be improved)
+            // Simple normal calculation (can be improved)
             Vector2<float> center = body->getPosition();
             Vector2<float> toHit = result.point - center;
-            if (toHit.length() > 0.0001f) {
-                result.normal = toHit.normalized();
+            float len = toHit.length();
+            if (len > 0.0001f) {
+                result.normal = toHit * (1.0f / len);  // Avoid division operator
             } else {
                 result.normal = Vector2<float>(1.0f, 0.0f);
             }
@@ -240,48 +277,119 @@ PhysicsWorld::raycast(const Vector2<float>& origin, const Vector2<float>& direct
     return result;
 }
 
-void PhysicsWorld::setGravity(const Vector2<float>& gravity) {
-    config_.gravity = gravity;
+std::vector<PhysicsWorld::RaycastHit> PhysicsWorld::raycastAll(const Vector2<float>& start, const Vector2<float>& end) const {
+    std::vector<RaycastHit> results;
     
-    // Wake up all dynamic bodies when gravity changes
-    for (auto& body : rigid_bodies_) {
-        if (body->getType() == BodyType::Dynamic) {
-            body->setAwake(true);
+    Vector2<float> direction = end - start;
+    float maxDistance = direction.length();
+    
+    if (maxDistance < 0.0001f) {
+        return results; // Invalid ray
+    }
+    
+    direction = direction * (1.0f / maxDistance);  // Avoid division operator
+    
+    // Raycast against all bodies
+    for (const auto& body : bodies_) {
+        auto bounds = body->getWorldBounds();
+        
+        // Create 3D ray for SIMD operations
+        SIMD::Ray<float> ray(
+            SIMD::Vector<float, 3>(start.x, start.y, 0.0f),
+            SIMD::Vector<float, 3>(direction.x, direction.y, 0.0f)
+        );
+        
+        float t;
+        if (ray.intersects(bounds, t) && t <= maxDistance && t >= 0.0f) {
+            RaycastHit hit;
+            hit.hasHit = true;
+            hit.distance = t;
+            hit.point = start + direction * t;
+            hit.body = body.get();
+            
+            // Simple normal calculation
+            Vector2<float> center = body->getPosition();
+            Vector2<float> toHit = hit.point - center;
+            float len = toHit.length();
+            if (len > 0.0001f) {
+                hit.normal = toHit * (1.0f / len);  // Avoid division operator
+            } else {
+                hit.normal = Vector2<float>(1.0f, 0.0f);
+            }
+            
+            results.push_back(hit);
         }
     }
+    
+    // Sort by distance
+    std::sort(results.begin(), results.end(),
+        [](const RaycastHit& a, const RaycastHit& b) {
+            return a.distance < b.distance;
+        });
+    
+    return results;
 }
 
-size_t PhysicsWorld::getBodyCount() const {
-    return rigid_bodies_.size();
+// Private implementation methods
+void PhysicsWorld::performBroadPhase() {
+    broadPhaseCollision();
 }
 
-size_t PhysicsWorld::getActiveBodyCount() const {
-    size_t count = 0;
-    for (const auto& body : rigid_bodies_) {
-        if (body->isAwake()) {
-            ++count;
+void PhysicsWorld::performNarrowPhase() {
+    narrowPhaseCollision();
+}
+
+void PhysicsWorld::warmStartContacts() {
+    // Warm starting improves convergence but is optional for simple implementation
+    // For now, we'll keep it simple and not implement warm starting
+}
+
+void PhysicsWorld::solveVelocityConstraints() {
+    // Iterate through contacts and resolve them
+    for (auto& contact : contacts_) {
+        if (!contact.isValid()) continue;
+        
+        // Use the collision resolution from RigidBody
+        contact.body1->resolveCollision(
+            contact.manifold.normal,
+            contact.manifold.penetration,
+            contact.manifold.contactPoint,
+            *contact.body2
+        );
+    }
+}
+
+void PhysicsWorld::solvePositionConstraints() {
+    // Position correction is handled in resolveCollision
+    // Additional position-based corrections could go here
+}
+
+bool PhysicsWorld::isValidPair(const RigidBody& body1, const RigidBody& body2) const {
+    // Skip if both bodies are static
+    if (body1.isStatic() && body2.isStatic()) {
+        return false;
+    }
+    
+    // Skip if both bodies are sleeping
+    if (!body1.isAwake() && !body2.isAwake()) {
+        return false;
+    }
+    
+    // Skip if either body is not active
+    if (!body1.isActive() || !body2.isActive()) {
+        return false;
+    }
+    
+    return true;
+}
+
+void PhysicsWorld::updateActiveBodyList() {
+    active_body_indices_.clear();
+    
+    for (size_t i = 0; i < bodies_.size(); ++i) {
+        if (bodies_[i]->isAwake() && bodies_[i]->isActive()) {
+            active_body_indices_.push_back(i);
         }
-    }
-    return count;
-}
-
-void PhysicsWorld::setTimeStep(float timeStep) {
-    if (timeStep > 0.0f) {
-        config_.timeStep = timeStep;
-    }
-}
-
-void PhysicsWorld::setVelocityIterations(int iterations) {
-    config_.velocityIterations = std::max(1, iterations);
-}
-
-void PhysicsWorld::setPositionIterations(int iterations) {
-    config_.positionIterations = std::max(0, iterations);
-}
-
-void PhysicsWorld::clearForces() {
-    for (auto& body : rigid_bodies_) {
-        body->clearForces();
     }
 }
 
