@@ -10,6 +10,15 @@ struct GLFWwindow;
 
 namespace PyNovaGE {
 namespace Window {
+    // Forward declarations from input_platform.hpp
+    class IInputPlatform;
+    struct TouchEvent;
+    struct TouchData;
+}
+}
+
+namespace PyNovaGE {
+namespace Window {
 
 /**
  * @brief Key codes (mapped from GLFW)
@@ -154,6 +163,7 @@ struct GamepadState {
 class InputManager {
 public:
     using InputCallback = std::function<void(const InputEvent&)>;
+    using TouchCallback = std::function<void(const TouchEvent&)>;
     
     /**
      * @brief Constructor
@@ -257,6 +267,11 @@ public:
     void SetInputCallback(InputCallback callback);
     
     /**
+     * @brief Set touch event callback
+     */
+    void SetTouchCallback(TouchCallback callback);
+    
+    /**
      * @brief Enable/disable mouse cursor
      */
     void SetMouseCursorVisible(bool visible);
@@ -270,42 +285,39 @@ public:
      * @brief Set mouse cursor mode (normal, hidden, disabled)
      */
     void SetMouseCursorMode(int mode); // GLFW_CURSOR_NORMAL, etc.
+    
+    /**
+     * @brief Check if platform supports touch input
+     */
+    bool SupportsTouchInput() const;
+    
+    /**
+     * @brief Get number of active touches
+     */
+    int GetActiveTouchCount() const;
+    
+    /**
+     * @brief Get touch data by touch ID
+     */
+    TouchData GetTouch(int touch_id) const;
+    
+    /**
+     * @brief Get all active touches
+     */
+    std::vector<TouchData> GetActiveTouches() const;
+    
+    /**
+     * @brief Check platform capabilities
+     */
+    bool SupportsKeyboard() const;
+    bool SupportsMouse() const;
+    bool SupportsGamepad() const;
+    std::string GetPlatformName() const;
 
 private:
-    static constexpr int MAX_KEYS = 512;
-    static constexpr int MAX_MOUSE_BUTTONS = 8;
-    static constexpr int MAX_GAMEPADS = 16;
-    
-    GLFWwindow* window_;
+    std::unique_ptr<IInputPlatform> platform_;
     InputCallback input_callback_;
-    
-    // Input state tracking
-    std::array<InputState, MAX_KEYS> key_states_{};
-    std::array<InputState, MAX_KEYS> prev_key_states_{};
-    
-    std::array<InputState, MAX_MOUSE_BUTTONS> mouse_states_{};
-    std::array<InputState, MAX_MOUSE_BUTTONS> prev_mouse_states_{};
-    
-    std::array<GamepadState, MAX_GAMEPADS> gamepad_states_{};
-    std::array<GamepadState, MAX_GAMEPADS> prev_gamepad_states_{};
-    
-    PyNovaGE::Vector2f mouse_position_{0.0f, 0.0f};
-    PyNovaGE::Vector2f prev_mouse_position_{0.0f, 0.0f};
-    PyNovaGE::Vector2f scroll_delta_{0.0f, 0.0f};
-    
-    bool cursor_visible_ = true;
-    
-    // GLFW callbacks
-    static void KeyCallback(GLFWwindow* window, int key, int scancode, int action, int mods);
-    static void MouseButtonCallback(GLFWwindow* window, int button, int action, int mods);
-    static void CursorPositionCallback(GLFWwindow* window, double xpos, double ypos);
-    static void ScrollCallback(GLFWwindow* window, double xoffset, double yoffset);
-    static void JoystickCallback(int jid, int event);
-    
-    void SetupCallbacks();
-    void UpdateGamepads();
-    void TriggerEvent(const InputEvent& event);
-    InputState GetInputState(bool current, bool previous) const;
+    TouchCallback touch_callback_;
 };
 
 } // namespace Window
