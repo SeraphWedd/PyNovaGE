@@ -72,7 +72,13 @@ bool Renderer::Initialize(const RendererConfig& config) {
     // Initialize subsystems
     try {
         s_sprite_renderer_ = std::make_unique<SpriteRenderer>();
-        s_batch_renderer_ = std::make_unique<BatchRenderer>(s_config_.max_sprites_per_batch, s_config_.max_textures_per_batch);
+        if (!s_sprite_renderer_->Initialize()) {
+            std::cerr << "Failed to initialize SpriteRenderer!" << std::endl;
+            return false;
+        }
+        
+        // Note: BatchRenderer initialization commented out for now
+        // s_batch_renderer_ = std::make_unique<BatchRenderer>(s_config_.max_sprites_per_batch, s_config_.max_textures_per_batch);
     } catch (const std::exception& e) {
         std::cerr << "Failed to initialize renderer subsystems: " << e.what() << std::endl;
         return false;

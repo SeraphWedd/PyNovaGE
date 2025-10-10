@@ -12,6 +12,7 @@ if(BUILD_EXAMPLES)
     add_subdirectory(interactive_demo)
     add_subdirectory(shader_test)
     add_subdirectory(texture_test)
+    add_subdirectory(sprite_test)
     
     message(STATUS "Examples configured successfully")
 else()

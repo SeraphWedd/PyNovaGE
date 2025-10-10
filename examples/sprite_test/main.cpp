@@ -1,0 +1,290 @@
+#include <iostream>
+#include <vector>
+#include <cassert>
+
+// GLAD must be included before any OpenGL headers
+#include <glad/gl.h>
+#include <GLFW/glfw3.h>
+
+#include "renderer/renderer.hpp"
+#include "renderer/sprite_renderer.hpp"
+#include "renderer/texture.hpp"
+#include "window/window.hpp"
+
+using PyNovaGE::Renderer::Sprite;
+using PyNovaGE::Renderer::SpriteRenderer;
+using PyNovaGE::Renderer::Texture;
+using PyNovaGE::Renderer::TextureFormat;
+using PyNovaGE::Renderer::TextureDataType;
+using PyNovaGE::Renderer::RendererConfig;
+using PyNovaGE::Renderer::RenderStats;
+using PyNovaGE::Vector2f;
+
+bool InitializeOpenGL() {
+    if (!glfwInit()) {
+        std::cerr << "Failed to initialize GLFW" << std::endl;
+        return false;
+    }
+    
+    glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
+    glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
+    glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
+    glfwWindowHint(GLFW_VISIBLE, GLFW_FALSE); // Hidden window for testing
+    
+    GLFWwindow* window = glfwCreateWindow(800, 600, "Sprite Test", nullptr, nullptr);
+    if (!window) {
+        std::cerr << "Failed to create window" << std::endl;
+        glfwTerminate();
+        return false;
+    }
+    
+    glfwMakeContextCurrent(window);
+    
+    if (!gladLoaderLoadGL()) {
+        std::cerr << "Failed to initialize GLAD" << std::endl;
+        glfwTerminate();
+        return false;
+    }
+    
+    return true;
+}
+
+void TestSpriteCreation() {
+    std::cout << "[TEST] Sprite Creation and Properties..." << std::endl;
+    
+    // Test 1: Default sprite creation
+    Sprite sprite1;
+    
+    if (sprite1.position.x == 0.0f && sprite1.position.y == 0.0f &&
+        sprite1.rotation == 0.0f &&
+        sprite1.scale.x == 1.0f && sprite1.scale.y == 1.0f &&
+        sprite1.color.x == 1.0f && sprite1.color.y == 1.0f && 
+        sprite1.color.z == 1.0f && sprite1.color.w == 1.0f) {
+        std::cout << "[PASS] Default sprite creation with correct initial values" << std::endl;
+    } else {
+        std::cout << "[FAIL] Default sprite has incorrect initial values" << std::endl;
+    }
+    
+    // Test 2: Sprite property modification
+    sprite1.position = {100.0f, 200.0f};
+    sprite1.rotation = 3.14159f / 4.0f; // 45 degrees
+    sprite1.scale = {2.0f, 1.5f};
+    sprite1.color = {1.0f, 0.5f, 0.0f, 0.8f}; // Orange with transparency
+    
+    if (sprite1.position.x == 100.0f && sprite1.position.y == 200.0f &&
+        sprite1.rotation == 3.14159f / 4.0f &&
+        sprite1.scale.x == 2.0f && sprite1.scale.y == 1.5f) {
+        std::cout << "[PASS] Sprite property modification works correctly" << std::endl;
+    } else {
+        std::cout << "[FAIL] Sprite property modification failed" << std::endl;
+    }
+}
+
+void TestSpriteWithTexture() {
+    std::cout << "[TEST] Sprite with Texture..." << std::endl;
+    
+    // Create a test texture
+    std::vector<unsigned char> textureData(64 * 64 * 4);
+    // Create a simple pattern
+    for (int y = 0; y < 64; ++y) {
+        for (int x = 0; x < 64; ++x) {
+            int idx = (y * 64 + x) * 4;
+            textureData[idx] = static_cast<unsigned char>((x * 255) / 63);     // Red gradient
+            textureData[idx + 1] = static_cast<unsigned char>((y * 255) / 63); // Green gradient
+            textureData[idx + 2] = 128;                                        // Blue constant
+            textureData[idx + 3] = 255;                                        // Alpha full
+        }
+    }
+    
+    auto texture = std::make_shared<Texture>();
+    bool textureCreated = texture->CreateFromData(64, 64, TextureFormat::RGBA, 
+                                                 TextureDataType::UnsignedByte, 
+                                                 textureData.data());
+    
+    if (!textureCreated || !texture->IsValid()) {
+        std::cout << "[FAIL] Failed to create test texture" << std::endl;
+        return;
+    }
+    
+    // Test: Sprite construction with texture
+    Vector2f position(150.0f, 100.0f);
+    Sprite sprite(position, texture);
+    
+    if (sprite.texture == texture &&
+        sprite.position.x == 150.0f && sprite.position.y == 100.0f &&
+        sprite.size.x == 64.0f && sprite.size.y == 64.0f) {
+        std::cout << "[PASS] Sprite with texture constructor works correctly" << std::endl;
+    } else {
+        std::cout << "[FAIL] Sprite with texture constructor failed" << std::endl;
+    }
+}
+
+void TestSpriteRenderer() {
+    std::cout << "[TEST] SpriteRenderer Functionality..." << std::endl;
+    
+    // Test 1: SpriteRenderer creation and initialization
+    SpriteRenderer spriteRenderer;
+    
+    if (!spriteRenderer.IsInitialized()) {
+        std::cout << "[PASS] SpriteRenderer starts uninitialized" << std::endl;
+    } else {
+        std::cout << "[FAIL] SpriteRenderer should start uninitialized" << std::endl;
+    }
+    
+    // Test 2: Initialize SpriteRenderer
+    bool initialized = spriteRenderer.Initialize();
+    
+    if (initialized && spriteRenderer.IsInitialized()) {
+        std::cout << "[PASS] SpriteRenderer initialization successful" << std::endl;
+    } else {
+        std::cout << "[FAIL] SpriteRenderer initialization failed" << std::endl;
+        return;
+    }
+    
+    // Test 3: Create a sprite with texture for rendering
+    std::vector<unsigned char> renderData(32 * 32 * 4, 255); // White 32x32 texture
+    auto renderTexture = std::make_shared<Texture>();
+    bool renderTextureCreated = renderTexture->CreateFromData(32, 32, TextureFormat::RGBA,
+                                                             TextureDataType::UnsignedByte,
+                                                             renderData.data());
+    
+    if (!renderTextureCreated) {
+        std::cout << "[FAIL] Failed to create render test texture" << std::endl;
+        return;
+    }
+    
+    Sprite renderSprite({0.0f, 0.0f}, renderTexture);
+    renderSprite.color = {1.0f, 0.8f, 0.6f, 1.0f}; // Light orange tint
+    
+    // Test 4: Attempt to render sprite (this tests the rendering pipeline)
+    try {
+        spriteRenderer.RenderSprite(renderSprite);
+        std::cout << "[PASS] Sprite rendering completed without errors" << std::endl;
+    } catch (const std::exception& e) {
+        std::cout << "[FAIL] Sprite rendering threw exception: " << e.what() << std::endl;
+    } catch (...) {
+        std::cout << "[FAIL] Sprite rendering threw unknown exception" << std::endl;
+    }
+    
+    // Test 5: Cleanup
+    spriteRenderer.Shutdown();
+    
+    if (!spriteRenderer.IsInitialized()) {
+        std::cout << "[PASS] SpriteRenderer shutdown successful" << std::endl;
+    } else {
+        std::cout << "[FAIL] SpriteRenderer shutdown failed" << std::endl;
+    }
+}
+
+void TestRendererIntegration() {
+    std::cout << "[TEST] Renderer Integration..." << std::endl;
+    
+    // Test 1: Initialize main renderer
+    RendererConfig config;
+    config.enable_blend = true;
+    config.enable_depth_test = false; // 2D rendering
+    
+    bool rendererInit = PyNovaGE::Renderer::Renderer::Initialize(config);
+    
+    if (rendererInit && PyNovaGE::Renderer::Renderer::IsInitialized()) {
+        std::cout << "[PASS] Main renderer initialization successful" << std::endl;
+    } else {
+        std::cout << "[FAIL] Main renderer initialization failed" << std::endl;
+        return;
+    }
+    
+    // Test 2: Get sprite renderer from main renderer
+    SpriteRenderer* spriteRenderer = PyNovaGE::Renderer::Renderer::GetSpriteRenderer();
+    
+    if (spriteRenderer != nullptr && spriteRenderer->IsInitialized()) {
+        std::cout << "[PASS] SpriteRenderer retrieved from main renderer" << std::endl;
+    } else {
+        std::cout << "[FAIL] Failed to get initialized SpriteRenderer from main renderer" << std::endl;
+        PyNovaGE::Renderer::Renderer::Shutdown();
+        return;
+    }
+    
+    // Test 3: Create and render sprite through main renderer
+    std::vector<unsigned char> integrationData(16 * 16 * 4);
+    // Create checkerboard pattern
+    for (int y = 0; y < 16; ++y) {
+        for (int x = 0; x < 16; ++x) {
+            int idx = (y * 16 + x) * 4;
+            bool checker = ((x / 4) + (y / 4)) % 2;
+            integrationData[idx] = checker ? 255 : 0;     // Red
+            integrationData[idx + 1] = checker ? 255 : 0; // Green  
+            integrationData[idx + 2] = checker ? 255 : 0; // Blue
+            integrationData[idx + 3] = 255;               // Alpha
+        }
+    }
+    
+    auto integrationTexture = std::make_shared<Texture>();
+    bool integrationTextureCreated = integrationTexture->CreateFromData(16, 16, TextureFormat::RGBA,
+                                                                        TextureDataType::UnsignedByte,
+                                                                        integrationData.data());
+    
+    if (integrationTextureCreated) {
+        Sprite integrationSprite({100.0f, 100.0f}, integrationTexture);
+        integrationSprite.rotation = 3.14159f / 6.0f; // 30 degrees
+        integrationSprite.scale = {3.0f, 3.0f};
+        
+        try {
+            // Begin frame
+            PyNovaGE::Renderer::Renderer::BeginFrame();
+            PyNovaGE::Renderer::Renderer::Clear({0.2f, 0.3f, 0.4f, 1.0f});
+            
+            // Render sprite
+            spriteRenderer->RenderSprite(integrationSprite);
+            
+            // End frame
+            PyNovaGE::Renderer::Renderer::EndFrame();
+            
+            std::cout << "[PASS] Complete rendering pipeline successful" << std::endl;
+            
+            // Check stats
+            const RenderStats& stats = PyNovaGE::Renderer::Renderer::GetStats();
+            std::cout << "       Frame time: " << stats.frame_time_ms << "ms" << std::endl;
+            
+        } catch (...) {
+            std::cout << "[FAIL] Complete rendering pipeline failed" << std::endl;
+        }
+    } else {
+        std::cout << "[FAIL] Failed to create integration texture" << std::endl;
+    }
+    
+    // Test 4: Cleanup
+    PyNovaGE::Renderer::Renderer::Shutdown();
+    
+    if (!PyNovaGE::Renderer::Renderer::IsInitialized()) {
+        std::cout << "[PASS] Main renderer shutdown successful" << std::endl;
+    } else {
+        std::cout << "[FAIL] Main renderer shutdown failed" << std::endl;
+    }
+}
+
+int main() {
+    std::cout << "=== PyNovaGE Sprite System Test ===" << std::endl << std::endl;
+    
+    if (!InitializeOpenGL()) {
+        std::cerr << "Failed to initialize OpenGL context" << std::endl;
+        return -1;
+    }
+    
+    // Run all tests
+    TestSpriteCreation();
+    std::cout << std::endl;
+    
+    TestSpriteWithTexture();
+    std::cout << std::endl;
+    
+    TestSpriteRenderer();
+    std::cout << std::endl;
+    
+    TestRendererIntegration();
+    std::cout << std::endl;
+    
+    std::cout << "=== Sprite System Test Complete ===" << std::endl;
+    
+    glfwTerminate();
+    return 0;
+}
