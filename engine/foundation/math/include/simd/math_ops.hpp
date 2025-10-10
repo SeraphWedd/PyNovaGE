@@ -2,6 +2,7 @@
 
 #include "types.hpp"
 #include <cmath>
+#include <algorithm>
 
 namespace PyNovaGE {
 namespace SIMD {
