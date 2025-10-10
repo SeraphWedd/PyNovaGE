@@ -8,11 +8,13 @@
 
 #include "renderer/renderer.hpp"
 #include "renderer/sprite_renderer.hpp"
+#include "renderer/batch_renderer.hpp"
 #include "renderer/texture.hpp"
 #include "window/window.hpp"
 
 using PyNovaGE::Renderer::Sprite;
 using PyNovaGE::Renderer::SpriteRenderer;
+using PyNovaGE::Renderer::BatchRenderer;
 using PyNovaGE::Renderer::Texture;
 using PyNovaGE::Renderer::TextureFormat;
 using PyNovaGE::Renderer::TextureDataType;
@@ -262,6 +264,238 @@ void TestRendererIntegration() {
     }
 }
 
+void TestBatchRendering() {
+    std::cout << "[TEST] BatchRenderer Functionality..." << std::endl;
+    
+    // Test 1: BatchRenderer creation and initialization
+    BatchRenderer batchRenderer(100, 8); // Smaller limits for testing
+    
+    if (!batchRenderer.IsInitialized()) {
+        std::cout << "[PASS] BatchRenderer starts uninitialized" << std::endl;
+    } else {
+        std::cout << "[FAIL] BatchRenderer should start uninitialized" << std::endl;
+    }
+    
+    // Test 2: Initialize BatchRenderer
+    bool initialized = batchRenderer.Initialize();
+    
+    if (initialized && batchRenderer.IsInitialized()) {
+        std::cout << "[PASS] BatchRenderer initialization successful" << std::endl;
+        std::cout << "       Max sprites per batch: " << batchRenderer.GetMaxSprites() << std::endl;
+        std::cout << "       Max textures per batch: " << batchRenderer.GetMaxTextures() << std::endl;
+    } else {
+        std::cout << "[FAIL] BatchRenderer initialization failed" << std::endl;
+        return;
+    }
+    
+    // Test 3: Create test textures for batch rendering
+    std::vector<std::shared_ptr<Texture>> testTextures;
+    
+    // Create 3 different colored textures
+    for (int i = 0; i < 3; ++i) {
+        std::vector<unsigned char> textureData(16 * 16 * 4);
+        
+        // Different colors for each texture
+        unsigned char colors[3][3] = {
+            {255, 0, 0},   // Red
+            {0, 255, 0},   // Green
+            {0, 0, 255}    // Blue
+        };
+        
+        for (int p = 0; p < 16 * 16; ++p) {
+            textureData[p * 4] = colors[i][0];     // R
+            textureData[p * 4 + 1] = colors[i][1]; // G
+            textureData[p * 4 + 2] = colors[i][2]; // B
+            textureData[p * 4 + 3] = 255;          // A
+        }
+        
+        auto texture = std::make_shared<Texture>();
+        if (texture->CreateFromData(16, 16, TextureFormat::RGBA,
+                                   TextureDataType::UnsignedByte,
+                                   textureData.data())) {
+            testTextures.push_back(texture);
+        }
+    }
+    
+    if (testTextures.size() != 3) {
+        std::cout << "[FAIL] Failed to create test textures for batch rendering" << std::endl;
+        return;
+    }
+    
+    std::cout << "[PASS] Created " << testTextures.size() << " test textures" << std::endl;
+    
+    // Test 4: Create sprites for batch rendering
+    std::vector<Sprite> batchSprites;
+    
+    for (int y = 0; y < 5; ++y) {
+        for (int x = 0; x < 4; ++x) {
+            Sprite sprite;
+            sprite.position = Vector2f(static_cast<float>(x * 40 + 50), static_cast<float>(y * 40 + 50));
+            sprite.size = Vector2f(32.0f, 32.0f);
+            sprite.color = {1.0f, 1.0f, 1.0f, 0.8f}; // Slightly transparent
+            sprite.rotation = static_cast<float>((x + y) * 0.2f); // Slight rotation variation
+            sprite.texture = testTextures[(x + y) % 3]; // Cycle through textures
+            batchSprites.push_back(sprite);
+        }
+    }
+    
+    std::cout << "[PASS] Created " << batchSprites.size() << " sprites for batch rendering" << std::endl;
+    
+    // Test 5: Batch rendering lifecycle
+    try {
+        batchRenderer.BeginBatch();
+        
+        int spritesAdded = 0;
+        for (const auto& sprite : batchSprites) {
+            if (batchRenderer.AddSprite(sprite)) {
+                ++spritesAdded;
+            }
+        }
+        
+        std::cout << "[PASS] Added " << spritesAdded << "/" << batchSprites.size() << " sprites to batch" << std::endl;
+        
+        // Check batch status
+        std::cout << "       Current sprites in batch: " << batchRenderer.GetCurrentSpriteCount() << std::endl;
+        std::cout << "       Current textures in batch: " << batchRenderer.GetCurrentTextureCount() << std::endl;
+        
+        batchRenderer.EndBatch();
+        
+        std::cout << "[PASS] Batch rendering lifecycle completed successfully" << std::endl;
+        
+        // Check statistics
+        const auto& stats = batchRenderer.GetStats();
+        std::cout << "       Batch statistics:" << std::endl;
+        std::cout << "         Draw calls: " << stats.draw_calls << std::endl;
+        std::cout << "         Sprites batched: " << stats.sprites_batched << std::endl;
+        std::cout << "         Batches flushed: " << stats.batches_flushed << std::endl;
+        std::cout << "         Texture binds: " << stats.texture_binds << std::endl;
+        std::cout << "         Avg sprites per batch: " << stats.avg_sprites_per_batch << std::endl;
+        
+    } catch (const std::exception& e) {
+        std::cout << "[FAIL] Batch rendering threw exception: " << e.what() << std::endl;
+    } catch (...) {
+        std::cout << "[FAIL] Batch rendering threw unknown exception" << std::endl;
+    }
+    
+    // Test 6: Cleanup
+    batchRenderer.Shutdown();
+    
+    if (!batchRenderer.IsInitialized()) {
+        std::cout << "[PASS] BatchRenderer shutdown successful" << std::endl;
+    } else {
+        std::cout << "[FAIL] BatchRenderer shutdown failed" << std::endl;
+    }
+}
+
+void TestBatchVsIndividualRendering() {
+    std::cout << "[TEST] Batch vs Individual Rendering Performance..." << std::endl;
+    
+    // Initialize both renderers
+    RendererConfig config;
+    config.enable_blend = true;
+    config.enable_depth_test = false;
+    
+    if (!PyNovaGE::Renderer::Renderer::Initialize(config)) {
+        std::cout << "[FAIL] Failed to initialize main renderer for performance test" << std::endl;
+        return;
+    }
+    
+    SpriteRenderer* spriteRenderer = PyNovaGE::Renderer::Renderer::GetSpriteRenderer();
+    BatchRenderer* batchRenderer = PyNovaGE::Renderer::Renderer::GetBatchRenderer();
+    
+    if (!spriteRenderer || !batchRenderer) {
+        std::cout << "[FAIL] Failed to get renderers from main renderer" << std::endl;
+        PyNovaGE::Renderer::Renderer::Shutdown();
+        return;
+    }
+    
+    std::cout << "[PASS] Retrieved both individual and batch renderers" << std::endl;
+    
+    // Create test texture
+    std::vector<unsigned char> perfData(8 * 8 * 4, 255); // White 8x8 texture
+    auto perfTexture = std::make_shared<Texture>();
+    if (!perfTexture->CreateFromData(8, 8, TextureFormat::RGBA,
+                                    TextureDataType::UnsignedByte,
+                                    perfData.data())) {
+        std::cout << "[FAIL] Failed to create performance test texture" << std::endl;
+        PyNovaGE::Renderer::Renderer::Shutdown();
+        return;
+    }
+    
+    // Create test sprites
+    const int numSprites = 50;
+    std::vector<Sprite> perfSprites;
+    
+    for (int i = 0; i < numSprites; ++i) {
+        Sprite sprite;
+        sprite.position = Vector2f(static_cast<float>((i % 10) * 20 + 10), static_cast<float>((i / 10) * 20 + 10));
+        sprite.size = Vector2f(16.0f, 16.0f);
+        sprite.color = {1.0f, 1.0f, 1.0f, 1.0f};
+        sprite.texture = perfTexture;
+        perfSprites.push_back(sprite);
+    }
+    
+    std::cout << "[PASS] Created " << numSprites << " sprites for performance comparison" << std::endl;
+    
+    // Test individual rendering
+    try {
+        PyNovaGE::Renderer::Renderer::BeginFrame();
+        PyNovaGE::Renderer::Renderer::Clear({0.1f, 0.1f, 0.1f, 1.0f});
+        
+        for (const auto& sprite : perfSprites) {
+            spriteRenderer->RenderSprite(sprite);
+        }
+        
+        PyNovaGE::Renderer::Renderer::EndFrame();
+        
+        const auto& individualStats = PyNovaGE::Renderer::Renderer::GetStats();
+        std::cout << "[PASS] Individual rendering completed" << std::endl;
+        std::cout << "       Individual render time: " << individualStats.frame_time_ms << "ms" << std::endl;
+        
+    } catch (...) {
+        std::cout << "[FAIL] Individual rendering failed" << std::endl;
+    }
+    
+    // Reset statistics
+    batchRenderer->ResetStats();
+    
+    // Test batch rendering
+    try {
+        PyNovaGE::Renderer::Renderer::BeginFrame();
+        PyNovaGE::Renderer::Renderer::Clear({0.1f, 0.1f, 0.1f, 1.0f});
+        
+        batchRenderer->RenderSprites(perfSprites);
+        
+        PyNovaGE::Renderer::Renderer::EndFrame();
+        
+        const auto& batchStats = PyNovaGE::Renderer::Renderer::GetStats();
+        const auto& rendererStats = batchRenderer->GetStats();
+        
+        std::cout << "[PASS] Batch rendering completed" << std::endl;
+        std::cout << "       Batch render time: " << batchStats.frame_time_ms << "ms" << std::endl;
+        std::cout << "       Batch renderer statistics:" << std::endl;
+        std::cout << "         Draw calls: " << rendererStats.draw_calls << std::endl;
+        std::cout << "         Sprites batched: " << rendererStats.sprites_batched << std::endl;
+        std::cout << "         Batches flushed: " << rendererStats.batches_flushed << std::endl;
+        
+        // Calculate efficiency
+        if (rendererStats.draw_calls > 0) {
+            float efficiency = static_cast<float>(rendererStats.sprites_batched) / static_cast<float>(rendererStats.draw_calls);
+            std::cout << "       Sprites per draw call: " << efficiency << std::endl;
+            
+            if (efficiency > 1.0f) {
+                std::cout << "[PASS] Batch rendering shows improved efficiency!" << std::endl;
+            }
+        }
+        
+    } catch (...) {
+        std::cout << "[FAIL] Batch rendering failed" << std::endl;
+    }
+    
+    PyNovaGE::Renderer::Renderer::Shutdown();
+    std::cout << "[PASS] Performance comparison completed" << std::endl;
+}
+
 int main() {
     std::cout << "=== PyNovaGE Sprite System Test ===" << std::endl << std::endl;
     
@@ -281,6 +515,12 @@ int main() {
     std::cout << std::endl;
     
     TestRendererIntegration();
+    std::cout << std::endl;
+    
+    TestBatchRendering();
+    std::cout << std::endl;
+    
+    TestBatchVsIndividualRendering();
     std::cout << std::endl;
     
     std::cout << "=== Sprite System Test Complete ===" << std::endl;

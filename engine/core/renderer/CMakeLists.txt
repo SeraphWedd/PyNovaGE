@@ -61,6 +61,7 @@ if(BUILD_TESTS)
         tests/test_shader.cpp
         tests/test_texture.cpp
         tests/test_sprite_renderer.cpp
+        tests/test_batch_renderer.cpp
     )
 
     target_link_libraries(renderer_tests PRIVATE

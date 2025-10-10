@@ -77,8 +77,11 @@ bool Renderer::Initialize(const RendererConfig& config) {
             return false;
         }
         
-        // Note: BatchRenderer initialization commented out for now
-        // s_batch_renderer_ = std::make_unique<BatchRenderer>(s_config_.max_sprites_per_batch, s_config_.max_textures_per_batch);
+        s_batch_renderer_ = std::make_unique<BatchRenderer>(s_config_.max_sprites_per_batch, s_config_.max_textures_per_batch);
+        if (!s_batch_renderer_->Initialize()) {
+            std::cerr << "Failed to initialize BatchRenderer!" << std::endl;
+            return false;
+        }
     } catch (const std::exception& e) {
         std::cerr << "Failed to initialize renderer subsystems: " << e.what() << std::endl;
         return false;
