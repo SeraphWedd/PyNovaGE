@@ -40,7 +40,23 @@ public:
 
     // Check if point is inside AABB
     bool contains(const Vector<T, 3>& point) const {
-        #if defined(NOVA_SSE2_AVAILABLE)
+        #if defined(NOVA_AVX2_AVAILABLE)
+        if constexpr (std::is_same_v<T, float>) {
+            // Use AVX2 for optimized point containment - still process as 3D with Z=0 for 2D physics
+            __m256 p_wide = _mm256_set_ps(0, 0, 0, 0, 0, point[2], point[1], point[0]);
+            __m256 mn_wide = _mm256_set_ps(0, 0, 0, 0, 0, min[2], min[1], min[0]);
+            __m256 mx_wide = _mm256_set_ps(0, 0, 0, 0, 0, max[2], max[1], max[0]);
+            
+            __m256 greater = _mm256_cmp_ps(p_wide, mn_wide, _CMP_GE_OQ);
+            __m256 lesser = _mm256_cmp_ps(p_wide, mx_wide, _CMP_LE_OQ);
+            __m256 result = _mm256_and_ps(greater, lesser);
+            
+            // Get bitmask for all 8 lanes, but only check the lower 3 bits (x, y, z)
+            // The physics system uses this for 2D (Z always 0) so effectively checks x, y
+            int mask = _mm256_movemask_ps(result);
+            return (mask & 0x07) == 0x07;
+        }
+        #elif defined(NOVA_SSE2_AVAILABLE)
         if constexpr (std::is_same_v<T, float>) {
             // Use SSE2 for 3D point containment (x, y, z components)
             __m128 p = _mm_set_ps(0, point[2], point[1], point[0]);
@@ -77,7 +93,25 @@ public:
 
     // Check if this AABB intersects with another
     bool intersects(const AABB& other) const {
-        #if defined(NOVA_SSE2_AVAILABLE)
+        #if defined(NOVA_AVX2_AVAILABLE)
+        if constexpr (std::is_same_v<T, float>) {
+            // Use AVX2 for optimized AABB intersection - process as 3D with Z=0 for 2D physics
+            __m256 this_min_wide = _mm256_set_ps(0, 0, 0, 0, 0, min[2], min[1], min[0]);
+            __m256 this_max_wide = _mm256_set_ps(0, 0, 0, 0, 0, max[2], max[1], max[0]);
+            __m256 other_min_wide = _mm256_set_ps(0, 0, 0, 0, 0, other.min[2], other.min[1], other.min[0]);
+            __m256 other_max_wide = _mm256_set_ps(0, 0, 0, 0, 0, other.max[2], other.max[1], other.max[0]);
+            
+            // For intersection: this.max >= other.min && this.min <= other.max
+            __m256 left = _mm256_cmp_ps(this_max_wide, other_min_wide, _CMP_GE_OQ);
+            __m256 right = _mm256_cmp_ps(this_min_wide, other_max_wide, _CMP_LE_OQ);
+            __m256 result = _mm256_and_ps(left, right);
+            
+            // Get bitmask for all 8 lanes, but only check the lower 3 bits (x, y, z)
+            // The physics system uses this for 2D (Z always 0) so effectively checks x, y
+            int mask = _mm256_movemask_ps(result);
+            return (mask & 0x07) == 0x07;
+        }
+        #elif defined(NOVA_SSE2_AVAILABLE)
         if constexpr (std::is_same_v<T, float>) {
             // Use SSE2 for 3D AABB intersection (x, y, z components)
             __m128 this_min = _mm_set_ps(0, min[2], min[1], min[0]);
