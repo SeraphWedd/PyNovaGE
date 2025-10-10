@@ -206,6 +206,9 @@ public:
     bool SupportsMouse() const override { return false; }
     bool SupportsGamepad() const override { return true; }
     std::string GetPlatformName() const override { return "Android"; }
+    
+    // Android-specific method for setting up input queue
+    void SetInputQueue(void* input_queue);
 
 private:
     class AndroidInputImpl;
