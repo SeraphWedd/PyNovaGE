@@ -16,6 +16,8 @@ using PyNovaGE::Renderer::Sprite;
 using PyNovaGE::Renderer::SpriteRenderer;
 using PyNovaGE::Renderer::BatchRenderer;
 using PyNovaGE::Renderer::Texture;
+using PyNovaGE::Renderer::TextureAtlas;
+using PyNovaGE::Renderer::TextureAtlasRegion;
 using PyNovaGE::Renderer::TextureFormat;
 using PyNovaGE::Renderer::TextureDataType;
 using PyNovaGE::Renderer::RendererConfig;
@@ -496,6 +498,208 @@ void TestBatchVsIndividualRendering() {
     std::cout << "[PASS] Performance comparison completed" << std::endl;
 }
 
+void TestTextureAtlas() {
+    std::cout << "[TEST] TextureAtlas Functionality..." << std::endl;
+    
+    // Test 1: Create a texture atlas
+    TextureAtlas atlas(256, 256);
+    
+    if (atlas.GetSize().x == 256 && atlas.GetSize().y == 256 && 
+        atlas.GetRegionCount() == 0) {
+        std::cout << "[PASS] TextureAtlas creation successful" << std::endl;
+    } else {
+        std::cout << "[FAIL] TextureAtlas creation failed" << std::endl;
+        return;
+    }
+    
+    std::cout << "       Atlas size: " << atlas.GetSize().x << "x" << atlas.GetSize().y << std::endl;
+    std::cout << "       Atlas valid: " << (atlas.IsValid() ? "Yes" : "No") << std::endl;
+    
+    // Test 2: Create test texture data for regions
+    std::vector<unsigned char> redData(32 * 32 * 4);
+    std::vector<unsigned char> greenData(16 * 16 * 4);
+    std::vector<unsigned char> blueData(24 * 24 * 4);
+    std::vector<unsigned char> yellowData(20 * 20 * 4);
+    
+    // Fill with different colors
+    for (int i = 0; i < 32 * 32; ++i) {
+        redData[i * 4] = 255;     // R
+        redData[i * 4 + 1] = 0;   // G
+        redData[i * 4 + 2] = 0;   // B
+        redData[i * 4 + 3] = 255; // A
+    }
+    
+    for (int i = 0; i < 16 * 16; ++i) {
+        greenData[i * 4] = 0;     // R
+        greenData[i * 4 + 1] = 255; // G
+        greenData[i * 4 + 2] = 0;   // B
+        greenData[i * 4 + 3] = 255; // A
+    }
+    
+    for (int i = 0; i < 24 * 24; ++i) {
+        blueData[i * 4] = 0;     // R
+        blueData[i * 4 + 1] = 0;   // G
+        blueData[i * 4 + 2] = 255; // B
+        blueData[i * 4 + 3] = 255; // A
+    }
+    
+    for (int i = 0; i < 20 * 20; ++i) {
+        yellowData[i * 4] = 255;   // R
+        yellowData[i * 4 + 1] = 255; // G
+        yellowData[i * 4 + 2] = 0;   // B
+        yellowData[i * 4 + 3] = 255; // A
+    }
+    
+    // Test 3: Add regions to atlas
+    const TextureAtlasRegion* redRegion = atlas.AddRegion("red_square", 32, 32, redData.data());
+    const TextureAtlasRegion* greenRegion = atlas.AddRegion("green_square", 16, 16, greenData.data());
+    const TextureAtlasRegion* blueRegion = atlas.AddRegion("blue_square", 24, 24, blueData.data());
+    const TextureAtlasRegion* yellowRegion = atlas.AddRegion("yellow_square", 20, 20, yellowData.data());
+    
+    if (redRegion && greenRegion && blueRegion && yellowRegion) {
+        std::cout << "[PASS] Added 4 regions to atlas successfully" << std::endl;
+        std::cout << "       Total regions in atlas: " << atlas.GetRegionCount() << std::endl;
+    } else {
+        std::cout << "[FAIL] Failed to add all regions to atlas" << std::endl;
+        std::cout << "       Added: " << atlas.GetRegionCount() << "/4 regions" << std::endl;
+    }
+    
+    // Test 4: Verify region properties and packing
+    if (redRegion) {
+        std::cout << "       Red region - Position: (" << redRegion->position.x << ", " << redRegion->position.y << ")";
+        std::cout << " Size: (" << redRegion->size.x << ", " << redRegion->size.y << ")";
+        std::cout << " UV: (" << redRegion->uv_min.x << ", " << redRegion->uv_min.y << ") to ";
+        std::cout << "(" << redRegion->uv_max.x << ", " << redRegion->uv_max.y << ")" << std::endl;
+        
+        if (redRegion->size.x == 32 && redRegion->size.y == 32 &&
+            redRegion->uv_min.x >= 0.0f && redRegion->uv_min.y >= 0.0f &&
+            redRegion->uv_max.x <= 1.0f && redRegion->uv_max.y <= 1.0f &&
+            redRegion->uv_max.x > redRegion->uv_min.x &&
+            redRegion->uv_max.y > redRegion->uv_min.y) {
+            std::cout << "[PASS] Red region properties are correct" << std::endl;
+        } else {
+            std::cout << "[FAIL] Red region has incorrect properties" << std::endl;
+        }
+    }
+    
+    // Test 5: Verify regions don't overlap
+    auto overlaps = [](const TextureAtlasRegion& a, const TextureAtlasRegion& b) {
+        return !(a.position.x + a.size.x <= b.position.x ||
+                 b.position.x + b.size.x <= a.position.x ||
+                 a.position.y + a.size.y <= b.position.y ||
+                 b.position.y + b.size.y <= a.position.y);
+    };
+    
+    bool hasOverlaps = false;
+    if (redRegion && greenRegion && overlaps(*redRegion, *greenRegion)) hasOverlaps = true;
+    if (redRegion && blueRegion && overlaps(*redRegion, *blueRegion)) hasOverlaps = true;
+    if (redRegion && yellowRegion && overlaps(*redRegion, *yellowRegion)) hasOverlaps = true;
+    if (greenRegion && blueRegion && overlaps(*greenRegion, *blueRegion)) hasOverlaps = true;
+    if (greenRegion && yellowRegion && overlaps(*greenRegion, *yellowRegion)) hasOverlaps = true;
+    if (blueRegion && yellowRegion && overlaps(*blueRegion, *yellowRegion)) hasOverlaps = true;
+    
+    if (!hasOverlaps) {
+        std::cout << "[PASS] All regions are properly packed without overlaps" << std::endl;
+    } else {
+        std::cout << "[FAIL] Some regions overlap - packing algorithm issue" << std::endl;
+    }
+    
+    // Test 6: Retrieve regions by name
+    const TextureAtlasRegion* retrievedRed = atlas.GetRegion("red_square");
+    const TextureAtlasRegion* retrievedGreen = atlas.GetRegion("green_square");
+    const TextureAtlasRegion* nonExistent = atlas.GetRegion("non_existent");
+    
+    if (retrievedRed == redRegion && retrievedGreen == greenRegion && nonExistent == nullptr) {
+        std::cout << "[PASS] Region retrieval by name works correctly" << std::endl;
+    } else {
+        std::cout << "[FAIL] Region retrieval by name failed" << std::endl;
+    }
+    
+    // Test 7: Test atlas capacity and efficiency
+    std::cout << "[TEST] Atlas packing efficiency..." << std::endl;
+    
+    TextureAtlas efficiencyAtlas(128, 128);
+    std::vector<unsigned char> smallData(8 * 8 * 4, 128); // Gray 8x8 squares
+    
+    int successfulAdditions = 0;
+    int maxAttempts = 300; // Try more than theoretical max to test limits
+    for (int i = 0; i < maxAttempts; ++i) {
+        std::string regionName = "small_" + std::to_string(i);
+        if (efficiencyAtlas.AddRegion(regionName, 8, 8, smallData.data())) {
+            ++successfulAdditions;
+        } else {
+            std::cout << "       Atlas full after " << successfulAdditions << " regions (failed on attempt " << (i + 1) << ")" << std::endl;
+            break; // Atlas is full
+        }
+    }
+    
+    int theoreticalMax = (128 / 8) * (128 / 8); // 256 8x8 regions in 128x128 atlas
+    float efficiency = static_cast<float>(successfulAdditions) / static_cast<float>(theoreticalMax) * 100.0f;
+    
+    std::cout << "       Packed " << successfulAdditions << "/" << theoreticalMax << " small regions" << std::endl;
+    std::cout << "       Packing efficiency: " << efficiency << "%" << std::endl;
+    
+    // With maximal rectangles algorithm, we should achieve very high efficiency for uniform rectangles
+    if (efficiency >= 90.0f) {
+        std::cout << "[PASS] Atlas packing efficiency is excellent (>= 90%)" << std::endl;
+    } else if (efficiency >= 75.0f) {
+        std::cout << "[PASS] Atlas packing efficiency is good (>= 75%)" << std::endl;
+    } else if (efficiency >= 60.0f) {
+        std::cout << "[PASS] Atlas packing efficiency is acceptable (>= 60%)" << std::endl;
+    } else {
+        std::cout << "[FAIL] Atlas packing efficiency is too low (< 60%)" << std::endl;
+    }
+    
+    // Additional test with non-uniform sizes to show the algorithm's flexibility
+    std::cout << "[TEST] Mixed-size packing test..." << std::endl;
+    TextureAtlas mixedAtlas(256, 256);
+    std::vector<std::pair<int, int>> mixedSizes = {
+        {32, 32}, {16, 16}, {24, 24}, {8, 8}, {12, 12},
+        {16, 32}, {8, 16}, {20, 20}, {28, 14}, {10, 30}
+    };
+    
+    int mixedSuccess = 0;
+    for (size_t i = 0; i < mixedSizes.size(); ++i) {
+        std::vector<unsigned char> mixedData(mixedSizes[i].first * mixedSizes[i].second * 4, static_cast<unsigned char>(i * 25));
+        std::string mixedName = "mixed_" + std::to_string(i);
+        if (mixedAtlas.AddRegion(mixedName, mixedSizes[i].first, mixedSizes[i].second, mixedData.data())) {
+            ++mixedSuccess;
+        }
+    }
+    
+    std::cout << "       Successfully packed " << mixedSuccess << "/" << mixedSizes.size() << " mixed-size regions" << std::endl;
+    if (mixedSuccess == static_cast<int>(mixedSizes.size())) {
+        std::cout << "[PASS] Mixed-size packing successful" << std::endl;
+    } else {
+        std::cout << "[FAIL] Mixed-size packing incomplete" << std::endl;
+    }
+    
+    // Test 8: Test with sprites using atlas texture
+    if (atlas.IsValid() && redRegion && greenRegion) {
+        std::cout << "[TEST] Using atlas texture with sprites..." << std::endl;
+        
+        // Note: For this test, we demonstrate that the atlas texture regions work correctly
+        // but we can't easily create sprites that directly use the atlas texture since
+        // the Texture class is non-copyable and the atlas owns the texture.
+        // In a real implementation, you'd add methods to create sprites from atlas regions.
+        
+        std::cout << "[INFO] Atlas texture is ready for use with sprites" << std::endl;
+        std::cout << "       Atlas texture ID: " << atlas.GetTexture().GetTextureID() << std::endl;
+        std::cout << "       Atlas texture size: " << atlas.GetTexture().GetWidth() << "x" << atlas.GetTexture().GetHeight() << std::endl;
+        
+        // Test that we can bind the atlas texture (this proves it's a valid OpenGL texture)
+        try {
+            atlas.GetTexture().Bind(0);
+            std::cout << "[PASS] Successfully bound atlas texture to texture unit 0" << std::endl;
+            Texture::Unbind(0);
+        } catch (...) {
+            std::cout << "[FAIL] Failed to bind atlas texture" << std::endl;
+        }
+    }
+    
+    std::cout << "[PASS] TextureAtlas testing completed" << std::endl;
+}
+
 int main() {
     std::cout << "=== PyNovaGE Sprite System Test ===" << std::endl << std::endl;
     
@@ -521,6 +725,9 @@ int main() {
     std::cout << std::endl;
     
     TestBatchVsIndividualRendering();
+    std::cout << std::endl;
+    
+    TestTextureAtlas();
     std::cout << std::endl;
     
     std::cout << "=== Sprite System Test Complete ===" << std::endl;

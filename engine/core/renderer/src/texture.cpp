@@ -2,6 +2,9 @@
 #include <glad/gl.h>
 #include <iostream>
 #include <cstring>
+#include <climits>
+#include <algorithm>
+#include <vector>
 
 // For image loading - we'll implement a simple approach for now
 // In a full implementation, you'd use stb_image or similar
@@ -279,12 +282,8 @@ void Texture::ApplyConfig() {
 
 // TextureAtlas implementation
 TextureAtlas::TextureAtlas(int width, int height) : width_(width), height_(height) {
-    // Create root node for binary tree packing
-    root_ = std::make_unique<AtlasNode>();
-    root_->x = 0;
-    root_->y = 0;
-    root_->width = width;
-    root_->height = height;
+    // Initialize with one large free rectangle covering entire atlas
+    free_rectangles_.emplace_back(0, 0, width, height);
     
     // Only create OpenGL texture if we have a valid context
     // For unit tests, we can skip this part
@@ -304,7 +303,7 @@ TextureAtlas::~TextureAtlas() {
     std::cout << "TextureAtlas destroyed" << std::endl;
 }
 
-TextureAtlas::TextureAtlas(TextureAtlas&& other) noexcept : texture_(std::move(other.texture_)), width_(other.width_), height_(other.height_), root_(std::move(other.root_)), regions_(std::move(other.regions_)) {
+TextureAtlas::TextureAtlas(TextureAtlas&& other) noexcept : texture_(std::move(other.texture_)), width_(other.width_), height_(other.height_), free_rectangles_(std::move(other.free_rectangles_)), regions_(std::move(other.regions_)) {
     std::cout << "TextureAtlas moved" << std::endl;
 }
 
@@ -313,7 +312,7 @@ TextureAtlas& TextureAtlas::operator=(TextureAtlas&& other) noexcept {
         texture_ = std::move(other.texture_);
         width_ = other.width_;
         height_ = other.height_;
-        root_ = std::move(other.root_);
+        free_rectangles_ = std::move(other.free_rectangles_);
         regions_ = std::move(other.regions_);
     }
     return *this;
@@ -330,35 +329,32 @@ const TextureAtlasRegion* TextureAtlas::AddRegion(const std::string& name, int w
         return nullptr;
     }
     
-    // Find space in atlas
-    AtlasNode* node = FindNode(root_.get(), width, height);
-    if (!node) {
+    // Find best position using maximal rectangles algorithm
+    int best_x, best_y;
+    if (!FindBestPosition(width, height, best_x, best_y)) {
         std::cerr << "No space available in atlas for region '" << name << "' (" << width << "x" << height << ")" << std::endl;
         return nullptr;
     }
     
-    // Split the node
-    node = SplitNode(node, width, height);
-    if (!node) {
-        return nullptr;
-    }
+    // Place the rectangle and update free space
+    PlaceRectangle(best_x, best_y, width, height);
     
     // Update atlas texture with region data (only if texture is valid)
     if (texture_.IsValid()) {
-        texture_.UpdateData(node->x, node->y, width, height, TextureFormat::RGBA, TextureDataType::UnsignedByte, data);
+        texture_.UpdateData(best_x, best_y, width, height, TextureFormat::RGBA, TextureDataType::UnsignedByte, data);
     }
     
     // Create region info
     TextureAtlasRegion region;
-    region.position = {node->x, node->y};
+    region.position = {best_x, best_y};
     region.size = {width, height};
     region.name = name;
     
     // Calculate UV coordinates
     float inv_width = 1.0f / static_cast<float>(width_);
     float inv_height = 1.0f / static_cast<float>(height_);
-    region.uv_min = {static_cast<float>(node->x) * inv_width, static_cast<float>(node->y) * inv_height};
-    region.uv_max = {static_cast<float>(node->x + width) * inv_width, static_cast<float>(node->y + height) * inv_height};
+    region.uv_min = {static_cast<float>(best_x) * inv_width, static_cast<float>(best_y) * inv_height};
+    region.uv_max = {static_cast<float>(best_x + width) * inv_width, static_cast<float>(best_y + height) * inv_height};
     
     // Store region
     auto [iter, success] = regions_.emplace(name, region);
@@ -370,77 +366,105 @@ const TextureAtlasRegion* TextureAtlas::GetRegion(const std::string& name) const
     return (iter != regions_.end()) ? &iter->second : nullptr;
 }
 
-TextureAtlas::AtlasNode* TextureAtlas::FindNode(AtlasNode* node, int width, int height) {
-    if (!node) {
-        return nullptr;
-    }
+bool TextureAtlas::FindBestPosition(int width, int height, int& best_x, int& best_y) {
+    int best_short_side_fit = INT_MAX;
+    int best_long_side_fit = INT_MAX;
+    best_x = -1;
+    best_y = -1;
     
-    // If node is used, recurse into children
-    if (node->used) {
-        AtlasNode* found_node = FindNode(node->left.get(), width, height);
-        if (found_node) {
-            return found_node;
+    for (const auto& rect : free_rectangles_) {
+        if (!rect.CanFit(width, height)) {
+            continue;
         }
-        return FindNode(node->right.get(), width, height);
+        
+        // Calculate fit quality
+        int leftover_horizontal = rect.width - width;
+        int leftover_vertical = rect.height - height;
+        int short_side_fit = std::min(leftover_horizontal, leftover_vertical);
+        int long_side_fit = std::max(leftover_horizontal, leftover_vertical);
+        
+        // Best fit is the one with least short side waste, then least long side waste
+        if (short_side_fit < best_short_side_fit || 
+            (short_side_fit == best_short_side_fit && long_side_fit < best_long_side_fit)) {
+            best_x = rect.x;
+            best_y = rect.y;
+            best_short_side_fit = short_side_fit;
+            best_long_side_fit = long_side_fit;
+        }
     }
     
-    // Check if this node can fit the region
-    if (width > node->width || height > node->height) {
-        return nullptr; // Too big
-    }
-    
-    // Perfect fit
-    if (width == node->width && height == node->height) {
-        return node;
-    }
-    
-    // Node is larger than needed, so it can be split
-    return node;
+    return best_x != -1;
 }
 
-TextureAtlas::AtlasNode* TextureAtlas::SplitNode(AtlasNode* node, int width, int height) {
-    if (!node) {
-        return nullptr;
+void TextureAtlas::PlaceRectangle(int x, int y, int width, int height) {
+    // Split free rectangles that intersect with the placed rectangle
+    SplitFreeRectangles(x, y, width, height);
+    
+    // Remove redundant free rectangles
+    PruneFreeRectangles();
+}
+
+void TextureAtlas::SplitFreeRectangles(int placed_x, int placed_y, int placed_width, int placed_height) {
+    std::vector<FreeRectangle> new_rectangles;
+    
+    for (const auto& rect : free_rectangles_) {
+        // Skip rectangles that don't intersect with the placed rectangle
+        if (rect.x >= placed_x + placed_width || rect.x + rect.width <= placed_x ||
+            rect.y >= placed_y + placed_height || rect.y + rect.height <= placed_y) {
+            new_rectangles.push_back(rect);
+            continue;
+        }
+        
+        // Split the intersecting rectangle
+        // Left side
+        if (rect.x < placed_x) {
+            new_rectangles.emplace_back(rect.x, rect.y, placed_x - rect.x, rect.height);
+        }
+        
+        // Right side
+        if (rect.x + rect.width > placed_x + placed_width) {
+            new_rectangles.emplace_back(placed_x + placed_width, rect.y, 
+                                       (rect.x + rect.width) - (placed_x + placed_width), rect.height);
+        }
+        
+        // Bottom side
+        if (rect.y < placed_y) {
+            new_rectangles.emplace_back(rect.x, rect.y, rect.width, placed_y - rect.y);
+        }
+        
+        // Top side
+        if (rect.y + rect.height > placed_y + placed_height) {
+            new_rectangles.emplace_back(rect.x, placed_y + placed_height, rect.width,
+                                       (rect.y + rect.height) - (placed_y + placed_height));
+        }
     }
     
-    // Mark node as used
-    node->used = true;
-    
-    // Calculate remaining space
-    int dw = node->width - width;
-    int dh = node->height - height;
-    
-    // Create child nodes
-    node->left = std::make_unique<AtlasNode>();
-    node->right = std::make_unique<AtlasNode>();
-    
-    // Split based on which dimension has more remaining space
-    if (dw > dh) {
-        // Split horizontally
-        node->left->x = node->x + width;
-        node->left->y = node->y;
-        node->left->width = dw;
-        node->left->height = height;
-        
-        node->right->x = node->x;
-        node->right->y = node->y + height;
-        node->right->width = node->width;
-        node->right->height = dh;
-    } else {
-        // Split vertically
-        node->left->x = node->x;
-        node->left->y = node->y + height;
-        node->left->width = width;
-        node->left->height = dh;
-        
-        node->right->x = node->x + width;
-        node->right->y = node->y;
-        node->right->width = dw;
-        node->right->height = node->height;
+    free_rectangles_ = std::move(new_rectangles);
+}
+
+void TextureAtlas::PruneFreeRectangles() {
+    // Remove rectangles that are contained within other rectangles
+    for (size_t i = 0; i < free_rectangles_.size(); ++i) {
+        for (size_t j = i + 1; j < free_rectangles_.size();) {
+            if (IsContainedIn(free_rectangles_[i], free_rectangles_[j])) {
+                // Rectangle i is contained in j, remove i
+                free_rectangles_.erase(free_rectangles_.begin() + i);
+                --i;
+                break;
+            } else if (IsContainedIn(free_rectangles_[j], free_rectangles_[i])) {
+                // Rectangle j is contained in i, remove j
+                free_rectangles_.erase(free_rectangles_.begin() + j);
+            } else {
+                ++j;
+            }
+        }
     }
-    
-    // Return current node (now represents the used space)
-    return node;
+}
+
+bool TextureAtlas::IsContainedIn(const FreeRectangle& a, const FreeRectangle& b) const {
+    return a.x >= b.x && a.y >= b.y && 
+           a.x + a.width <= b.x + b.width && 
+           a.y + a.height <= b.y + b.height;
 }
 
 // TextureManager implementation

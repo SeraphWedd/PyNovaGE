@@ -337,35 +337,71 @@ public:
     size_t GetRegionCount() const { return regions_.size(); }
 
 private:
-    struct AtlasNode {
+    struct Shelf {
+        int y;          // Y position of shelf
+        int height;     // Height of shelf (tallest item on shelf)
+        int width_used; // How much width is used on this shelf
+        
+        Shelf(int y_pos, int shelf_height) : y(y_pos), height(shelf_height), width_used(0) {}
+    };
+    
+    struct FreeRectangle {
         int x, y, width, height;
-        bool used = false;
-        std::unique_ptr<AtlasNode> left;
-        std::unique_ptr<AtlasNode> right;
+        
+        FreeRectangle(int x_, int y_, int w_, int h_) : x(x_), y(y_), width(w_), height(h_) {}
+        
+        bool CanFit(int w, int h) const {
+            return width >= w && height >= h;
+        }
+        
+        // Calculate waste when fitting rectangle of given size
+        int GetWaste(int w, int h) const {
+            return (width * height) - (w * h);
+        }
     };
     
     /**
-     * @brief Find space for a region
-     * @param node Current node
+     * @brief Find best position using Best Fit algorithm
      * @param width Required width
      * @param height Required height
-     * @return Node that fits or nullptr
+     * @param best_x Output: best x position
+     * @param best_y Output: best y position
+     * @return true if position found, false if no space
      */
-    AtlasNode* FindNode(AtlasNode* node, int width, int height);
+    bool FindBestPosition(int width, int height, int& best_x, int& best_y);
     
     /**
-     * @brief Split a node to fit a region
-     * @param node Node to split
-     * @param width Required width
-     * @param height Required height
-     * @return Split node or nullptr
+     * @brief Place rectangle and update free rectangles
+     * @param x X position
+     * @param y Y position
+     * @param width Rectangle width
+     * @param height Rectangle height
      */
-    AtlasNode* SplitNode(AtlasNode* node, int width, int height);
+    void PlaceRectangle(int x, int y, int width, int height);
+    
+    /**
+     * @brief Split free rectangles that intersect with placed rectangle
+     * @param placed_x X position of placed rectangle
+     * @param placed_y Y position of placed rectangle
+     * @param placed_width Width of placed rectangle
+     * @param placed_height Height of placed rectangle
+     */
+    void SplitFreeRectangles(int placed_x, int placed_y, int placed_width, int placed_height);
+    
+    /**
+     * @brief Remove redundant free rectangles that are contained within others
+     */
+    void PruneFreeRectangles();
+    
+    /**
+     * @brief Check if rectangle A is inside rectangle B
+     */
+    bool IsContainedIn(const FreeRectangle& a, const FreeRectangle& b) const;
     
     Texture texture_;
     int width_;
     int height_;
-    std::unique_ptr<AtlasNode> root_;
+    std::vector<FreeRectangle> free_rectangles_;
     std::unordered_map<std::string, TextureAtlasRegion> regions_;
 };
 
