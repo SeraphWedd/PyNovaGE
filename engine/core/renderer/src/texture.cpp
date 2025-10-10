@@ -277,9 +277,27 @@ void Texture::ApplyConfig() {
     glBindTexture(GL_TEXTURE_2D, 0);
 }
 
-// TextureAtlas implementation (placeholder)
+// TextureAtlas implementation
 TextureAtlas::TextureAtlas(int width, int height) : width_(width), height_(height) {
-    std::cout << "TextureAtlas created " << width << "x" << height << " (placeholder)" << std::endl;
+    // Create root node for binary tree packing
+    root_ = std::make_unique<AtlasNode>();
+    root_->x = 0;
+    root_->y = 0;
+    root_->width = width;
+    root_->height = height;
+    
+    // Only create OpenGL texture if we have a valid context
+    // For unit tests, we can skip this part
+    try {
+        unsigned char* empty_data = new unsigned char[width * height * 4];
+        std::memset(empty_data, 0, width * height * 4);
+        
+        texture_ = Texture::Create("atlas_" + std::to_string(width) + "x" + std::to_string(height), width, height, empty_data);
+        delete[] empty_data;
+    } catch (...) {
+        // If texture creation fails (no OpenGL context), continue without it
+        // The atlas can still function for testing the packing algorithm
+    }
 }
 
 TextureAtlas::~TextureAtlas() {
@@ -302,30 +320,127 @@ TextureAtlas& TextureAtlas::operator=(TextureAtlas&& other) noexcept {
 }
 
 const TextureAtlasRegion* TextureAtlas::AddRegion(const std::string& name, int width, int height, const unsigned char* data) {
-    (void)name;
-    (void)width;
-    (void)height;
-    (void)data;
-    return nullptr;
+    if (!data || width <= 0 || height <= 0) {
+        return nullptr;
+    }
+    
+    // Check if region already exists
+    if (regions_.find(name) != regions_.end()) {
+        std::cerr << "Region '" << name << "' already exists in atlas" << std::endl;
+        return nullptr;
+    }
+    
+    // Find space in atlas
+    AtlasNode* node = FindNode(root_.get(), width, height);
+    if (!node) {
+        std::cerr << "No space available in atlas for region '" << name << "' (" << width << "x" << height << ")" << std::endl;
+        return nullptr;
+    }
+    
+    // Split the node
+    node = SplitNode(node, width, height);
+    if (!node) {
+        return nullptr;
+    }
+    
+    // Update atlas texture with region data (only if texture is valid)
+    if (texture_.IsValid()) {
+        texture_.UpdateData(node->x, node->y, width, height, TextureFormat::RGBA, TextureDataType::UnsignedByte, data);
+    }
+    
+    // Create region info
+    TextureAtlasRegion region;
+    region.position = {node->x, node->y};
+    region.size = {width, height};
+    region.name = name;
+    
+    // Calculate UV coordinates
+    float inv_width = 1.0f / static_cast<float>(width_);
+    float inv_height = 1.0f / static_cast<float>(height_);
+    region.uv_min = {static_cast<float>(node->x) * inv_width, static_cast<float>(node->y) * inv_height};
+    region.uv_max = {static_cast<float>(node->x + width) * inv_width, static_cast<float>(node->y + height) * inv_height};
+    
+    // Store region
+    auto [iter, success] = regions_.emplace(name, region);
+    return success ? &iter->second : nullptr;
 }
 
 const TextureAtlasRegion* TextureAtlas::GetRegion(const std::string& name) const {
-    (void)name;
-    return nullptr;
+    auto iter = regions_.find(name);
+    return (iter != regions_.end()) ? &iter->second : nullptr;
 }
 
 TextureAtlas::AtlasNode* TextureAtlas::FindNode(AtlasNode* node, int width, int height) {
-    (void)node;
-    (void)width;
-    (void)height;
-    return nullptr;
+    if (!node) {
+        return nullptr;
+    }
+    
+    // If node is used, recurse into children
+    if (node->used) {
+        AtlasNode* found_node = FindNode(node->left.get(), width, height);
+        if (found_node) {
+            return found_node;
+        }
+        return FindNode(node->right.get(), width, height);
+    }
+    
+    // Check if this node can fit the region
+    if (width > node->width || height > node->height) {
+        return nullptr; // Too big
+    }
+    
+    // Perfect fit
+    if (width == node->width && height == node->height) {
+        return node;
+    }
+    
+    // Node is larger than needed, so it can be split
+    return node;
 }
 
 TextureAtlas::AtlasNode* TextureAtlas::SplitNode(AtlasNode* node, int width, int height) {
-    (void)node;
-    (void)width;
-    (void)height;
-    return nullptr;
+    if (!node) {
+        return nullptr;
+    }
+    
+    // Mark node as used
+    node->used = true;
+    
+    // Calculate remaining space
+    int dw = node->width - width;
+    int dh = node->height - height;
+    
+    // Create child nodes
+    node->left = std::make_unique<AtlasNode>();
+    node->right = std::make_unique<AtlasNode>();
+    
+    // Split based on which dimension has more remaining space
+    if (dw > dh) {
+        // Split horizontally
+        node->left->x = node->x + width;
+        node->left->y = node->y;
+        node->left->width = dw;
+        node->left->height = height;
+        
+        node->right->x = node->x;
+        node->right->y = node->y + height;
+        node->right->width = node->width;
+        node->right->height = dh;
+    } else {
+        // Split vertically
+        node->left->x = node->x;
+        node->left->y = node->y + height;
+        node->left->width = width;
+        node->left->height = dh;
+        
+        node->right->x = node->x + width;
+        node->right->y = node->y;
+        node->right->width = dw;
+        node->right->height = node->height;
+    }
+    
+    // Return current node (now represents the used space)
+    return node;
 }
 
 // TextureManager implementation

@@ -60,6 +60,7 @@ if(BUILD_TESTS)
         tests/test_renderer.cpp
         tests/test_shader.cpp
         tests/test_texture.cpp
+        tests/test_texture_atlas.cpp
         tests/test_sprite_renderer.cpp
         tests/test_batch_renderer.cpp
     )
