@@ -150,6 +150,22 @@ void PhysicsWorld::narrowPhaseCollision() {
             contact.body2 = bodyB.get();
             contact.manifold = manifold;
             
+            // Initialize contact constraint data
+            float totalInverseMass = bodyA->getInverseMass() + bodyB->getInverseMass();
+            contact.normal_mass = (totalInverseMass > 0.0f) ? 1.0f / totalInverseMass : 0.0f;
+            
+            // Calculate effective friction mass (simplified - no rotation for now)
+            contact.tangent_mass = contact.normal_mass;
+            
+            // Calculate bias for position correction (Baumgarte stabilization)
+            const float BIAS_FACTOR = 0.2f;
+            const float BIAS_THRESHOLD = 0.01f;
+            contact.bias = std::max(0.0f, BIAS_FACTOR * (manifold.penetration - BIAS_THRESHOLD) / FIXED_TIME_STEP);
+            
+            // Reset accumulated impulses (will be warmed started if contact persists)
+            contact.normal_impulse = 0.0f;
+            contact.tangent_impulse = 0.0f;
+            
             contacts_.push_back(contact);
         }
     }
@@ -340,28 +356,126 @@ void PhysicsWorld::performNarrowPhase() {
 }
 
 void PhysicsWorld::warmStartContacts() {
-    // Warm starting improves convergence but is optional for simple implementation
-    // For now, we'll keep it simple and not implement warm starting
-}
-
-void PhysicsWorld::solveVelocityConstraints() {
-    // Iterate through contacts and resolve them
+    // Apply cached impulses from previous frame for better stability
     for (auto& contact : contacts_) {
         if (!contact.isValid()) continue;
         
-        // Use the collision resolution from RigidBody
-        contact.body1->resolveCollision(
-            contact.manifold.normal,
-            contact.manifold.penetration,
-            contact.manifold.contactPoint,
-            *contact.body2
-        );
+        RigidBody* bodyA = contact.body1;
+        RigidBody* bodyB = contact.body2;
+        
+        // Apply normal impulse
+        Vector2<float> normalImpulse = contact.manifold.normal * contact.normal_impulse;
+        if (bodyA->isDynamic()) {
+            bodyA->setLinearVelocity(bodyA->getLinearVelocity() - normalImpulse * bodyA->getInverseMass());
+        }
+        if (bodyB->isDynamic()) {
+            bodyB->setLinearVelocity(bodyB->getLinearVelocity() + normalImpulse * bodyB->getInverseMass());
+        }
+        
+        // Apply tangent impulse (friction)
+        Vector2<float> tangent = Vector2<float>(-contact.manifold.normal.y, contact.manifold.normal.x);
+        Vector2<float> tangentImpulse = tangent * contact.tangent_impulse;
+        if (bodyA->isDynamic()) {
+            bodyA->setLinearVelocity(bodyA->getLinearVelocity() - tangentImpulse * bodyA->getInverseMass());
+        }
+        if (bodyB->isDynamic()) {
+            bodyB->setLinearVelocity(bodyB->getLinearVelocity() + tangentImpulse * bodyB->getInverseMass());
+        }
+    }
+}
+
+void PhysicsWorld::solveVelocityConstraints() {
+    // Iterative impulse-based constraint solving
+    for (auto& contact : contacts_) {
+        if (!contact.isValid()) continue;
+        
+        RigidBody* bodyA = contact.body1;
+        RigidBody* bodyB = contact.body2;
+        
+        // Calculate relative velocity
+        Vector2<float> relativeVelocity = bodyB->getLinearVelocity() - bodyA->getLinearVelocity();
+        float contactVelocity = relativeVelocity.dot(contact.manifold.normal);
+        
+        // Calculate desired velocity change
+        float restitution = std::min(bodyA->getMaterial().restitution, bodyB->getMaterial().restitution);
+        float desiredDeltaVelocity = -contactVelocity * (1.0f + restitution) + contact.bias;
+        
+        // Calculate impulse magnitude
+        float deltaImpulse = desiredDeltaVelocity * contact.normal_mass;
+        
+        // Clamp accumulated impulse (non-penetration constraint)
+        float oldNormalImpulse = contact.normal_impulse;
+        contact.normal_impulse = std::max(0.0f, contact.normal_impulse + deltaImpulse);
+        deltaImpulse = contact.normal_impulse - oldNormalImpulse;
+        
+        // Apply normal impulse
+        Vector2<float> impulse = contact.manifold.normal * deltaImpulse;
+        if (bodyA->isDynamic()) {
+            bodyA->setLinearVelocity(bodyA->getLinearVelocity() - impulse * bodyA->getInverseMass());
+            bodyA->setAwake(true);
+        }
+        if (bodyB->isDynamic()) {
+            bodyB->setLinearVelocity(bodyB->getLinearVelocity() + impulse * bodyB->getInverseMass());
+            bodyB->setAwake(true);
+        }
+        
+        // Friction constraint
+        Vector2<float> tangent = Vector2<float>(-contact.manifold.normal.y, contact.manifold.normal.x);
+        relativeVelocity = bodyB->getLinearVelocity() - bodyA->getLinearVelocity();
+        float tangentVelocity = relativeVelocity.dot(tangent);
+        
+        float friction = std::sqrt(bodyA->getMaterial().friction * bodyB->getMaterial().friction);
+        float maxFriction = friction * contact.normal_impulse;
+        
+        float tangentImpulseDelta = -tangentVelocity * contact.tangent_mass;
+        float oldTangentImpulse = contact.tangent_impulse;
+        contact.tangent_impulse = std::max(-maxFriction, std::min(maxFriction, contact.tangent_impulse + tangentImpulseDelta));
+        tangentImpulseDelta = contact.tangent_impulse - oldTangentImpulse;
+        
+        // Apply friction impulse
+        Vector2<float> frictionImpulse = tangent * tangentImpulseDelta;
+        if (bodyA->isDynamic()) {
+            bodyA->setLinearVelocity(bodyA->getLinearVelocity() - frictionImpulse * bodyA->getInverseMass());
+        }
+        if (bodyB->isDynamic()) {
+            bodyB->setLinearVelocity(bodyB->getLinearVelocity() + frictionImpulse * bodyB->getInverseMass());
+        }
     }
 }
 
 void PhysicsWorld::solvePositionConstraints() {
-    // Position correction is handled in resolveCollision
-    // Additional position-based corrections could go here
+    // Position-based constraint solving to prevent sinking
+    const float POSITION_CORRECTION_PERCENT = 0.4f;
+    const float POSITION_CORRECTION_THRESHOLD = 0.01f;
+    
+    for (auto& contact : contacts_) {
+        if (!contact.isValid()) continue;
+        
+        // Only correct if penetration is significant
+        if (contact.manifold.penetration <= POSITION_CORRECTION_THRESHOLD) {
+            continue;
+        }
+        
+        RigidBody* bodyA = contact.body1;
+        RigidBody* bodyB = contact.body2;
+        
+        // Calculate mass-weighted correction
+        float totalInverseMass = bodyA->getInverseMass() + bodyB->getInverseMass();
+        if (totalInverseMass <= 0.0f) continue; // Both bodies are static
+        
+        float correctionMagnitude = (contact.manifold.penetration * POSITION_CORRECTION_PERCENT) / totalInverseMass;
+        Vector2<float> correction = contact.manifold.normal * correctionMagnitude;
+        
+        // Apply position correction
+        if (bodyA->isDynamic()) {
+            Vector2<float> bodyACorrection = correction * (-bodyA->getInverseMass());
+            bodyA->setPosition(bodyA->getPosition() + bodyACorrection);
+        }
+        if (bodyB->isDynamic()) {
+            Vector2<float> bodyBCorrection = correction * bodyB->getInverseMass();
+            bodyB->setPosition(bodyB->getPosition() + bodyBCorrection);
+        }
+    }
 }
 
 bool PhysicsWorld::isValidPair(const RigidBody& body1, const RigidBody& body2) const {

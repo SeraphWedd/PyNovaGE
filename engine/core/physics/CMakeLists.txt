@@ -70,6 +70,7 @@ if(BUILD_TESTING)
     add_executable(physics_tests
         tests/test_collision_shapes.cpp
         tests/test_physics_complete.cpp
+        tests/test_physics_integration.cpp
     )
     
     target_link_libraries(physics_tests
