@@ -13,6 +13,7 @@ if(BUILD_EXAMPLES)
     add_subdirectory(shader_test)
     add_subdirectory(texture_test)
     add_subdirectory(sprite_test)
+    add_subdirectory(voxel_demo)
     
     message(STATUS "Examples configured successfully")
 else()
