@@ -27,7 +27,6 @@
 // GLFW for input handling
 #include <GLFW/glfw3.h>
 
-using namespace PyNovaGE::Core;
 using namespace PyNovaGE::Renderer::Voxel;
 
 /**
@@ -53,19 +52,22 @@ public:
     bool Initialize() {
         std::cout << "🎮 PyNovaGE Voxel Demo - Initializing..." << std::endl;
         
+        // Initialize window system
+        window_system_guard_ = std::make_unique<PyNovaGE::Window::WindowSystemGuard>();
+        if (!window_system_guard_->IsInitialized()) {
+            std::cerr << "❌ Failed to initialize window system!" << std::endl;
+            return false;
+        }
+        
         // Create window
-        Window::Config window_config;
+        PyNovaGE::Window::WindowConfig window_config;
         window_config.width = 1600;
         window_config.height = 900;
         window_config.title = "PyNovaGE Voxel Demo - High Performance 3D Voxel Engine";
         window_config.resizable = true;
         window_config.vsync = true;
         
-        window_ = std::make_unique<Window>(window_config);
-        if (!window_->Initialize()) {
-            std::cerr << "❌ Failed to initialize window!" << std::endl;
-            return false;
-        }
+        window_ = std::make_unique<PyNovaGE::Window::Window>(window_config);
         
         // Setup input callbacks
         SetupInputCallbacks();
@@ -83,7 +85,6 @@ public:
         render_config.max_render_distance = 200.0f;
         render_config.max_remesh_per_frame = 4;
         render_config.max_upload_per_frame = 2;
-        render_config.show_debug_info = true;
         
         renderer_.SetConfig(render_config);
         renderer_.SetWorld(&world_);
@@ -139,7 +140,7 @@ private:
                 // Add pillars at corners
                 if ((cx == 0 || cx == 7) && (cz == 0 || cz == 7)) {
                     for (int y = 3; y < 15; ++y) {
-                        world_.SetVoxel(Vector3f(cx * 16 + 8, y, cz * 16 + 8), VoxelType::WOOD);
+                        world_.SetVoxel(Vector3f(static_cast<float>(cx * 16 + 8), static_cast<float>(y), static_cast<float>(cz * 16 + 8)), VoxelType::WOOD);
                     }
                 }
                 
@@ -149,8 +150,8 @@ private:
                     for (int lx = 0; lx < 16; ++lx) {
                         for (int lz = 0; lz < 16; ++lz) {
                             if ((lx + lz) % 2 == 0) {
-                                world_.SetVoxel(Vector3f(cx * 16 + lx, 3, cz * 16 + lz), VoxelType::STONE);
-                                world_.SetVoxel(Vector3f(cx * 16 + lx, 4, cz * 16 + lz), VoxelType::DIRT);
+                                world_.SetVoxel(Vector3f(static_cast<float>(cx * 16 + lx), 3.0f, static_cast<float>(cz * 16 + lz)), VoxelType::STONE);
+                                world_.SetVoxel(Vector3f(static_cast<float>(cx * 16 + lx), 4.0f, static_cast<float>(cz * 16 + lz)), VoxelType::DIRT);
                             }
                         }
                     }
@@ -163,17 +164,17 @@ private:
     
     void SetupInputCallbacks() {
         // Set user pointer for callbacks
-        glfwSetWindowUserPointer(window_->GetGLFWWindow(), this);
+        glfwSetWindowUserPointer(window_->GetNativeWindow(), this);
         
         // Mouse callback for camera rotation
-        glfwSetCursorPosCallback(window_->GetGLFWWindow(), 
+        glfwSetCursorPosCallback(window_->GetNativeWindow(), 
             [](GLFWwindow* window, double xpos, double ypos) {
                 auto* demo = static_cast<VoxelDemo*>(glfwGetWindowUserPointer(window));
                 demo->OnMouseMove(xpos, ypos);
             });
         
         // Key callback for commands
-        glfwSetKeyCallback(window_->GetGLFWWindow(),
+        glfwSetKeyCallback(window_->GetNativeWindow(),
             [](GLFWwindow* window, int key, int scancode, int action, int mods) {
                 auto* demo = static_cast<VoxelDemo*>(glfwGetWindowUserPointer(window));
                 demo->OnKeyPress(key, scancode, action, mods);
@@ -187,8 +188,8 @@ private:
             first_mouse_ = false;
         }
         
-        float xoffset = xpos - last_mouse_x_;
-        float yoffset = last_mouse_y_ - ypos; // Reversed for Y
+        float xoffset = static_cast<float>(xpos - last_mouse_x_);
+        float yoffset = static_cast<float>(last_mouse_y_ - ypos); // Reversed for Y
         
         last_mouse_x_ = xpos;
         last_mouse_y_ = ypos;
@@ -198,7 +199,7 @@ private:
         }
     }
     
-    void OnKeyPress(int key, int scancode, int action, int mods) {
+    void OnKeyPress(int key, [[maybe_unused]] int scancode, int action, [[maybe_unused]] int mods) {
         if (action != GLFW_PRESS) return;
         
         switch (key) {
@@ -232,7 +233,7 @@ private:
     }
     
     void ProcessInput(float delta_time) {
-        GLFWwindow* window = window_->GetGLFWWindow();
+        GLFWwindow* window = window_->GetNativeWindow();
         
         // Camera movement
         if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS)
@@ -334,10 +335,10 @@ private:
         mouse_captured_ = !mouse_captured_;
         
         if (mouse_captured_) {
-            glfwSetInputMode(window_->GetGLFWWindow(), GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+            glfwSetInputMode(window_->GetNativeWindow(), GLFW_CURSOR, GLFW_CURSOR_DISABLED);
             std::cout << "🖱️  Mouse captured - move to look around" << std::endl;
         } else {
-            glfwSetInputMode(window_->GetGLFWWindow(), GLFW_CURSOR, GLFW_CURSOR_NORMAL);
+            glfwSetInputMode(window_->GetNativeWindow(), GLFW_CURSOR, GLFW_CURSOR_NORMAL);
             std::cout << "🖱️  Mouse released" << std::endl;
         }
     }
@@ -365,14 +366,13 @@ private:
     }
     
     void Cleanup() {
-        if (window_) {
-            window_->Shutdown();
-        }
+        // Resources will be cleaned up automatically by RAII
     }
 
 private:
     // Core systems
-    std::unique_ptr<Window> window_;
+    std::unique_ptr<PyNovaGE::Window::WindowSystemGuard> window_system_guard_;
+    std::unique_ptr<PyNovaGE::Window::Window> window_;
     Camera camera_;
     VoxelRenderer renderer_;
     SimpleVoxelWorld world_;
