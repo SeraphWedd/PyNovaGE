@@ -18,6 +18,10 @@ if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/renderer/CMakeLists.txt")
     add_subdirectory(renderer)
 endif()
 
+if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/scene/CMakeLists.txt")
+    add_subdirectory(scene)
+endif()
+
 # Create interface library for all core systems
 add_library(core INTERFACE)
 add_library(PyNovaGE::Core ALIAS core)
@@ -37,6 +41,10 @@ endif()
 
 if(TARGET renderer)
     target_link_libraries(core INTERFACE renderer)
+endif()
+
+if(TARGET scene)
+    target_link_libraries(core INTERFACE PyNovaGE::Scene)
 endif()
 
 # Export and install (temporarily commented due to window GLFW export issue)
