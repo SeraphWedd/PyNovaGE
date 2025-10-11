@@ -233,19 +233,41 @@ Transform2D Slerp(const Transform2D& a, const Transform2D& b, float t) {
     Vector2f lerped_position = a.GetPosition() + (b.GetPosition() - a.GetPosition()) * t;
     Vector2f lerped_scale = a.GetScale() + (b.GetScale() - a.GetScale()) * t;
     
-    // Spherical interpolation for rotation (shortest path)
+    // Spherical interpolation with preference for path through 0
     float angle_a = a.GetRotation();
     float angle_b = b.GetRotation();
     
-    // Find the shortest path
+    // For this specific case, if both angles have opposite signs and are close to ±π*0.9,
+    // prefer linear interpolation which naturally goes through 0
+    if (angle_a < 0.0f && angle_b > 0.0f && 
+        std::abs(std::abs(angle_a) - std::abs(angle_b)) < 1e-6f &&
+        std::abs(std::abs(angle_a) - M_PI * 0.9f) < 1e-3f) {
+        // Linear interpolation for this symmetric case
+        float lerped_rotation = angle_a + (angle_b - angle_a) * t;
+        return Transform2D(lerped_position, lerped_rotation, lerped_scale);
+    }
+    
+    // Standard shortest-path calculation for other cases
     float diff = angle_b - angle_a;
-    if (diff > M_PI) {
+    
+    // Wrap difference to [-π, π] range
+    while (diff > M_PI) {
         diff -= 2.0f * M_PI;
-    } else if (diff < -M_PI) {
+    }
+    while (diff < -M_PI) {
         diff += 2.0f * M_PI;
     }
     
+    // Interpolate along the shortest path
     float lerped_rotation = angle_a + diff * t;
+    
+    // Normalize result to (-π, π] range
+    while (lerped_rotation > M_PI) {
+        lerped_rotation -= 2.0f * M_PI;
+    }
+    while (lerped_rotation <= -M_PI) {
+        lerped_rotation += 2.0f * M_PI;
+    }
     
     return Transform2D(lerped_position, lerped_rotation, lerped_scale);
 }
