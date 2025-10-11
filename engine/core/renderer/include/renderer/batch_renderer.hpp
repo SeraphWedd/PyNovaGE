@@ -137,6 +137,44 @@ public:
      */
     void RenderSprites(const std::vector<Sprite>& sprites);
     
+    // --- 2D primitives convenience (batched) ---
+    /**
+     * @brief Add a filled rectangle in screen space (pixels)
+     * @param x Left in pixels
+     * @param y Bottom in pixels
+     * @param w Width in pixels
+     * @param h Height in pixels
+     * @param screenW Screen width in pixels
+     * @param screenH Screen height in pixels
+     * @param color RGBA color
+     */
+    void AddRectScreen(float x, float y, float w, float h, int screenW, int screenH, const Vector4f& color);
+    
+    /**
+     * @brief Add a line segment in screen space with thickness (pixels)
+     */
+    void AddLineScreen(float x0, float y0, float x1, float y1, float thickness, int screenW, int screenH, const Vector4f& color);
+
+    /**
+     * @brief Add a textured quad in screen space
+     */
+    void AddTexturedQuadScreen(float x, float y, float w, float h,
+                               int screenW, int screenH,
+                               std::shared_ptr<Texture> texture,
+                               const Vector4f& color = {1,1,1,1});
+
+    /**
+     * @brief Add a filled circle in screen space (pixels)
+     * @param x Center X coordinate in pixels
+     * @param y Center Y coordinate in pixels
+     * @param radius Radius in pixels
+     * @param screenW Screen width in pixels
+     * @param screenH Screen height in pixels
+     * @param color RGBA color
+     * @param segments Number of segments for tessellation (default: 32)
+     */
+    void AddCircleScreen(float x, float y, float radius, int screenW, int screenH, const Vector4f& color, int segments = 32);
+
     /**
      * @brief Get batch statistics
      */

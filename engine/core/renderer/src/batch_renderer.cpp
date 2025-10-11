@@ -419,5 +419,175 @@ void BatchRenderer::GenerateTransformedVertices(const Sprite& sprite, std::array
     }
 }
 
+// Helpers to add colored quads in NDC
+static void PushQuad(std::vector<BatchVertex>& vertices,
+                     std::vector<unsigned int>& indices,
+                     const std::array<Vector3f,4>& pos,
+                     const Vector4f& color,
+                     float texture_index = -1.0f) {
+    unsigned int base = static_cast<unsigned int>(vertices.size());
+    // Use dummy UVs
+    Vector2f uv0{0.0f, 0.0f}, uv1{1.0f, 0.0f}, uv2{1.0f, 1.0f}, uv3{0.0f, 1.0f};
+    vertices.emplace_back(pos[0], uv0, color, texture_index);
+    vertices.emplace_back(pos[1], uv1, color, texture_index);
+    vertices.emplace_back(pos[2], uv2, color, texture_index);
+    vertices.emplace_back(pos[3], uv3, color, texture_index);
+    indices.push_back(base + 0);
+    indices.push_back(base + 1);
+    indices.push_back(base + 2);
+    indices.push_back(base + 2);
+    indices.push_back(base + 3);
+    indices.push_back(base + 0);
+}
+
+static inline Vector3f ScreenToNDC(float x, float y, int screenW, int screenH) {
+    float nx = (x / static_cast<float>(screenW)) * 2.0f - 1.0f;
+    float ny = (y / static_cast<float>(screenH)) * 2.0f - 1.0f;
+    return {nx, ny, 0.0f};
+}
+
+void BatchRenderer::AddRectScreen(float x, float y, float w, float h, int screenW, int screenH, const Vector4f& color) {
+    if (!batch_started_) {
+        std::cerr << "Batch not started! Call BeginBatch() first." << std::endl;
+        return;
+    }
+    // Convert from bottom-left origin screen space to NDC quad
+    float x0 = x;
+    float y0 = y;
+    float x1 = x + w;
+    float y1 = y + h;
+    // Note: current NDC conversion expects y up; if your window origin differs, adjust accordingly
+    std::array<Vector3f,4> pos = {
+        ScreenToNDC(x0, y0, screenW, screenH), // bl
+        ScreenToNDC(x1, y0, screenW, screenH), // br
+        ScreenToNDC(x1, y1, screenW, screenH), // tr
+        ScreenToNDC(x0, y1, screenW, screenH)  // tl
+    };
+    PushQuad(vertices_, indices_, pos, color, -1.0f);
+}
+
+void BatchRenderer::AddLineScreen(float x0, float y0, float x1, float y1, float thickness, int screenW, int screenH, const Vector4f& color) {
+    if (!batch_started_) {
+        std::cerr << "Batch not started! Call BeginBatch() first." << std::endl;
+        return;
+    }
+    // Build a quad around the line segment
+    float dx = x1 - x0;
+    float dy = y1 - y0;
+    float len = std::max(1e-4f, std::sqrt(dx*dx + dy*dy));
+    float nx = -dy / len;
+    float ny = dx / len;
+    float hx = nx * (thickness * 0.5f);
+    float hy = ny * (thickness * 0.5f);
+
+    std::array<Vector3f,4> pos = {
+        ScreenToNDC(x0 - hx, y0 - hy, screenW, screenH),
+        ScreenToNDC(x0 + hx, y0 + hy, screenW, screenH),
+        ScreenToNDC(x1 + hx, y1 + hy, screenW, screenH),
+        ScreenToNDC(x1 - hx, y1 - hy, screenW, screenH)
+    };
+    PushQuad(vertices_, indices_, pos, color, -1.0f);
+}
+
+void BatchRenderer::AddTexturedQuadScreen(float x, float y, float w, float h,
+                               int screenW, int screenH,
+                               std::shared_ptr<Texture> texture,
+                               const Vector4f& color) {
+    if (!batch_started_) {
+        std::cerr << "Batch not started! Call BeginBatch() first." << std::endl;
+        return;
+    }
+    if (!texture) {
+        std::cerr << "AddTexturedQuadScreen requires a texture" << std::endl;
+        return;
+    }
+    // Positions
+    float x0 = x;
+    float y0 = y;
+    float x1 = x + w;
+    float y1 = y + h;
+    std::array<Vector3f,4> pos = {
+        ScreenToNDC(x0, y0, screenW, screenH),
+        ScreenToNDC(x1, y0, screenW, screenH),
+        ScreenToNDC(x1, y1, screenW, screenH),
+        ScreenToNDC(x0, y1, screenW, screenH)
+    };
+    // Texture slot
+    int tIndex = FindOrAddTexture(texture);
+    if (tIndex < 0) {
+        // Flush and retry
+        FlushBatch();
+        tIndex = FindOrAddTexture(texture);
+        if (tIndex < 0) {
+            std::cerr << "Failed to bind texture for AddTexturedQuadScreen" << std::endl;
+            return;
+        }
+    }
+    unsigned int base = static_cast<unsigned int>(vertices_.size());
+    // Default UVs
+    Vector2f uv0{0.0f, 0.0f}, uv1{1.0f, 0.0f}, uv2{1.0f, 1.0f}, uv3{0.0f, 1.0f};
+    vertices_.emplace_back(pos[0], uv0, color, static_cast<float>(tIndex));
+    vertices_.emplace_back(pos[1], uv1, color, static_cast<float>(tIndex));
+    vertices_.emplace_back(pos[2], uv2, color, static_cast<float>(tIndex));
+    vertices_.emplace_back(pos[3], uv3, color, static_cast<float>(tIndex));
+    indices_.push_back(base + 0);
+    indices_.push_back(base + 1);
+    indices_.push_back(base + 2);
+    indices_.push_back(base + 2);
+    indices_.push_back(base + 3);
+    indices_.push_back(base + 0);
+}
+
+void BatchRenderer::AddCircleScreen(float x, float y, float radius, int screenW, int screenH, const Vector4f& color, int segments) {
+    if (!batch_started_) {
+        std::cerr << "Batch not started! Call BeginBatch() first." << std::endl;
+        return;
+    }
+    
+    if (segments < 3) {
+        segments = 3; // Minimum segments for a triangle
+    }
+    if (segments > 64) {
+        segments = 64; // Cap segments for performance
+    }
+    
+    // Center vertex in NDC
+    Vector3f center = ScreenToNDC(x, y, screenW, screenH);
+    
+    // Generate circle vertices using triangle fan approach
+    unsigned int base = static_cast<unsigned int>(vertices_.size());
+    
+    // Add center vertex
+    Vector2f center_uv{0.5f, 0.5f}; // Center UV coordinate
+    vertices_.emplace_back(center, center_uv, color, -1.0f);
+    
+    // Generate perimeter vertices
+    const float angle_step = 2.0f * 3.14159265359f / static_cast<float>(segments);
+    for (int i = 0; i <= segments; ++i) {
+        float angle = static_cast<float>(i) * angle_step;
+        float cos_angle = std::cos(angle);
+        float sin_angle = std::sin(angle);
+        
+        // Calculate vertex position in screen space
+        float vertex_x = x + cos_angle * radius;
+        float vertex_y = y + sin_angle * radius;
+        
+        // Convert to NDC
+        Vector3f vertex_pos = ScreenToNDC(vertex_x, vertex_y, screenW, screenH);
+        
+        // UV coordinates for circle (normalized from -1 to 1, then to 0 to 1)
+        Vector2f uv{(cos_angle + 1.0f) * 0.5f, (sin_angle + 1.0f) * 0.5f};
+        
+        vertices_.emplace_back(vertex_pos, uv, color, -1.0f);
+    }
+    
+    // Generate indices for triangle fan
+    for (int i = 0; i < segments; ++i) {
+        indices_.push_back(base);           // Center vertex
+        indices_.push_back(base + 1 + i);   // Current perimeter vertex
+        indices_.push_back(base + 1 + ((i + 1) % segments)); // Next perimeter vertex
+    }
+}
+
 } // namespace Renderer
 } // namespace PyNovaGE
