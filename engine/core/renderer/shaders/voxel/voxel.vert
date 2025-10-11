@@ -20,6 +20,9 @@ uniform vec2 u_viewport_size;
 // Model matrix for chunk positioning
 uniform mat4 u_model_matrix;
 
+// Shadow mapping
+uniform mat4 u_shadow_matrix;
+
 // Lighting uniforms
 uniform vec3 u_sun_direction;      // Direction to sun
 uniform vec3 u_sun_color;          // Sun light color
@@ -51,6 +54,7 @@ flat out int v_voxel_type;    // Voxel type (flat, not interpolated)
 out float v_fog_factor;       // Fog interpolation factor
 out vec3 v_sun_light;         // Sun light contribution
 out vec3 v_ambient_light;     // Ambient light contribution
+out vec4 v_shadow_coord;      // Shadow map coordinates
 
 void main() {
     // Transform vertex position using standard MVP pipeline
@@ -97,16 +101,12 @@ void main() {
         
         // Linear fog
         v_fog_factor = clamp((u_fog_end - distance) / (u_fog_end - u_fog_start), 0.0, 1.0);
-        
-        // Alternative: Exponential fog
-        // v_fog_factor = exp(-u_fog_density * distance);
-        
-        // Alternative: Exponential squared fog
-        // float fog_coord = u_fog_density * distance;
-        // v_fog_factor = exp(-fog_coord * fog_coord);
     } else {
         v_fog_factor = 1.0;
     }
+
+    // Shadow coords
+    v_shadow_coord = u_shadow_matrix * world_pos;
 }
 
 // Additional vertex shader utilities for future features:
