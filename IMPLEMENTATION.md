@@ -19,6 +19,18 @@
 🎇 **Complete 2D Particle System with physics simulation and benchmarks!**
 🔧 **Production-ready build system with automated testing and benchmarking!**
 
+🧱 **Voxel demo pipeline stabilized**
+- Correct greedy meshing that generates proper rectangular quads (no degenerate U-shapes)
+- Neighbor-aware meshing across chunk boundaries (no seam artifacts)
+- Per-voxel-type color shading in fragment shader (stone, dirt, grass, wood, leaves)
+- Robust frustum culling (row‑major plane extraction fix, normalized planes, support-vertex AABB test)
+- Guard-band + near-plane bias added to avoid near-edge popping for large chunks
+- Window maximize/resize safe via framebuffer size callbacks (viewport + camera aspect updates)
+- Vertex attributes (voxel type, lighting) wired correctly
+- Logging gated with PVG_VOXEL_DEBUG_LOGS and meshing logs throttled
+- Demo pauses update/render when minimized or unfocused to prevent CPU/log flooding
+- Shader path resolved relative to executable for double-click launch on Windows
+
 ---
 
 ## Test Suite Results 🧪
@@ -116,11 +128,15 @@
 - ✅ **Comprehensive texture management**
 - ✅ **OpenGL state management and buffer optimization**
 - ✅ **Complete 2D particle system** (emitters, physics, batch rendering)
-- ❌ Voxel renderer
-  - ❌ Chunk management
-  - ❌ Basic frustum culling (needed even for voxels)
-  - ❌ Greedy meshing for voxels
-  - ❌ Texture arrays for blocks
+- ⚠️ Voxel renderer (demo functional; core features implemented)
+  - ✅ Greedy meshing with proper rectangular quads
+  - ✅ Neighbor-aware meshing to eliminate chunk seam artifacts
+  - ✅ GPU upload/render path (VAO/VBO/EBO) and per-voxel-type coloring in shader
+  - ✅ Frustum culling (row‑major plane extraction fix, normalized planes, robust AABB test, guard‑band + near‑bias)
+  - ✅ Resize-safe rendering (framebuffer callbacks, viewport + camera aspect updates)
+  - ⚠️ Texturing/texture arrays for blocks (next)
+  - ⚠️ Ambient occlusion and improved lighting (next)
+  - ⚠️ Distance-based LOD/streaming (future)
 
 #### Physics (Priority: Medium) ✅
 - ✅ **AABB collision detection and operations**
@@ -212,7 +228,7 @@
 2. ✅ **Physics system COMPLETE** (full 2D rigid body physics with 43 tests)
 3. ✅ **Particle system COMPLETE** (advanced 2D particle effects with emitters, physics, rendering)
 4. **Scene system** (basic ECS, scene graph) - **NEXT PRIORITY**
-5. **Voxel rendering support** (chunk management, meshing)
+5. **Voxel rendering enhancements** (textures/arrays, AO, lighting, LOD) — core demo and culling complete
 6. **Python bindings** (expose core systems to Python)
 7. **Audio system** (basic sound playback)
 8. **Debug tools** (profiler, visual debugging)
