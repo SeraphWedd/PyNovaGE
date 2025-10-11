@@ -147,14 +147,20 @@ private:
      * @param quads Vector of quads to convert
      * @return Mesh data with vertices and indices
      */
-    MeshData QuadsToMesh(const std::vector<Quad>& quads);
+    MeshData QuadsToMesh(const std::vector<Quad>& quads,
+                         const Chunk& chunk,
+                         const std::array<const Chunk*, 6>* neighbors = nullptr);
 
     /**
      * @brief Generate vertices for a single quad
      * @param quad The quad to generate vertices for
+     * @param chunk The chunk for AO sampling
+     * @param neighbors Optional neighbor chunks for AO sampling
      * @return Array of 4 vertices
      */
-    std::array<Vertex, 4> GenerateQuadVertices(const Quad& quad);
+    std::array<Vertex, 4> GenerateQuadVertices(const Quad& quad,
+                                               const Chunk& chunk,
+                                               const std::array<const Chunk*, 6>* neighbors = nullptr);
 
     /**
      * @brief Calculate ambient occlusion for a vertex

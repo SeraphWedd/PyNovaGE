@@ -88,7 +88,7 @@ GreedyMesher::MeshData GreedyMesher::GenerateMeshWithNeighbors(
     }
     
     // Convert quads to mesh data
-    MeshData mesh_data = QuadsToMesh(all_quads);
+    MeshData mesh_data = QuadsToMesh(all_quads, chunk, &neighbors);
     
     // Update stats
     last_stats_.quads_generated = all_quads.size();
@@ -299,7 +299,9 @@ std::vector<GreedyMesher::Quad> GreedyMesher::GenerateQuadsForFace(
     return quads;
 }
 
-GreedyMesher::MeshData GreedyMesher::QuadsToMesh(const std::vector<Quad>& quads) {
+GreedyMesher::MeshData GreedyMesher::QuadsToMesh(const std::vector<Quad>& quads,
+                                                const Chunk& chunk,
+                                                const std::array<const Chunk*, 6>* neighbors) {
     MeshData mesh_data;
     mesh_data.quad_count = quads.size();
     mesh_data.face_count = quads.size();
@@ -312,7 +314,7 @@ GreedyMesher::MeshData GreedyMesher::QuadsToMesh(const std::vector<Quad>& quads)
     
     for (const auto& quad : quads) {
         // Generate 4 vertices for the quad
-        auto quad_vertices = GenerateQuadVertices(quad);
+        auto quad_vertices = GenerateQuadVertices(quad, chunk, neighbors);
         
         // Add vertices to mesh
         for (const auto& vertex : quad_vertices) {
@@ -331,7 +333,9 @@ GreedyMesher::MeshData GreedyMesher::QuadsToMesh(const std::vector<Quad>& quads)
     return mesh_data;
 }
 
-std::array<Vertex, 4> GreedyMesher::GenerateQuadVertices(const Quad& quad) {
+std::array<Vertex, 4> GreedyMesher::GenerateQuadVertices(const Quad& quad,
+                                                       const Chunk& chunk,
+                                                       const std::array<const Chunk*, 6>* neighbors) {
     std::array<Vertex, 4> vertices;
 
     Vector3f face_normal = GetFaceNormal(quad.face);
@@ -409,21 +413,72 @@ std::array<Vertex, 4> GreedyMesher::GenerateQuadVertices(const Quad& quad) {
         vertices[i].texcoord = config_.generate_uvs ? tex_coords[i] : Vector2f(0, 0);
         // Store texture array layer index in texture_id channel
         vertices[i].texture_id = static_cast<float>(layer_index);
-        vertices[i].ambient_occlusion = 1.0f;
+        // Calculate ambient occlusion for each corner
+        vertices[i].ambient_occlusion = CalculateAmbientOcclusion(
+            chunk, quad.position, quad.face, i, neighbors);
     }
 
     return vertices;
 }
 
-float GreedyMesher::CalculateAmbientOcclusion([[maybe_unused]] const Chunk& chunk,
-                                             [[maybe_unused]] ChunkCoord pos,
-                                             [[maybe_unused]] Face face,
-                                             [[maybe_unused]] int corner,
-                                             [[maybe_unused]] const std::array<const Chunk*, 6>* neighbors) const {
-    // TODO: Implement proper AO calculation
-    // This would check neighboring voxels and calculate occlusion based on
-    // how many solid voxels are adjacent to this vertex
-    return 1.0f;
+float GreedyMesher::CalculateAmbientOcclusion(const Chunk& chunk,
+                                           ChunkCoord pos,
+                                           Face face,
+                                           int corner,
+                                           const std::array<const Chunk*, 6>* neighbors) const {
+    if (!config_.enable_ambient_occlusion) {
+        return 1.0f;
+    }
+
+    // Get face normal and corner delta vectors
+    Vector3f normal = GetFaceNormal(face);
+    ChunkCoord corner_pos = pos + FACE_CORNERS[static_cast<size_t>(face)][corner];
+
+    // Get two perpendicular vectors along the face
+    Vector3f tangent, bitangent;
+    if (face == Face::TOP || face == Face::BOTTOM) {
+        tangent = Vector3f(1, 0, 0);
+        bitangent = Vector3f(0, 0, 1);
+    } else if (face == Face::LEFT || face == Face::RIGHT) {
+        tangent = Vector3f(0, 1, 0);
+        bitangent = Vector3f(0, 0, 1);
+    } else { // FRONT/BACK
+        tangent = Vector3f(1, 0, 0);
+        bitangent = Vector3f(0, 1, 0);
+    }
+
+    // Sample points around the corner
+    ChunkCoord side1 = corner_pos + ChunkCoord(static_cast<int>(tangent.x),
+                                              static_cast<int>(tangent.y),
+                                              static_cast<int>(tangent.z));
+    ChunkCoord side2 = corner_pos + ChunkCoord(static_cast<int>(bitangent.x),
+                                              static_cast<int>(bitangent.y),
+                                              static_cast<int>(bitangent.z));
+    ChunkCoord diagonal = corner_pos + ChunkCoord(static_cast<int>(tangent.x + bitangent.x),
+                                                 static_cast<int>(tangent.y + bitangent.y),
+                                                 static_cast<int>(tangent.z + bitangent.z));
+
+    // Check if sample points are solid
+    bool side1_solid = GetVoxelAt(chunk, side1, neighbors) != VoxelType::AIR;
+    bool side2_solid = GetVoxelAt(chunk, side2, neighbors) != VoxelType::AIR;
+    bool diagonal_solid = GetVoxelAt(chunk, diagonal, neighbors) != VoxelType::AIR;
+
+    // Calculate AO value based on number of solid neighbors
+    float ao_value = 1.0f;
+
+    if (side1_solid && side2_solid) {
+        ao_value = 0.25f; // Maximum occlusion when both sides are blocked
+    } else {
+        int solid_count = (side1_solid ? 1 : 0) + (side2_solid ? 1 : 0) + (diagonal_solid ? 1 : 0);
+        switch (solid_count) {
+            case 3: ao_value = 0.25f; break;  // All three points solid
+            case 2: ao_value = 0.5f; break;   // Two points solid
+            case 1: ao_value = 0.75f; break;  // One point solid
+            default: ao_value = 1.0f;         // No solid neighbors
+        }
+    }
+
+    return ao_value;
 }
 
 std::array<Vector2f, 4> GreedyMesher::GetTextureCoordinates([[maybe_unused]] VoxelType voxel_type, [[maybe_unused]] Face face) const {
