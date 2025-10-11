@@ -399,12 +399,16 @@ std::array<Vertex, 4> GreedyMesher::GenerateQuadVertices(const Quad& quad) {
     }
 
     // Fill vertex data
+    // Map voxel type (1..5) to texture array layer index (0..4)
+    int layer_index = static_cast<int>(quad.voxel_type) - 1;
+    if (layer_index < 0) layer_index = 0;
+
     for (int i = 0; i < 4; ++i) {
         vertices[i].position = world_corners[i];
         vertices[i].normal = config_.generate_normals ? face_normal : Vector3f(0, 1, 0);
         vertices[i].texcoord = config_.generate_uvs ? tex_coords[i] : Vector2f(0, 0);
-        // Use texture_id as per-vertex voxel type for now
-        vertices[i].texture_id = static_cast<float>(quad.voxel_type);
+        // Store texture array layer index in texture_id channel
+        vertices[i].texture_id = static_cast<float>(layer_index);
         vertices[i].ambient_occlusion = 1.0f;
     }
 

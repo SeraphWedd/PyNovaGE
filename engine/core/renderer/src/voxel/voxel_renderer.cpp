@@ -5,6 +5,7 @@
 #include <iostream>
 #include <set>
 #include <glad/gl.h>
+#include "renderer/texture_array.hpp"
 
 #ifndef PVG_VOXEL_DEBUG_LOGS
 #define PVG_VOXEL_DEBUG_LOGS 0
@@ -38,19 +39,85 @@ bool VoxelRenderer::Initialize() {
     if (!shader_manager_.LoadShaderPreset(VoxelShaderManager::ShaderPreset::Standard)) {
         return false;
     }
+
+    // Create and load block textures
+    texture_array_ = std::make_unique<TextureArray>();
+    const int texW = 16, texH = 16, layers = 5; // STONE, DIRT, GRASS, WOOD, LEAVES
+    if (!texture_array_->Create(texW, texH, layers, TextureFormat::RGBA, true)) {
+        std::cerr << "Failed to create block texture array" << std::endl;
+        return false;
+    }
+
+    // Configure texture array
+    texture_array_->SetFilter(
+        TextureFilter::LinearMipmapLinear,  // min filter (trilinear)
+        TextureFilter::Linear               // mag filter
+    );
+    texture_array_->SetWrap(TextureWrap::Repeat, TextureWrap::Repeat);
+
+    // Create procedural textures since we don't have PNG files yet
+    auto makeSolid = [&](unsigned char r, unsigned char g, unsigned char b, unsigned char a) {
+        std::vector<unsigned char> data(texW * texH * 4);
+        for (int i = 0; i < texW * texH; ++i) {
+            data[i*4+0] = r; data[i*4+1] = g; data[i*4+2] = b; data[i*4+3] = a;
+        }
+        return data;
+    };
+
+    // Simple procedural textures
+    auto stone = makeSolid(140, 140, 150, 255);
+    auto dirt  = makeSolid(115, 77,  46,  255);
+    auto grass = makeSolid(60,  150, 70,  255);
+
+    // Wood: two-tone stripes
+    std::vector<unsigned char> wood(texW * texH * 4);
+    for (int y = 0; y < texH; ++y) {
+        for (int x = 0; x < texW; ++x) {
+            bool stripe = ((x / 2) % 2) == 0;
+            unsigned char r = stripe ? 120 : 100;
+            unsigned char g = stripe ? 85  : 70;
+            unsigned char b = stripe ? 50  : 40;
+            int idx = (y * texW + x) * 4;
+            wood[idx+0] = r; wood[idx+1] = g; wood[idx+2] = b; wood[idx+3] = 255;
+        }
+    }
+
+    // Leaves: green with alpha cutouts (checkerboard holes)
+    std::vector<unsigned char> leaves(texW * texH * 4);
+    for (int y = 0; y < texH; ++y) {
+        for (int x = 0; x < texW; ++x) {
+            bool hole = ((x + y) % 4) == 0; // sparse holes
+            int idx = (y * texW + x) * 4;
+            leaves[idx+0] = 50;  // R
+            leaves[idx+1] = 140; // G
+            leaves[idx+2] = 60;  // B
+            leaves[idx+3] = hole ? 0 : 255;
+        }
+    }
+
+    // Upload procedural textures
+    texture_array_->SetLayerData(0, TextureFormat::RGBA, TextureDataType::UnsignedByte, stone.data());
+    texture_array_->SetLayerData(1, TextureFormat::RGBA, TextureDataType::UnsignedByte, dirt.data());
+    texture_array_->SetLayerData(2, TextureFormat::RGBA, TextureDataType::UnsignedByte, grass.data());
+    texture_array_->SetLayerData(3, TextureFormat::RGBA, TextureDataType::UnsignedByte, wood.data());
+    texture_array_->SetLayerData(4, TextureFormat::RGBA, TextureDataType::UnsignedByte, leaves.data());
     
     // Configure mesher
-    GreedyMesher::Config mesher_config;
-    mesher_config.enable_ambient_occlusion = config_.enable_ambient_occlusion;
-    mesher_config.enable_face_culling = config_.enable_face_culling;
-    mesher_.SetConfig(mesher_config);
+    {
+        GreedyMesher::Config mesher_config;
+        mesher_config.enable_ambient_occlusion = config_.enable_ambient_occlusion;
+        mesher_config.enable_face_culling = config_.enable_face_culling;
+        mesher_.SetConfig(mesher_config);
+    }
     
     // Configure frustum culler
-    FrustumCuller::Config culler_config;
-    culler_config.enable_frustum_culling = config_.enable_frustum_culling;
-    culler_config.enable_distance_culling = config_.enable_distance_culling;
-    culler_config.max_render_distance = config_.max_render_distance;
-    frustum_culler_.SetConfig(culler_config);
+    {
+        FrustumCuller::Config culler_config;
+        culler_config.enable_frustum_culling = config_.enable_frustum_culling;
+        culler_config.enable_distance_culling = config_.enable_distance_culling;
+        culler_config.max_render_distance = config_.max_render_distance;
+        frustum_culler_.SetConfig(culler_config);
+    }
     
     // Start mesh worker threads
     if (config_.enable_multithreaded_meshing && config_.mesh_worker_threads > 0) {
@@ -70,6 +137,9 @@ void VoxelRenderer::Shutdown() {
     if (!initialized_) {
         return;
     }
+
+    // Clean up texture array
+    texture_array_.reset();
     
     // Shutdown worker threads
     shutdown_workers_ = true;
@@ -515,8 +585,9 @@ void VoxelRenderer::RenderChunks(const std::vector<ChunkRenderData*>& chunks, co
     shader->SetUniform("u_fog_end", fog_end);
     
     // Set per-scene uniforms (once per frame)
-    shader->SetUniform("u_use_texture_arrays", false);  // Disable texture arrays for now
+    shader->SetUniform("u_use_texture_arrays", true);
     shader->SetUniform("u_texture_blend_factor", 1.0f);
+    shader->SetUniform("u_texture_array", 0);  // Texture unit 0
     shader->SetUniform("u_enable_normal_mapping", false);
     shader->SetUniform("u_normal_strength", 1.0f);
     shader->SetUniform("u_material_roughness", 0.8f);
@@ -541,6 +612,11 @@ void VoxelRenderer::RenderChunks(const std::vector<ChunkRenderData*>& chunks, co
     }
 #endif
     
+    // Bind voxel texture array (before drawing chunks)
+    if (texture_array_) {
+        texture_array_->Bind(0);
+    }
+
     // Render each chunk
     static int debug_chunk_prints = 0;
     for (ChunkRenderData* render_data : chunks) {
@@ -841,14 +917,33 @@ void SimpleVoxelWorld::GenerateTestWorld() {
                     for (int cx = 0; cx < CHUNK_SIZE; ++cx) {
                         VoxelType voxel = VoxelType::AIR;
                         
-                        // Ground layer
+                        // Ground layer - stone
                         if (cy < 2) {
                             voxel = VoxelType::STONE;
                             solid_voxels++;
                         }
-                        // Grass layer
+                        // Surface layer - grass
                         else if (cy == 2) {
-                            voxel = VoxelType::DIRT; // Or grass when available
+                            voxel = VoxelType::GRASS;
+                            solid_voxels++;
+                        }
+                        // Random trees
+                        else if (cy > 2 && cy < 7 && 
+                                 (((cx + x * CHUNK_SIZE) % 7 == 0 && (cz + z * CHUNK_SIZE) % 7 == 0))) {
+                            // Tree trunk
+                            if (cx % 2 == 0 && cz % 2 == 0) {
+                                voxel = VoxelType::WOOD;
+                                solid_voxels++;
+                            }
+                            // Leaves around the top
+                            else if (cy > 4) {
+                                voxel = VoxelType::LEAVES;
+                                solid_voxels++;
+                            }
+                        }
+                        // Random scattered dirt
+                        else if (cy == 3 && ((cx + cz) % 5 == 0)) {
+                            voxel = VoxelType::DIRT;
                             solid_voxels++;
                         }
                         

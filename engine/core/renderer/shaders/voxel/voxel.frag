@@ -122,9 +122,20 @@ vec3 voxelAlbedo(int t) {
 }
 
 void main() {
-    // Simple voxel fragment shader with basic albedo by voxel type
+    // Lighting prepass
     vec3 light = v_sun_light + v_ambient_light;
-vec3 albedo = voxelAlbedo(v_voxel_type);
+
+    // Sample texture array if enabled; otherwise use debug voxel colors
+    vec3 albedo;
+    if (u_use_texture_arrays) {
+        vec4 texel = texture(u_texture_array, vec3(v_tex_coords, float(v_voxel_type)));
+        // Alpha test for cutout textures (e.g., leaves)
+        if (texel.a < 0.5) discard;
+        albedo = texel.rgb;
+    } else {
+        albedo = voxelAlbedo(v_voxel_type);
+    }
+
     vec3 final_color = albedo * light;
     
     // Apply ambient occlusion

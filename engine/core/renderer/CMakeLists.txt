@@ -23,8 +23,13 @@ set(GLAD_SOURCES
     ${CMAKE_CURRENT_SOURCE_DIR}/../../../third_party/glad/src/gl.c
 )
 
+# stb_image library
+set(STB_SOURCES
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../../third_party/stb/stb_image.cpp
+)
+
 # Renderer library
-add_library(renderer STATIC ${RENDERER_SOURCES} ${GLAD_SOURCES})
+add_library(renderer STATIC ${RENDERER_SOURCES} ${GLAD_SOURCES} ${STB_SOURCES})
 add_library(PyNovaGE::Renderer ALIAS renderer)
 
 # Configure include directories
@@ -33,6 +38,7 @@ target_include_directories(renderer
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
         $<INSTALL_INTERFACE:include>
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/../../../third_party/glad/include>
+        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/../../../third_party/stb>
 )
 
 # Set target properties

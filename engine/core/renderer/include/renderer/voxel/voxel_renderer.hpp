@@ -5,6 +5,7 @@
 #include "meshing.hpp"
 #include "frustum_culler.hpp"
 #include "shader_manager.hpp"
+#include "renderer/texture_array.hpp"
 #include <vectors/vector3.hpp>
 #include <matrices/matrix4.hpp>
 #include <unordered_map>
@@ -369,6 +370,9 @@ private:
     
     // Debug and callbacks
     std::function<void(const VoxelRenderStats&)> debug_render_callback_;
+    
+    // Texture array for voxel materials
+    std::unique_ptr<PyNovaGE::Renderer::TextureArray> texture_array_;
     
     // Initialization state
     bool initialized_ = false;
