@@ -135,9 +135,14 @@ struct VoxelRenderConfig {
     
     // Quality settings
     bool enable_ambient_occlusion = true;
+    float ao_strength = 0.75f;            // AO intensity (0..1)
     bool enable_normal_mapping = false;
     bool enable_texture_arrays = true;
     int anisotropic_filtering = 16;
+    
+    // Day/Night cycle
+    bool enable_day_night = true;
+    float day_cycle_seconds = 600.0f; // 10-minute cycle
     
     // Performance settings
     bool enable_multithreaded_meshing = true;
@@ -367,6 +372,9 @@ private:
     VoxelRenderStats stats_;
     uint32_t current_frame_ = 0;
     std::chrono::steady_clock::time_point frame_start_time_;
+    
+    // Day/Night timing
+    float time_of_day_seconds_ = 0.0f;
     
     // Debug and callbacks
     std::function<void(const VoxelRenderStats&)> debug_render_callback_;

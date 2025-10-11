@@ -321,11 +321,31 @@ GreedyMesher::MeshData GreedyMesher::QuadsToMesh(const std::vector<Quad>& quads,
             mesh_data.vertices.push_back(vertex);
         }
         
-        // Add indices (two triangles per quad) - counter-clockwise winding
-        mesh_data.indices.insert(mesh_data.indices.end(), {
-            vertex_offset + 0, vertex_offset + 2, vertex_offset + 1,
-            vertex_offset + 0, vertex_offset + 3, vertex_offset + 2
-        });
+        // Add indices (two triangles per quad)
+        if (config_.ao_flip_triangles) {
+            // Choose diagonal with higher summed AO to reduce visible seams
+            float d02 = quad_vertices[0].ambient_occlusion + quad_vertices[2].ambient_occlusion;
+            float d13 = quad_vertices[1].ambient_occlusion + quad_vertices[3].ambient_occlusion;
+            if (d02 >= d13) {
+                // Diagonal 0-2
+                mesh_data.indices.insert(mesh_data.indices.end(), {
+                    vertex_offset + 0, vertex_offset + 2, vertex_offset + 1,
+                    vertex_offset + 0, vertex_offset + 3, vertex_offset + 2
+                });
+            } else {
+                // Diagonal 1-3
+                mesh_data.indices.insert(mesh_data.indices.end(), {
+                    vertex_offset + 0, vertex_offset + 1, vertex_offset + 3,
+                    vertex_offset + 3, vertex_offset + 1, vertex_offset + 2
+                });
+            }
+        } else {
+            // Default: fixed diagonal 0-2
+            mesh_data.indices.insert(mesh_data.indices.end(), {
+                vertex_offset + 0, vertex_offset + 2, vertex_offset + 1,
+                vertex_offset + 0, vertex_offset + 3, vertex_offset + 2
+            });
+        }
         
         vertex_offset += 4;
     }
@@ -478,7 +498,9 @@ float GreedyMesher::CalculateAmbientOcclusion(const Chunk& chunk,
         }
     }
 
-    return ao_value;
+    // Apply AO strength mix
+    float s = std::clamp(config_.ao_strength, 0.0f, 1.0f);
+    return 1.0f + (ao_value - 1.0f) * s;
 }
 
 std::array<Vector2f, 4> GreedyMesher::GetTextureCoordinates([[maybe_unused]] VoxelType voxel_type, [[maybe_unused]] Face face) const {

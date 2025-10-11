@@ -106,6 +106,7 @@ bool VoxelRenderer::Initialize() {
     {
         GreedyMesher::Config mesher_config;
         mesher_config.enable_ambient_occlusion = config_.enable_ambient_occlusion;
+        mesher_config.ao_strength = config_.ao_strength;
         mesher_config.enable_face_culling = config_.enable_face_culling;
         mesher_.SetConfig(mesher_config);
     }
@@ -179,6 +180,7 @@ void VoxelRenderer::SetConfig(const VoxelRenderConfig& config) {
         // Update subsystem configurations
         GreedyMesher::Config mesher_config = mesher_.GetConfig();
         mesher_config.enable_ambient_occlusion = config_.enable_ambient_occlusion;
+        mesher_config.ao_strength = config_.ao_strength;
         mesher_config.enable_face_culling = config_.enable_face_culling;
         mesher_.SetConfig(mesher_config);
         
@@ -198,6 +200,15 @@ void VoxelRenderer::Update([[maybe_unused]] float delta_time, const Camera& came
     frame_start_time_ = std::chrono::steady_clock::now();
     stats_.Reset();
     current_frame_++;
+
+    // Advance day/night time
+    if (config_.enable_day_night && config_.day_cycle_seconds > 0.0f) {
+        time_of_day_seconds_ += delta_time;
+        if (time_of_day_seconds_ >= config_.day_cycle_seconds) {
+            // Wrap around to keep values small
+            time_of_day_seconds_ = std::fmod(time_of_day_seconds_, config_.day_cycle_seconds);
+        }
+    }
     
     // Update frustum culler with current camera
     frustum_culler_.UpdateCamera(camera);
@@ -560,14 +571,35 @@ void VoxelRenderer::RenderChunks(const std::vector<ChunkRenderData*>& chunks, co
     shader->SetUniform("u_viewport_size", camera_matrices.viewport_size);
     
     // Set lighting uniforms individually
-    Vector3f sun_direction = Vector3f(-0.3f, -0.7f, -0.2f).normalized();
-    Vector3f sun_color = Vector3f(1.0f, 0.95f, 0.8f);
-    float sun_intensity = 1.0f;
+    Vector3f sun_direction;
+    Vector3f sun_color;
+    float sun_intensity;
     Vector3f ambient_color = Vector3f(0.4f, 0.4f, 0.6f);
-    float ambient_intensity = 0.3f;
+    float ambient_intensity;
+
+    if (config_.enable_day_night && config_.day_cycle_seconds > 0.0f) {
+        float t = time_of_day_seconds_ / config_.day_cycle_seconds; // 0..1
+        float angle = t * 6.2831853f; // 0..2π
+        // Sun moves in a vertical arc; negative Y means above horizon for our lighting convention
+        sun_direction = Vector3f(std::cos(angle), -std::sin(angle), 0.2f).normalized();
+        float sun_elevation = std::clamp(-sun_direction.y, 0.0f, 1.0f); // 0 night, 1 noon
+        sun_intensity = 0.1f + 0.9f * sun_elevation;
+        ambient_intensity = 0.15f + 0.35f * sun_elevation;
+        // Warmer at noon, cooler at night
+        sun_color = Vector3f(1.0f, 0.9f + 0.05f * sun_elevation, 0.8f + 0.1f * sun_elevation);
+    } else {
+        sun_direction = Vector3f(-0.3f, -0.7f, -0.2f).normalized();
+        sun_color = Vector3f(1.0f, 0.95f, 0.8f);
+        sun_intensity = 1.0f;
+        ambient_intensity = 0.3f;
+    }
     float gamma = 2.2f;
     bool enable_fog = true;
-    Vector3f fog_color = Vector3f(0.7f, 0.8f, 1.0f);
+    // Fog color shifts with time of day
+    float sun_elevation_for_fog = std::clamp(-sun_direction.y, 0.0f, 1.0f);
+    Vector3f fog_day = Vector3f(0.7f, 0.8f, 1.0f);
+    Vector3f fog_night = Vector3f(0.1f, 0.12f, 0.2f);
+    Vector3f fog_color = fog_night * (1.0f - sun_elevation_for_fog) + fog_day * sun_elevation_for_fog;
     float fog_density = 0.02f;
     float fog_start = 100.0f;
     float fog_end = config_.max_render_distance;
@@ -604,6 +636,73 @@ void VoxelRenderer::RenderChunks(const std::vector<ChunkRenderData*>& chunks, co
     shader->SetUniform("u_show_ao", false);
     shader->SetUniform("u_show_light_levels", false);
     shader->SetUniform("u_wireframe_color", Vector3f(1.0f, 1.0f, 0.0f)); // Bright yellow wireframe
+
+    // Procedurally add a point light to each detected tree top
+    struct PointLightCPU { Vector3f pos; Vector3f color; float intensity; float radius; };
+    std::vector<PointLightCPU> lights;
+    lights.reserve(64);
+
+    if (world_) {
+        auto all_chunks = world_->GetAllChunks();
+        for (const auto& pair : all_chunks) {
+            const Chunk* c = pair.first;
+            Vector3f chunk_world = pair.second;
+            if (!c) continue;
+
+            // Track top wood Y for each (x,z) column
+            int topY[CHUNK_SIZE][CHUNK_SIZE];
+            for (int z = 0; z < CHUNK_SIZE; ++z)
+                for (int x = 0; x < CHUNK_SIZE; ++x)
+                    topY[x][z] = -1;
+
+            for (int y = 0; y < CHUNK_SIZE; ++y) {
+                for (int z = 0; z < CHUNK_SIZE; ++z) {
+                    for (int x = 0; x < CHUNK_SIZE; ++x) {
+                        if (c->GetVoxel(x, y, z) == VoxelType::WOOD) {
+                            if (y > topY[x][z]) topY[x][z] = y;
+                        }
+                    }
+                }
+            }
+
+            // For each top wood, place a light BESIDE the trunk (no leaf requirement)
+            for (int z = 0; z < CHUNK_SIZE; ++z) {
+                for (int x = 0; x < CHUNK_SIZE; ++x) {
+                    int yTop = topY[x][z];
+                    if (yTop < 0) continue;
+
+                    // Offset pattern to place light to the side of trunk
+                    // Alternate offsets to avoid perfect alignment
+                    float sideOffsetX = ((x + z) % 2 == 0) ? 1.2f : -0.2f;
+                    float sideOffsetZ = 0.5f;
+
+                    Vector3f pos = chunk_world + Vector3f(static_cast<float>(x) + sideOffsetX,
+                                                          static_cast<float>(yTop) + 1.0f,
+                                                          static_cast<float>(z) + sideOffsetZ);
+                    // Warm lantern-like light
+                    lights.push_back({ pos, Vector3f(1.0f, 0.85f, 0.6f), 2.0f, 18.0f });
+                    if (lights.size() >= 64) break;
+                }
+                if (lights.size() >= 64) break;
+            }
+            if (lights.size() >= 64) break;
+        }
+    }
+
+    // Fallback: if none detected, add two demo lights
+    if (lights.empty()) {
+        lights.push_back({ Vector3f(8.0f, 6.0f, 8.0f), Vector3f(1.0f, 0.85f, 0.6f), 2.5f, 20.0f });
+        lights.push_back({ Vector3f(24.0f, 5.0f, 10.0f), Vector3f(0.6f, 0.7f, 1.0f), 2.0f, 18.0f });
+    }
+
+    int n = static_cast<int>(std::min<size_t>(lights.size(), 64));
+    shader->SetUniform("u_num_point_lights", n);
+    for (int i = 0; i < n; ++i) {
+        shader->SetUniform("u_point_light_pos[" + std::to_string(i) + "]", lights[i].pos);
+        shader->SetUniform("u_point_light_color[" + std::to_string(i) + "]", lights[i].color);
+        shader->SetUniform("u_point_light_intensity[" + std::to_string(i) + "]", lights[i].intensity);
+        shader->SetUniform("u_point_light_radius[" + std::to_string(i) + "]", lights[i].radius);
+    }
     
     // Debug: Log wireframe mode
 #if PVG_VOXEL_DEBUG_LOGS

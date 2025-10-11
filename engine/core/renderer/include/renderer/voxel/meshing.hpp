@@ -48,6 +48,8 @@ public:
      */
     struct Config {
         bool enable_ambient_occlusion = true;  // Calculate AO for vertices
+        float ao_strength = 0.75f;             // AO intensity (0 = off, 1 = full)
+        bool ao_flip_triangles = true;         // Choose triangle diagonal to minimize AO artifacts
         bool enable_face_culling = true;       // Skip faces between solid voxels
         bool merge_same_textures = true;       // Only merge quads with same texture
         uint8_t max_quad_size = 16;            // Maximum size for a single quad

@@ -43,6 +43,14 @@ uniform float u_fog_density;       // Fog density
 uniform float u_fog_start;         // Fog start distance
 uniform float u_fog_end;           // Fog end distance
 
+// Point lights
+const int MAX_POINT_LIGHTS = 64;
+uniform int u_num_point_lights;
+uniform vec3 u_point_light_pos[MAX_POINT_LIGHTS];
+uniform vec3 u_point_light_color[MAX_POINT_LIGHTS];
+uniform float u_point_light_intensity[MAX_POINT_LIGHTS];
+uniform float u_point_light_radius[MAX_POINT_LIGHTS];
+
 // Camera data for calculations
 uniform mat4 u_view_matrix;
 uniform mat4 u_projection_matrix;
@@ -121,6 +129,21 @@ vec3 voxelAlbedo(int t) {
     return vec3(0.7); // default
 }
 
+// Point light accumulation
+vec3 applyPointLights(vec3 worldPos, vec3 normal, vec3 viewDir) {
+    vec3 sum = vec3(0.0);
+    for (int i = 0; i < u_num_point_lights; ++i) {
+        vec3 L = u_point_light_pos[i] - worldPos;
+        float dist = length(L);
+        if (dist > u_point_light_radius[i]) continue;
+        vec3 ldir = L / max(dist, 1e-4);
+        float ndotl = max(dot(normal, ldir), 0.0);
+        float atten = 1.0 / (1.0 + 0.09 * dist + 0.032 * dist * dist);
+        sum += u_point_light_color[i] * u_point_light_intensity[i] * ndotl * atten;
+    }
+    return sum;
+}
+
 void main() {
     // Lighting prepass
     vec3 light = v_sun_light + v_ambient_light;
@@ -135,6 +158,11 @@ void main() {
     } else {
         albedo = voxelAlbedo(v_voxel_type);
     }
+
+    // Add point lights
+    vec3 nrm = normalize(v_normal);
+    vec3 viewDir = normalize(-v_view_position);
+    light += applyPointLights(v_world_position, nrm, viewDir);
 
     vec3 final_color = albedo * light;
     
