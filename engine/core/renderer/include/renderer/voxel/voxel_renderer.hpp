@@ -142,7 +142,7 @@ struct VoxelRenderConfig {
     
     // Day/Night cycle
     bool enable_day_night = true;
-    float day_cycle_seconds = 600.0f; // 10-minute cycle
+    float day_cycle_seconds = 120.0f; // 2-minute cycle (short sample)
     
     // Performance settings
     bool enable_multithreaded_meshing = true;
@@ -313,6 +313,11 @@ private:
     void CleanupRenderState();
     
     /**
+     * @brief Render sky (full-screen pass with sun disc)
+     */
+    void RenderSky(const Camera& camera);
+    
+    /**
      * @brief Generate mesh for chunk (runs on worker threads)
      * @param task Mesh generation task
      */
@@ -384,6 +389,9 @@ private:
     
     // Initialization state
     bool initialized_ = false;
+    
+    // Sky rendering
+    uint32_t sky_vao_ = 0;
 
 public:
     // Hash function for world positions (for unordered_map key)

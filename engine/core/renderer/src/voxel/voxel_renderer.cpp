@@ -39,6 +39,14 @@ bool VoxelRenderer::Initialize() {
     if (!shader_manager_.LoadShaderPreset(VoxelShaderManager::ShaderPreset::Standard)) {
         return false;
     }
+    // Load sky shader program (uses same shaders directory)
+    if (!shader_manager_.LoadShaderProgram("sky", "sky.vert", "sky.frag")) {
+        std::cerr << "Failed to load sky shader" << std::endl;
+        // Not fatal; continue without sky
+    }
+
+    // Create a minimal VAO for full-screen triangle
+    glGenVertexArrays(1, &sky_vao_);
 
     // Create and load block textures
     texture_array_ = std::make_unique<TextureArray>();
@@ -135,6 +143,11 @@ bool VoxelRenderer::Initialize() {
 }
 
 void VoxelRenderer::Shutdown() {
+    // Delete sky VAO
+    if (sky_vao_ != 0) {
+        glDeleteVertexArrays(1, &sky_vao_);
+        sky_vao_ = 0;
+    }
     if (!initialized_) {
         return;
     }
@@ -233,6 +246,9 @@ void VoxelRenderer::Render(const Camera& camera) {
     
     auto render_start = std::chrono::steady_clock::now();
     
+    // Render sky first (no depth)
+    RenderSky(camera);
+
     // Setup rendering state
     SetupRenderState(camera);
     
@@ -583,10 +599,11 @@ void VoxelRenderer::RenderChunks(const std::vector<ChunkRenderData*>& chunks, co
         // Sun moves in a vertical arc; negative Y means above horizon for our lighting convention
         sun_direction = Vector3f(std::cos(angle), -std::sin(angle), 0.2f).normalized();
         float sun_elevation = std::clamp(-sun_direction.y, 0.0f, 1.0f); // 0 night, 1 noon
-        sun_intensity = 0.1f + 0.9f * sun_elevation;
-        ambient_intensity = 0.15f + 0.35f * sun_elevation;
-        // Warmer at noon, cooler at night
-        sun_color = Vector3f(1.0f, 0.9f + 0.05f * sun_elevation, 0.8f + 0.1f * sun_elevation);
+        // Stronger sun; dimmer night
+        sun_intensity = 0.15f + 1.35f * sun_elevation;   // up to ~1.5
+        ambient_intensity = 0.05f + 0.40f * sun_elevation;
+        // Warmer sunlight curve
+        sun_color = Vector3f(1.0f, 0.88f + 0.10f * sun_elevation, 0.70f + 0.20f * sun_elevation);
     } else {
         sun_direction = Vector3f(-0.3f, -0.7f, -0.2f).normalized();
         sun_color = Vector3f(1.0f, 0.95f, 0.8f);
@@ -847,6 +864,50 @@ void VoxelRenderer::SetupRenderState([[maybe_unused]] const Camera& camera) {
     
     // Store previous OpenGL state if needed for restoration
     // (For now, we'll just set what we need)
+}
+
+void VoxelRenderer::RenderSky(const Camera& camera) {
+    auto* sky = shader_manager_.GetShaderProgram("sky");
+    if (!sky || !sky->IsValid()) return;
+
+    // Build same lighting params used for voxels
+    Vector3f sun_direction;
+    Vector3f sun_color;
+    float sun_intensity;
+    float ambient_intensity; // not used here directly
+
+    if (config_.enable_day_night && config_.day_cycle_seconds > 0.0f) {
+        float t = time_of_day_seconds_ / config_.day_cycle_seconds;
+        float angle = t * 6.2831853f;
+        sun_direction = Vector3f(std::cos(angle), -std::sin(angle), 0.2f).normalized();
+        float sun_elevation = std::clamp(-sun_direction.y, 0.0f, 1.0f);
+        sun_intensity = 0.15f + 1.35f * sun_elevation;
+        sun_color = Vector3f(1.0f, 0.88f + 0.10f * sun_elevation, 0.70f + 0.20f * sun_elevation);
+        ambient_intensity = 0.05f + 0.40f * sun_elevation;
+    } else {
+        sun_direction = Vector3f(-0.3f, -0.7f, -0.2f).normalized();
+        sun_color = Vector3f(1.0f, 0.95f, 0.8f);
+        sun_intensity = 1.0f;
+        ambient_intensity = 0.3f;
+    }
+
+    // Set camera matrices
+    sky->Use();
+    sky->SetUniform("u_view_matrix", camera.GetViewMatrix());
+    sky->SetUniform("u_projection_matrix", camera.GetProjectionMatrix());
+    sky->SetUniform("u_sun_direction", sun_direction);
+    sky->SetUniform("u_sun_color", sun_color);
+    sky->SetUniform("u_sun_intensity", sun_intensity);
+    sky->SetUniform("u_time", static_cast<float>(time_of_day_seconds_));
+    // Provide camera-independent sun elevation to sky shader
+    float sun_elevation_uniform = std::clamp(-sun_direction.y, 0.0f, 1.0f);
+    sky->SetUniform("u_sun_elevation", sun_elevation_uniform);
+
+    // Disable depth and draw full-screen triangle
+    glDisable(GL_DEPTH_TEST);
+    glBindVertexArray(sky_vao_);
+    glDrawArrays(GL_TRIANGLES, 0, 3);
+    glBindVertexArray(0);
 }
 
 void VoxelRenderer::CleanupRenderState() {
