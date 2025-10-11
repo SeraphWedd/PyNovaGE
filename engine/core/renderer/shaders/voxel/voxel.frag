@@ -17,6 +17,21 @@ uniform sampler2DArray u_texture_array;     // Voxel texture array
 uniform sampler2D u_noise_texture;          // Noise texture for effects
 uniform sampler2D u_normal_map;             // Normal mapping (optional)
 
+// Sun shadow map
+uniform sampler2D u_shadow_map;
+uniform vec2 u_shadow_texel;
+uniform float u_shadow_bias;
+
+// Point light cubemap shadows (multiple slots)
+const int MAX_POINT_SHADOW_SLOTS = 4;
+uniform samplerCube u_point_shadow_map0;
+uniform samplerCube u_point_shadow_map1;
+uniform samplerCube u_point_shadow_map2;
+uniform samplerCube u_point_shadow_map3;
+uniform vec3 u_point_shadow_pos_slot[MAX_POINT_SHADOW_SLOTS];
+uniform float u_point_shadow_far_slot[MAX_POINT_SHADOW_SLOTS];
+uniform float u_point_shadow_bias;
+
 // Material properties
 uniform float u_material_roughness;   // Surface roughness
 uniform float u_material_metallic;    // Metallic factor
@@ -50,6 +65,7 @@ uniform vec3 u_point_light_pos[MAX_POINT_LIGHTS];
 uniform vec3 u_point_light_color[MAX_POINT_LIGHTS];
 uniform float u_point_light_intensity[MAX_POINT_LIGHTS];
 uniform float u_point_light_radius[MAX_POINT_LIGHTS];
+uniform int u_light_shadow_slot[MAX_POINT_LIGHTS]; // -1 means no shadow slot
 
 // Camera data for calculations
 uniform mat4 u_view_matrix;
@@ -70,6 +86,9 @@ uniform vec3 u_wireframe_color; // Wireframe color
 
 // Output
 out vec4 FragColor;
+
+// From vertex shader
+in vec4 v_shadow_coord;
 
 // Utility functions
 vec3 gammaCorrect(vec3 color, float gamma) {
@@ -139,10 +158,44 @@ vec3 applyPointLights(vec3 worldPos, vec3 normal, vec3 viewDir) {
         vec3 ldir = L / max(dist, 1e-4);
         float ndotl = max(dot(normal, ldir), 0.0);
         float atten = 1.0 / (1.0 + 0.09 * dist + 0.032 * dist * dist);
-        sum += u_point_light_color[i] * u_point_light_intensity[i] * ndotl * atten;
+        float pShadow = 1.0;
+        int slot = u_light_shadow_slot[i];
+        if (slot >= 0) {
+            // sample shadow for this light
+            vec3 toPos = worldPos - u_point_shadow_pos_slot[slot];
+            float depth;
+            if (slot == 0) depth = texture(u_point_shadow_map0, toPos).r * u_point_shadow_far_slot[slot];
+            else if (slot == 1) depth = texture(u_point_shadow_map1, toPos).r * u_point_shadow_far_slot[slot];
+            else if (slot == 2) depth = texture(u_point_shadow_map2, toPos).r * u_point_shadow_far_slot[slot];
+            else depth = texture(u_point_shadow_map3, toPos).r * u_point_shadow_far_slot[slot];
+            float d = length(toPos);
+            pShadow = (d - u_point_shadow_bias) <= depth ? 1.0 : 0.0;
+        }
+        sum += u_point_light_color[i] * u_point_light_intensity[i] * ndotl * atten * pShadow;
     }
     return sum;
 }
+
+float sampleShadow(vec4 shadowCoord) {
+    // Perspective divide
+    vec3 proj = shadowCoord.xyz / shadowCoord.w;
+    // Transform to [0,1]
+    vec2 uv = proj.xy * 0.5 + 0.5;
+    float current = proj.z * 0.5 + 0.5 - u_shadow_bias; // convert NDC z (-1..1) to depth (0..1)
+    // Early out if outside shadow map or behind light frustum
+    if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0 || current > 1.0 || current < 0.0) return 1.0;
+    // 3x3 PCF
+    float shadow = 0.0;
+    for (int x = -1; x <= 1; ++x) {
+        for (int y = -1; y <= 1; ++y) {
+            float depth = texture(u_shadow_map, uv + vec2(x, y) * u_shadow_texel).r;
+            shadow += current <= depth ? 1.0 : 0.0;
+        }
+    }
+    return shadow / 9.0;
+}
+
+// Deprecated single point shadow sampler replaced by per-slot sampling
 
 void main() {
     // Lighting prepass
@@ -159,12 +212,15 @@ void main() {
         albedo = voxelAlbedo(v_voxel_type);
     }
 
-    // Add point lights
+
+    // Apply shadowing to sun light only
+    float shadowFactor = sampleShadow(v_shadow_coord);
     vec3 nrm = normalize(v_normal);
     vec3 viewDir = normalize(-v_view_position);
-    light += applyPointLights(v_world_position, nrm, viewDir);
+    vec3 pointLit = applyPointLights(v_world_position, nrm, viewDir);
+    vec3 lit = v_sun_light * shadowFactor + v_ambient_light + pointLit;
 
-    vec3 final_color = albedo * light;
+    vec3 final_color = albedo * lit;
     
     // Apply ambient occlusion
     final_color *= v_ao_factor;

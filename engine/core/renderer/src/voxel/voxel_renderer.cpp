@@ -44,9 +44,43 @@ bool VoxelRenderer::Initialize() {
         std::cerr << "Failed to load sky shader" << std::endl;
         // Not fatal; continue without sky
     }
+    // Load shadow shader preset (depth-only)
+    shader_manager_.LoadShaderPreset(VoxelShaderManager::ShaderPreset::Shadow);
 
     // Create a minimal VAO for full-screen triangle
     glGenVertexArrays(1, &sky_vao_);
+
+    // Create shadow map resources
+    glGenFramebuffers(1, &shadow_fbo_);
+    glBindFramebuffer(GL_FRAMEBUFFER, shadow_fbo_);
+    glGenTextures(1, &shadow_depth_tex_);
+    glBindTexture(GL_TEXTURE_2D, shadow_depth_tex_);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT24, shadow_map_size_, shadow_map_size_, 0, GL_DEPTH_COMPONENT, GL_UNSIGNED_INT, nullptr);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, shadow_depth_tex_, 0);
+    glDrawBuffer(GL_NONE);
+    glReadBuffer(GL_NONE);
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+
+    // Create point shadow cubemap resources (pool of slots)
+    for (int s = 0; s < MAX_POINT_SHADOW_SLOTS; ++s) {
+        glGenFramebuffers(1, &point_shadow_fbos_[s]);
+        glGenTextures(1, &point_shadow_depth_cubes_[s]);
+        glBindTexture(GL_TEXTURE_CUBE_MAP, point_shadow_depth_cubes_[s]);
+        for (int i = 0; i < 6; ++i) {
+            glTexImage2D(GL_TEXTURE_CUBE_MAP_POSITIVE_X + i, 0, GL_DEPTH_COMPONENT24,
+                         point_shadow_size_, point_shadow_size_, 0, GL_DEPTH_COMPONENT, GL_UNSIGNED_INT, nullptr);
+        }
+        glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+        glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+        glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE);
+        glBindTexture(GL_TEXTURE_CUBE_MAP, 0);
+    }
 
     // Create and load block textures
     texture_array_ = std::make_unique<TextureArray>();
@@ -143,6 +177,26 @@ bool VoxelRenderer::Initialize() {
 }
 
 void VoxelRenderer::Shutdown() {
+    // Delete point shadow resources
+    for (int s = 0; s < MAX_POINT_SHADOW_SLOTS; ++s) {
+        if (point_shadow_depth_cubes_[s] != 0) {
+            glDeleteTextures(1, &point_shadow_depth_cubes_[s]);
+            point_shadow_depth_cubes_[s] = 0;
+        }
+        if (point_shadow_fbos_[s] != 0) {
+            glDeleteFramebuffers(1, &point_shadow_fbos_[s]);
+            point_shadow_fbos_[s] = 0;
+        }
+    }
+    // Delete shadow resources
+    if (shadow_depth_tex_ != 0) {
+        glDeleteTextures(1, &shadow_depth_tex_);
+        shadow_depth_tex_ = 0;
+    }
+    if (shadow_fbo_ != 0) {
+        glDeleteFramebuffers(1, &shadow_fbo_);
+        shadow_fbo_ = 0;
+    }
     // Delete sky VAO
     if (sky_vao_ != 0) {
         glDeleteVertexArrays(1, &sky_vao_);
@@ -205,6 +259,58 @@ void VoxelRenderer::SetConfig(const VoxelRenderConfig& config) {
     }
 }
 
+void VoxelRenderer::GatherPointLights() {
+    frame_point_lights_.clear();
+    frame_point_lights_.reserve(MAX_POINT_LIGHTS);
+
+    if (world_) {
+        auto all_chunks = world_->GetAllChunks();
+        for (const auto& pair : all_chunks) {
+            const Chunk* c = pair.first;
+            Vector3f chunk_world = pair.second;
+            if (!c) continue;
+
+            int topY[CHUNK_SIZE][CHUNK_SIZE];
+            for (int z = 0; z < CHUNK_SIZE; ++z)
+                for (int x = 0; x < CHUNK_SIZE; ++x)
+                    topY[x][z] = -1;
+
+            for (int y = 0; y < CHUNK_SIZE; ++y) {
+                for (int z = 0; z < CHUNK_SIZE; ++z) {
+                    for (int x = 0; x < CHUNK_SIZE; ++x) {
+                        if (c->GetVoxel(x, y, z) == VoxelType::WOOD) {
+                            if (y > topY[x][z]) topY[x][z] = y;
+                        }
+                    }
+                }
+            }
+
+            for (int z = 0; z < CHUNK_SIZE; ++z) {
+                for (int x = 0; x < CHUNK_SIZE; ++x) {
+                    int yTop = topY[x][z];
+                    if (yTop < 0) continue;
+
+                    float sideOffsetX = ((x + z) % 2 == 0) ? 1.2f : -0.2f;
+                    float sideOffsetZ = 0.5f;
+
+                    Vector3f pos = chunk_world + Vector3f(static_cast<float>(x) + sideOffsetX,
+                                                          static_cast<float>(yTop) + 1.0f,
+                                                          static_cast<float>(z) + sideOffsetZ);
+                    frame_point_lights_.push_back({ pos, Vector3f(1.0f, 0.85f, 0.6f), 2.0f, 18.0f });
+                    if (frame_point_lights_.size() >= MAX_POINT_LIGHTS) break;
+                }
+                if (frame_point_lights_.size() >= MAX_POINT_LIGHTS) break;
+            }
+            if (frame_point_lights_.size() >= MAX_POINT_LIGHTS) break;
+        }
+    }
+
+    if (frame_point_lights_.empty()) {
+        frame_point_lights_.push_back({ Vector3f(8.0f, 6.0f, 8.0f), Vector3f(1.0f, 0.85f, 0.6f), 2.5f, 20.0f });
+        frame_point_lights_.push_back({ Vector3f(24.0f, 5.0f, 10.0f), Vector3f(0.6f, 0.7f, 1.0f), 2.0f, 18.0f });
+    }
+}
+
 void VoxelRenderer::Update([[maybe_unused]] float delta_time, const Camera& camera) {
     if (!initialized_ || !world_) {
         return;
@@ -246,10 +352,18 @@ void VoxelRenderer::Render(const Camera& camera) {
     
     auto render_start = std::chrono::steady_clock::now();
     
-    // Render sky first (no depth)
+    // 1) Shadow map passes
+    GatherPointLights();
+    RenderShadowMap(camera);      // sun
+    RenderPointShadowMap(camera); // point lights (multi)
+
+    // 2) Sky pass
     RenderSky(camera);
 
-    // Setup rendering state
+    // 3) Setup rendering state for voxels
+    SetupRenderState(camera);
+    
+    // Cull chunks
     SetupRenderState(camera);
     
     // Cull chunks
@@ -654,71 +768,10 @@ void VoxelRenderer::RenderChunks(const std::vector<ChunkRenderData*>& chunks, co
     shader->SetUniform("u_show_light_levels", false);
     shader->SetUniform("u_wireframe_color", Vector3f(1.0f, 1.0f, 0.0f)); // Bright yellow wireframe
 
-    // Procedurally add a point light to each detected tree top
-    struct PointLightCPU { Vector3f pos; Vector3f color; float intensity; float radius; };
-    std::vector<PointLightCPU> lights;
-    lights.reserve(64);
-
-    if (world_) {
-        auto all_chunks = world_->GetAllChunks();
-        for (const auto& pair : all_chunks) {
-            const Chunk* c = pair.first;
-            Vector3f chunk_world = pair.second;
-            if (!c) continue;
-
-            // Track top wood Y for each (x,z) column
-            int topY[CHUNK_SIZE][CHUNK_SIZE];
-            for (int z = 0; z < CHUNK_SIZE; ++z)
-                for (int x = 0; x < CHUNK_SIZE; ++x)
-                    topY[x][z] = -1;
-
-            for (int y = 0; y < CHUNK_SIZE; ++y) {
-                for (int z = 0; z < CHUNK_SIZE; ++z) {
-                    for (int x = 0; x < CHUNK_SIZE; ++x) {
-                        if (c->GetVoxel(x, y, z) == VoxelType::WOOD) {
-                            if (y > topY[x][z]) topY[x][z] = y;
-                        }
-                    }
-                }
-            }
-
-            // For each top wood, place a light BESIDE the trunk (no leaf requirement)
-            for (int z = 0; z < CHUNK_SIZE; ++z) {
-                for (int x = 0; x < CHUNK_SIZE; ++x) {
-                    int yTop = topY[x][z];
-                    if (yTop < 0) continue;
-
-                    // Offset pattern to place light to the side of trunk
-                    // Alternate offsets to avoid perfect alignment
-                    float sideOffsetX = ((x + z) % 2 == 0) ? 1.2f : -0.2f;
-                    float sideOffsetZ = 0.5f;
-
-                    Vector3f pos = chunk_world + Vector3f(static_cast<float>(x) + sideOffsetX,
-                                                          static_cast<float>(yTop) + 1.0f,
-                                                          static_cast<float>(z) + sideOffsetZ);
-                    // Warm lantern-like light
-                    lights.push_back({ pos, Vector3f(1.0f, 0.85f, 0.6f), 2.0f, 18.0f });
-                    if (lights.size() >= 64) break;
-                }
-                if (lights.size() >= 64) break;
-            }
-            if (lights.size() >= 64) break;
-        }
-    }
-
-    // Fallback: if none detected, add two demo lights
-    if (lights.empty()) {
-        lights.push_back({ Vector3f(8.0f, 6.0f, 8.0f), Vector3f(1.0f, 0.85f, 0.6f), 2.5f, 20.0f });
-        lights.push_back({ Vector3f(24.0f, 5.0f, 10.0f), Vector3f(0.6f, 0.7f, 1.0f), 2.0f, 18.0f });
-    }
-
-    int n = static_cast<int>(std::min<size_t>(lights.size(), 64));
-    shader->SetUniform("u_num_point_lights", n);
-    for (int i = 0; i < n; ++i) {
-        shader->SetUniform("u_point_light_pos[" + std::to_string(i) + "]", lights[i].pos);
-        shader->SetUniform("u_point_light_color[" + std::to_string(i) + "]", lights[i].color);
-        shader->SetUniform("u_point_light_intensity[" + std::to_string(i) + "]", lights[i].intensity);
-        shader->SetUniform("u_point_light_radius[" + std::to_string(i) + "]", lights[i].radius);
+    // Upload per-slot pos/far once per frame
+    for (int s = 0; s < MAX_POINT_SHADOW_SLOTS; ++s) {
+        shader->SetUniform("u_point_shadow_pos_slot[" + std::to_string(s) + "]", point_shadow_pos_slot_[s]);
+        shader->SetUniform("u_point_shadow_far_slot[" + std::to_string(s) + "]", point_shadow_far_slot_[s]);
     }
     
     // Debug: Log wireframe mode
@@ -732,6 +785,20 @@ void VoxelRenderer::RenderChunks(const std::vector<ChunkRenderData*>& chunks, co
     if (texture_array_) {
         texture_array_->Bind(0);
     }
+    // Bind shadow map (unit 1)
+    if (shadow_depth_tex_ != 0) {
+        glActiveTexture(GL_TEXTURE1);
+        glBindTexture(GL_TEXTURE_2D, shadow_depth_tex_);
+        glActiveTexture(GL_TEXTURE0);
+    }
+    // Bind point shadow cubes (units 2..)
+    for (int s = 0; s < MAX_POINT_SHADOW_SLOTS; ++s) {
+        if (point_shadow_depth_cubes_[s] != 0) {
+            glActiveTexture(GL_TEXTURE2 + s);
+            glBindTexture(GL_TEXTURE_CUBE_MAP, point_shadow_depth_cubes_[s]);
+        }
+    }
+    glActiveTexture(GL_TEXTURE0);
 
     // Render each chunk
     static int debug_chunk_prints = 0;
@@ -783,12 +850,40 @@ void VoxelRenderer::RenderChunks(const std::vector<ChunkRenderData*>& chunks, co
             debug_chunk_prints++;
         }
         
+        // Use cached per-chunk lights (compute if stale)
+        if (render_data->lights_last_frame != current_frame_) {
+            ComputeChunkLights(*render_data);
+        }
+        int budget = render_data->cached_light_count;
+        shader->SetUniform("u_num_point_lights", budget);
+        for (int i = 0; i < budget; ++i) {
+            int li = render_data->cached_light_indices[i];
+            const auto& L = frame_point_lights_[li];
+            shader->SetUniform("u_point_light_pos[" + std::to_string(i) + "]", L.pos);
+            shader->SetUniform("u_point_light_color[" + std::to_string(i) + "]", L.color);
+            shader->SetUniform("u_point_light_intensity[" + std::to_string(i) + "]", L.intensity);
+            shader->SetUniform("u_point_light_radius[" + std::to_string(i) + "]", L.radius);
+            shader->SetUniform("u_light_shadow_slot[" + std::to_string(i) + "]", render_data->cached_light_shadow_slot[i]);
+        }
+
         shader->SetUniform("u_model_matrix", model_matrix);
         
         // Set per-chunk uniforms
         shader->SetUniform("u_voxel_type", 1);  // Default to stone type
-        
-        // Bind and draw mesh
+
+    // Shadow uniforms (per-frame)
+    shader->SetUniform("u_shadow_matrix", shadow_matrix_);
+    shader->SetUniform("u_shadow_map", 1);
+    shader->SetUniform("u_shadow_bias", 0.0015f);
+    shader->SetUniform("u_shadow_texel", Vector2f(1.0f / shadow_map_size_, 1.0f / shadow_map_size_));
+
+    // Point shadow uniforms
+    for (int s = 0; s < MAX_POINT_SHADOW_SLOTS; ++s) {
+        shader->SetUniform("u_point_shadow_map" + std::to_string(s), 2 + s);
+    }
+    shader->SetUniform("u_point_shadow_bias", 0.05f);
+
+    // Bind and draw mesh
         if (debug_chunk_prints < 5) {
             std::cout << "  Binding and drawing mesh..." << std::endl;
         }
@@ -864,6 +959,148 @@ void VoxelRenderer::SetupRenderState([[maybe_unused]] const Camera& camera) {
     
     // Store previous OpenGL state if needed for restoration
     // (For now, we'll just set what we need)
+}
+
+void VoxelRenderer::RenderPointShadowMap(const Camera& camera) {
+    auto* prog = shader_manager_.GetShaderProgram("point_shadow");
+    if (!prog) {
+        shader_manager_.LoadShaderProgram("point_shadow", "voxel_point_shadow.vert", "voxel_point_shadow.frag");
+        prog = shader_manager_.GetShaderProgram("point_shadow");
+    }
+    if (!prog || !prog->IsValid()) {
+        return;
+    }
+
+    // Select up to MAX_POINT_SHADOW_SLOTS most influential lights (closest to camera)
+    struct Candidate { int index; float score; };
+    std::vector<Candidate> candidates;
+    candidates.reserve(frame_point_lights_.size());
+    Vector3f camPos = camera.GetPosition();
+    for (int i = 0; i < static_cast<int>(frame_point_lights_.size()); ++i) {
+        float d = (frame_point_lights_[i].pos - camPos).length();
+        float score = 1.0f / std::max(d, 0.1f);
+        candidates.push_back({i, score});
+    }
+    std::sort(candidates.begin(), candidates.end(), [](const Candidate& a, const Candidate& b){ return a.score > b.score; });
+
+    // Reset mapping
+    for (int i = 0; i < MAX_POINT_LIGHTS; ++i) frame_light_shadow_slot_[i] = -1;
+
+    int assigned = 0;
+    for (const auto& c : candidates) {
+        if (assigned >= MAX_POINT_SHADOW_SLOTS) break;
+        int slot = assigned;
+        frame_light_shadow_slot_[c.index] = slot;
+        point_shadow_pos_slot_[slot] = frame_point_lights_[c.index].pos;
+        point_shadow_far_slot_[slot] = std::max(frame_point_lights_[c.index].radius, 1.0f);
+        assigned++;
+    }
+
+    if (assigned == 0) return;
+
+    // Common cube transform
+    Vector3f dirs[6] = {
+        { 1, 0, 0}, {-1, 0, 0}, {0, 1, 0}, {0,-1, 0}, {0, 0, 1}, {0, 0,-1}
+    };
+    Vector3f ups[6] = {
+        {0,-1, 0}, {0,-1, 0}, {0, 0, 1}, {0, 0,-1}, {0,-1, 0}, {0,-1, 0}
+    };
+
+    // Save and set viewport
+    GLint prevViewport[4];
+    glGetIntegerv(GL_VIEWPORT, prevViewport);
+    glViewport(0, 0, point_shadow_size_, point_shadow_size_);
+
+    prog->Use();
+
+    for (int s = 0; s < assigned; ++s) {
+        // Update this slot only on its cadence to save GPU time
+        if (point_shadow_update_divisor_ > 1) {
+            if (((current_frame_ + s) % point_shadow_update_divisor_) != 0) continue;
+        }
+        float nearP = 0.1f;
+        float farP = point_shadow_far_slot_[s];
+        Matrix4f proj = Matrix4f::Perspective((float)M_PI/2.0f, 1.0f, nearP, farP);
+
+        glBindFramebuffer(GL_FRAMEBUFFER, point_shadow_fbos_[s]);
+        for (int face = 0; face < 6; ++face) {
+            Matrix4f view = Matrix4f::LookAt(point_shadow_pos_slot_[s], point_shadow_pos_slot_[s] + dirs[face], ups[face]);
+            Matrix4f vp = proj * view;
+            glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_CUBE_MAP_POSITIVE_X + face, point_shadow_depth_cubes_[s], 0);
+            glClearDepth(1.0);
+            glClear(GL_DEPTH_BUFFER_BIT);
+
+            prog->SetUniform("u_cube_view_proj", vp);
+
+            for (auto& [key, render_data] : chunk_render_data_) {
+                if (!render_data->mesh) continue;
+                Matrix4f model = Matrix4f::Translation(render_data->world_position.x, render_data->world_position.y, render_data->world_position.z);
+                prog->SetUniform("u_model_matrix", model);
+                render_data->mesh->Bind();
+                render_data->mesh->Draw();
+            }
+        }
+    }
+
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    glViewport(prevViewport[0], prevViewport[1], prevViewport[2], prevViewport[3]);
+}
+
+void VoxelRenderer::RenderShadowMap(const Camera& camera) {
+    if (shadow_fbo_ == 0 || shadow_depth_tex_ == 0) return;
+
+    // Recompute sun direction (same as main pass)
+    Vector3f sun_direction;
+    if (config_.enable_day_night && config_.day_cycle_seconds > 0.0f) {
+        float t = time_of_day_seconds_ / config_.day_cycle_seconds;
+        float angle = t * 6.2831853f;
+        sun_direction = Vector3f(std::cos(angle), -std::sin(angle), 0.2f).normalized();
+    } else {
+        sun_direction = Vector3f(-0.3f, -0.7f, -0.2f).normalized();
+    }
+
+    // Build orthographic light camera around the current camera position
+    Vector3f center = camera.GetPosition();
+    float extent = 80.0f; // covers visible area generously
+    Matrix4f light_proj = Matrix4f::Orthographic(-extent, extent, -extent, extent, -100.0f, 200.0f);
+    Vector3f light_pos = center - sun_direction * 60.0f;
+    Matrix4f light_view = Matrix4f::LookAt(light_pos, center, Vector3f(0.0f, 1.0f, 0.0f));
+    shadow_matrix_ = light_proj * light_view; // row-major; consistent with shader uploads
+
+    // Setup FBO and viewport (preserve current viewport)
+    GLint prevViewport[4];
+    glGetIntegerv(GL_VIEWPORT, prevViewport);
+
+    glViewport(0, 0, shadow_map_size_, shadow_map_size_);
+    glBindFramebuffer(GL_FRAMEBUFFER, shadow_fbo_);
+    glClearDepth(1.0);
+    glClear(GL_DEPTH_BUFFER_BIT);
+
+    // Use shadow shader
+    auto* shadow_prog = shader_manager_.GetShaderProgram(VoxelShaderManager::ShaderPreset::Shadow);
+    if (!shadow_prog || !shadow_prog->IsValid()) {
+        glBindFramebuffer(GL_FRAMEBUFFER, 0);
+        return;
+    }
+    shadow_prog->Use();
+    shadow_prog->SetUniform("u_light_view_proj", shadow_matrix_);
+
+    // Render chunks to depth
+    for (auto& [key, render_data] : chunk_render_data_) {
+        if (!render_data->mesh) continue;
+        Matrix4f model = Matrix4f::Translation(
+            render_data->world_position.x,
+            render_data->world_position.y,
+            render_data->world_position.z);
+        shadow_prog->SetUniform("u_model_matrix", model);
+        render_data->mesh->Bind();
+        render_data->mesh->Draw();
+    }
+
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+
+    // Restore previous viewport
+    glViewport(prevViewport[0], prevViewport[1], prevViewport[2], prevViewport[3]);
 }
 
 void VoxelRenderer::RenderSky(const Camera& camera) {
@@ -1163,6 +1400,30 @@ ChunkCoord SimpleVoxelWorld::WorldToLocalCoord(const Vector3f& world_pos) const 
         static_cast<int>(world_pos.y) % CHUNK_SIZE,
         static_cast<int>(world_pos.z) % CHUNK_SIZE
     };
+}
+
+void VoxelRenderer::ComputeChunkLights(ChunkRenderData& crd) {
+    // Select nearest lights to chunk center and cache indices and slots
+    Vector3f chunk_center = crd.world_position + Vector3f(CHUNK_SIZE * 0.5f, CHUNK_SIZE * 0.5f, CHUNK_SIZE * 0.5f);
+    struct LightRef { int index; float dist2; };
+    std::vector<LightRef> lr;
+    lr.reserve(frame_point_lights_.size());
+    for (int i = 0; i < static_cast<int>(frame_point_lights_.size()); ++i) {
+        Vector3f d = frame_point_lights_[i].pos - chunk_center;
+        lr.push_back({ i, d.lengthSquared() });
+    }
+    int budget = std::min<int>(MAX_LIGHTS_PER_CHUNK, static_cast<int>(lr.size()));
+    if (budget > 0) {
+        std::nth_element(lr.begin(), lr.begin() + budget, lr.end(), [](const LightRef&a, const LightRef&b){ return a.dist2 < b.dist2; });
+    }
+    crd.cached_light_count = budget;
+    for (int i = 0; i < budget; ++i) {
+        int li = lr[i].index;
+        crd.cached_light_indices[i] = li;
+        int slot = (li < MAX_POINT_LIGHTS) ? frame_light_shadow_slot_[li] : -1;
+        crd.cached_light_shadow_slot[i] = slot;
+    }
+    crd.lights_last_frame = current_frame_;
 }
 
 } // namespace Voxel

@@ -34,6 +34,12 @@ struct ChunkRenderData {
     GreedyMesher::MeshData cpu_mesh_data;    // CPU mesh data (temp storage)
     std::atomic<bool> mesh_ready{false};     // Thread-safe mesh ready flag
 
+    // Cached lighting selection for this chunk (updated when needed)
+    int cached_light_count = 0;
+    int cached_light_indices[8] = {0};
+    int cached_light_shadow_slot[8] = { -1 };
+    uint32_t lights_last_frame = 0;
+
     ChunkRenderData() = default;
     ChunkRenderData(const Vector3f& pos) : world_position(pos) {}
     
@@ -182,6 +188,10 @@ struct MeshTask {
  */
 class VoxelRenderer {
 public:
+    static constexpr int MAX_POINT_LIGHTS = 64;
+    static constexpr int MAX_POINT_SHADOW_SLOTS = 4; // number of point lights casting shadows per frame
+    static constexpr int MAX_LIGHTS_PER_CHUNK = 4;   // per-draw light budget
+
     /**
      * @brief Constructor
      * @param shader_directory Directory containing voxel shaders
@@ -316,6 +326,24 @@ private:
      * @brief Render sky (full-screen pass with sun disc)
      */
     void RenderSky(const Camera& camera);
+
+    /**
+     * @brief Render shadow map from sun's perspective
+     */
+    void RenderShadowMap(const Camera& camera);
+    
+    /**
+     * @brief Gather point lights for this frame
+     */
+    void GatherPointLights();
+    
+    /**
+     * @brief Render cubemap shadows for selected point lights
+     */
+    void RenderPointShadowMap(const Camera& camera);
+
+    // Update or compute nearest lights for a given chunk (stores in render data)
+    void ComputeChunkLights(ChunkRenderData& crd);
     
     /**
      * @brief Generate mesh for chunk (runs on worker threads)
@@ -386,6 +414,25 @@ private:
     
     // Texture array for voxel materials
     std::unique_ptr<PyNovaGE::Renderer::TextureArray> texture_array_;
+
+    // Sun (directional) shadow mapping
+    uint32_t shadow_fbo_ = 0;
+    uint32_t shadow_depth_tex_ = 0;
+    int shadow_map_size_ = 1024;
+    Matrix4f shadow_matrix_;
+
+    // Point light cubemap shadows (pool of slots)
+    uint32_t point_shadow_fbos_[MAX_POINT_SHADOW_SLOTS] = {0,0,0,0};
+    uint32_t point_shadow_depth_cubes_[MAX_POINT_SHADOW_SLOTS] = {0,0,0,0};
+    int point_shadow_size_ = 512;
+    int point_shadow_update_divisor_ = 2; // update each slot every other frame
+    Vector3f point_shadow_pos_slot_[MAX_POINT_SHADOW_SLOTS] = {};
+    float point_shadow_far_slot_[MAX_POINT_SHADOW_SLOTS] = {50.0f,50.0f,50.0f,50.0f};
+    
+    // Lights gathered for this frame
+    struct PointLightCPU { Vector3f pos; Vector3f color; float intensity; float radius; };
+    std::vector<PointLightCPU> frame_point_lights_;
+    int frame_light_shadow_slot_[MAX_POINT_LIGHTS] = { -1 };
     
     // Initialization state
     bool initialized_ = false;
