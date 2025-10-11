@@ -17,6 +17,7 @@
 #include <sstream>
 #include <iomanip>
 #include <deque>
+#include <thread>
 
 // Engine includes
 #include <window/window.hpp>
@@ -27,7 +28,68 @@
 #include <vectors/vector4.hpp>
 
 // GLFW for input handling
+#ifdef _WIN32
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <windows.h>
+#endif
 #include <GLFW/glfw3.h>
+#include <unordered_map>
+#include <filesystem>
+
+#ifndef PVG_VOXEL_DEBUG_LOGS
+#define PVG_VOXEL_DEBUG_LOGS 0
+#endif
+
+class VoxelDemo;
+namespace {
+    static std::unordered_map<GLFWwindow*, VoxelDemo*> g_windowToDemo;
+
+    static std::string ResolveVoxelShaderDir() {
+        namespace fs = std::filesystem;
+#ifdef _WIN32
+        wchar_t buf[MAX_PATH] = {0};
+        DWORD len = GetModuleFileNameW(nullptr, buf, MAX_PATH);
+        fs::path exe_path;
+        if (len > 0) {
+            exe_path = fs::path(buf);
+        } else {
+            exe_path = fs::current_path();
+        }
+#else
+        fs::path exe_path = fs::current_path();
+#endif
+        fs::path exe_dir = exe_path.parent_path(); // e.g., .../build/bin/Debug
+        std::vector<fs::path> candidates = {
+            exe_dir / "shaders" / "voxel",                // build/bin/Debug/shaders/voxel
+            exe_dir.parent_path() / "shaders" / "voxel",  // build/bin/shaders/voxel
+            fs::path("build") / "bin" / "shaders" / "voxel" // repo-root relative when run from root
+        };
+
+        for (const auto& c : candidates) {
+            if (fs::exists(c / "voxel.vert") && fs::exists(c / "voxel.frag")) {
+#if PVG_VOXEL_DEBUG_LOGS
+                std::cout << "Using voxel shader dir: " << c.string() << std::endl;
+#endif
+                std::string s = c.string();
+                if (!s.empty() && s.back() != '/' && s.back() != '\\') s.push_back('/');
+                return s;
+            }
+        }
+        // Fallback to parent/shaders/voxel even if files don't exist (engine may copy after first run)
+        fs::path fallback = exe_dir.parent_path() / "shaders" / "voxel";
+#if PVG_VOXEL_DEBUG_LOGS
+        std::cout << "Voxel shader dir fallback to: " << fallback.string() << std::endl;
+#endif
+        std::string s = fallback.string();
+        if (!s.empty() && s.back() != '/' && s.back() != '\\') s.push_back('/');
+        return s;
+    }
+}
 
 using namespace PyNovaGE::Renderer::Voxel;
 
@@ -36,12 +98,12 @@ using namespace PyNovaGE::Renderer::Voxel;
  */
 class VoxelDemo {
 public:
-    VoxelDemo() : window_(nullptr), camera_(), renderer_("shaders/voxel/"), world_(8) {
+    VoxelDemo() : window_(nullptr), camera_(), renderer_(ResolveVoxelShaderDir()), world_(8) {
         last_frame_time_ = std::chrono::high_resolution_clock::now();
         
-        // Configure camera for nice viewing
-        camera_.SetPosition(Vector3f(32.0f, 5.0f, 32.0f));   // Even lower camera
-        camera_.SetRotation(0.0f, -30.0f);                   // Look down less steep
+        // Configure camera for optimal voxel viewing - positioned to see center of world immediately
+        camera_.SetPosition(Vector3f(64.0f, 20.0f, 64.0f));  // Center of 8x8 chunk world (8*16/2 = 64)
+        camera_.SetRotation(-20.0f, -45.0f);                 // Look down and towards center
         camera_.SetPerspective(75.0f, 16.0f/9.0f, 0.1f, 500.0f);
         camera_.SetMovementSpeed(25.0f);
         camera_.SetMouseSensitivity(0.2f);
@@ -106,14 +168,17 @@ public:
         }
         std::cout << "✅ Voxel renderer initialized!" << std::endl;
         
+        // DEBUG: Check if shader was loaded properly
+        std::cout << "DEBUG: Checking voxel shader loading..." << std::endl;
+        
         // Configure renderer for best performance
         VoxelRenderConfig render_config;
         render_config.enable_frustum_culling = false;  // Disable to test mesh visibility
-        render_config.enable_multithreaded_meshing = true;   // Re-enable with single thread
-        render_config.mesh_worker_threads = 1;               // Use just 1 thread to test
+        render_config.enable_multithreaded_meshing = false;  // Disable multithreading for immediate meshing
+        render_config.mesh_worker_threads = 0;               // No background threads
         render_config.max_render_distance = 200.0f;
-        render_config.max_remesh_per_frame = 4;
-        render_config.max_upload_per_frame = 2;
+        render_config.max_remesh_per_frame = 64;             // Allow many meshes per frame for startup
+        render_config.max_upload_per_frame = 64;             // Allow many uploads per frame for startup
         render_config.enable_face_culling = false;           // Disable face culling to see all faces
         
         renderer_.SetConfig(render_config);
@@ -121,6 +186,15 @@ public:
         
         // Generate world patterns
         GenerateWorld();
+        
+        // Force immediate meshing of all chunks for faster startup
+        std::cout << "⚡ Pre-meshing all chunks for immediate display..." << std::endl;
+        renderer_.Update(0.0f, camera_);  // Process any pending chunks
+        
+        // Give it a few more update cycles to ensure all chunks are processed
+        for (int i = 0; i < 5; ++i) {
+            renderer_.Update(0.016f, camera_);  // Simulate a few frames
+        }
         
         std::cout << "✅ Voxel demo initialized successfully!" << std::endl;
         std::cout << std::endl;
@@ -133,7 +207,14 @@ public:
         std::cout << "🚀 Starting voxel demo main loop..." << std::endl;
         
         int frame_count = 0;
-        while (!window_->ShouldClose()) {
+while (!window_->ShouldClose()) {
+            // When the window is minimized or out of focus, pause heavy work to avoid console spam and CPU burn
+            if (window_->IsMinimized() || !window_->IsFocused()) {
+                window_->PollEvents();
+                std::this_thread::sleep_for(std::chrono::milliseconds(50));
+                continue;
+            }
+
             if (frame_count == 0) {
                 std::cout << "Entering first frame..." << std::endl;
             }
@@ -237,21 +318,32 @@ private:
     }
     
     void SetupInputCallbacks() {
-        // Set user pointer for callbacks
-        glfwSetWindowUserPointer(window_->GetNativeWindow(), this);
+        // Associate this demo instance with the window without overwriting the engine's user pointer
+        g_windowToDemo[window_->GetNativeWindow()] = this;
         
         // Mouse callback for camera rotation
         glfwSetCursorPosCallback(window_->GetNativeWindow(), 
             [](GLFWwindow* window, double xpos, double ypos) {
-                auto* demo = static_cast<VoxelDemo*>(glfwGetWindowUserPointer(window));
-                demo->OnMouseMove(xpos, ypos);
+                auto it = g_windowToDemo.find(window);
+                if (it != g_windowToDemo.end()) it->second->OnMouseMove(xpos, ypos);
             });
         
         // Key callback for commands
         glfwSetKeyCallback(window_->GetNativeWindow(),
             [](GLFWwindow* window, int key, int scancode, int action, int mods) {
-                auto* demo = static_cast<VoxelDemo*>(glfwGetWindowUserPointer(window));
-                demo->OnKeyPress(key, scancode, action, mods);
+                auto it = g_windowToDemo.find(window);
+                if (it != g_windowToDemo.end()) it->second->OnKeyPress(key, scancode, action, mods);
+            });
+        
+        // Framebuffer resize callback to handle maximize/screenshot resizes
+        glfwSetFramebufferSizeCallback(window_->GetNativeWindow(),
+            [](GLFWwindow* window, int width, int height) {
+                if (width <= 0 || height <= 0) return; // avoid division by zero / minimized
+                PyNovaGE::Renderer::Renderer::SetViewport(0, 0, width, height);
+                auto it = g_windowToDemo.find(window);
+                if (it != g_windowToDemo.end()) {
+                    it->second->camera_.SetAspectRatio(static_cast<float>(width) / static_cast<float>(height));
+                }
             });
     }
     
@@ -433,9 +525,9 @@ private:
     }
     
     void ResetCamera() {
-        camera_.SetPosition(Vector3f(32.0f, 5.0f, 32.0f));
-        camera_.SetRotation(0.0f, -30.0f);
-        std::cout << "📷 Camera reset to default position" << std::endl;
+        camera_.SetPosition(Vector3f(64.0f, 20.0f, 64.0f));
+        camera_.SetRotation(-20.0f, -45.0f);
+        std::cout << "📷 Camera reset to optimal viewing position" << std::endl;
     }
     
     void PrintControls() {
@@ -483,7 +575,7 @@ private:
     
     // Display options
     bool show_performance_stats_ = false;
-    bool wireframe_mode_ = true;  // Start in wireframe to see geometry
+    bool wireframe_mode_ = false;  // Start in solid mode for better visibility
 };
 
 int main() {

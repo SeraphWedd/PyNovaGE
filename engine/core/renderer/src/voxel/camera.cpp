@@ -1,5 +1,6 @@
 #include "renderer/voxel/camera.hpp"
 #include <vectors/vector4.hpp>
+#include <cmath>
 
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
@@ -147,55 +148,86 @@ Camera::Frustum Camera::ExtractFrustum() {
     Frustum frustum;
     Matrix4f mvp = GetViewProjectionMatrix();
     
-    // Extract frustum planes from the view-projection matrix
-    // Left plane
+    // Extract frustum planes from the view-projection matrix (Matrix4f is row-major)
     const float* m = mvp.data.data();
-    frustum.planes[0] = Vector4f(
-        m[3] + m[0],
-        m[7] + m[4],
-        m[11] + m[8],
-        m[15] + m[12]
-    ).normalized();
-    
-    // Right plane
-    frustum.planes[1] = Vector4f(
-        m[3] - m[0],
-        m[7] - m[4],
-        m[11] - m[8],
-        m[15] - m[12]
-    ).normalized();
-    
-    // Bottom plane
-    frustum.planes[2] = Vector4f(
-        m[3] + m[1],
-        m[7] + m[5],
-        m[11] + m[9],
-        m[15] + m[13]
-    ).normalized();
-    
-    // Top plane
-    frustum.planes[3] = Vector4f(
-        m[3] - m[1],
-        m[7] - m[5],
-        m[11] - m[9],
-        m[15] - m[13]
-    ).normalized();
-    
-    // Near plane
-    frustum.planes[4] = Vector4f(
-        m[3] + m[2],
-        m[7] + m[6],
-        m[11] + m[10],
-        m[15] + m[14]
-    ).normalized();
-    
-    // Far plane
-    frustum.planes[5] = Vector4f(
-        m[3] - m[2],
-        m[7] - m[6],
-        m[11] - m[10],
-        m[15] - m[14]
-    ).normalized();
+
+    // Left plane = row3 + row0
+    {
+        Vector4f p(
+            m[12] + m[0],
+            m[13] + m[4],
+            m[14] + m[8],
+            m[15] + m[3]
+        );
+        float nlen = std::sqrt(p.x * p.x + p.y * p.y + p.z * p.z);
+        if (nlen > 0.0f) { p.x /= nlen; p.y /= nlen; p.z /= nlen; p.w /= nlen; }
+        frustum.planes[0] = p;
+    }
+
+    // Right plane = row3 - row0
+    {
+        Vector4f p(
+            m[12] - m[0],
+            m[13] - m[4],
+            m[14] - m[8],
+            m[15] - m[3]
+        );
+        float nlen = std::sqrt(p.x * p.x + p.y * p.y + p.z * p.z);
+        if (nlen > 0.0f) { p.x /= nlen; p.y /= nlen; p.z /= nlen; p.w /= nlen; }
+        frustum.planes[1] = p;
+    }
+
+    // Bottom plane = row3 + row1
+    {
+        Vector4f p(
+            m[12] + m[4],
+            m[13] + m[5],
+            m[14] + m[6],
+            m[15] + m[7]
+        );
+        float nlen = std::sqrt(p.x * p.x + p.y * p.y + p.z * p.z);
+        if (nlen > 0.0f) { p.x /= nlen; p.y /= nlen; p.z /= nlen; p.w /= nlen; }
+        frustum.planes[2] = p;
+    }
+
+    // Top plane = row3 - row1
+    {
+        Vector4f p(
+            m[12] - m[4],
+            m[13] - m[5],
+            m[14] - m[6],
+            m[15] - m[7]
+        );
+        float nlen = std::sqrt(p.x * p.x + p.y * p.y + p.z * p.z);
+        if (nlen > 0.0f) { p.x /= nlen; p.y /= nlen; p.z /= nlen; p.w /= nlen; }
+        frustum.planes[3] = p;
+    }
+
+    // Near plane = row3 + row2
+    {
+        Vector4f p(
+            m[12] + m[8],
+            m[13] + m[9],
+            m[14] + m[10],
+            m[15] + m[11]
+        );
+        float nlen = std::sqrt(p.x * p.x + p.y * p.y + p.z * p.z);
+        if (nlen > 0.0f) { p.x /= nlen; p.y /= nlen; p.z /= nlen; p.w /= nlen; }
+        frustum.planes[4] = p;
+    }
+
+    // Far plane = row3 - row2
+    {
+        Vector4f p(
+            m[12] - m[8],
+            m[13] - m[9],
+            m[14] - m[10],
+            m[15] - m[11]
+        );
+        float nlen = std::sqrt(p.x * p.x + p.y * p.y + p.z * p.z);
+        if (nlen > 0.0f) { p.x /= nlen; p.y /= nlen; p.z /= nlen; p.w /= nlen; }
+        frustum.planes[5] = p;
+    }
     
     return frustum;
 }

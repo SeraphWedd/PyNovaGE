@@ -2,6 +2,11 @@
 #include <vectors/vector2.hpp>
 #include <chrono>
 #include <algorithm>
+#include <iostream>
+
+#ifndef PVG_VOXEL_DEBUG_LOGS
+#define PVG_VOXEL_DEBUG_LOGS 0
+#endif
 
 namespace PyNovaGE {
 namespace Renderer {
@@ -57,10 +62,28 @@ GreedyMesher::MeshData GreedyMesher::GenerateMeshWithNeighbors(
     
     std::vector<Quad> all_quads;
     
+    // Debug: Count solid voxels
+    int solid_count = 0;
+    for (int y = 0; y < CHUNK_SIZE; ++y) {
+        for (int z = 0; z < CHUNK_SIZE; ++z) {
+            for (int x = 0; x < CHUNK_SIZE; ++x) {
+                if (chunk.GetVoxel(x, y, z) != VoxelType::AIR) {
+                    solid_count++;
+                }
+            }
+        }
+    }
+#if PVG_VOXEL_DEBUG_LOGS
+    std::cout << "  Meshing chunk with " << solid_count << " solid voxels" << std::endl;
+#endif
+    
     // Generate quads for each face direction
     for (int face_idx = 0; face_idx < 6; ++face_idx) {
         Face face = static_cast<Face>(face_idx);
         auto face_quads = GenerateQuadsForFace(chunk, face, &neighbors);
+#if PVG_VOXEL_DEBUG_LOGS
+        std::cout << "    Face " << face_idx << " generated " << face_quads.size() << " quads" << std::endl;
+#endif
         all_quads.insert(all_quads.end(), face_quads.begin(), face_quads.end());
     }
     
@@ -296,10 +319,10 @@ GreedyMesher::MeshData GreedyMesher::QuadsToMesh(const std::vector<Quad>& quads)
             mesh_data.vertices.push_back(vertex);
         }
         
-        // Add indices (two triangles per quad)
+        // Add indices (two triangles per quad) - counter-clockwise winding
         mesh_data.indices.insert(mesh_data.indices.end(), {
-            vertex_offset + 0, vertex_offset + 1, vertex_offset + 2,
-            vertex_offset + 2, vertex_offset + 3, vertex_offset + 0
+            vertex_offset + 0, vertex_offset + 2, vertex_offset + 1,
+            vertex_offset + 0, vertex_offset + 3, vertex_offset + 2
         });
         
         vertex_offset += 4;
@@ -310,74 +333,81 @@ GreedyMesher::MeshData GreedyMesher::QuadsToMesh(const std::vector<Quad>& quads)
 
 std::array<Vertex, 4> GreedyMesher::GenerateQuadVertices(const Quad& quad) {
     std::array<Vertex, 4> vertices;
-    
+
     Vector3f face_normal = GetFaceNormal(quad.face);
     auto tex_coords = GetTextureCoordinates(quad.voxel_type, quad.face);
-    
-    // Get the base corners for this face
-    const auto& base_corners = FACE_CORNERS[static_cast<size_t>(quad.face)];
-    
-    // Calculate quad corners based on position, width, and height
+
+    // Compute four unique corners per face using a clean axis-based approach.
+    // width extends along the first in-plane axis, height along the second in-plane axis.
+    const float x = static_cast<float>(quad.position.x);
+    const float y = static_cast<float>(quad.position.y);
+    const float z = static_cast<float>(quad.position.z);
+    const float w = static_cast<float>(quad.width);
+    const float h = static_cast<float>(quad.height);
+
     std::array<Vector3f, 4> world_corners;
-    
-    for (int i = 0; i < 4; ++i) {
-        Vector3f corner = Vector3f(
-            static_cast<float>(quad.position.x + base_corners[i].x * quad.width),
-            static_cast<float>(quad.position.y + base_corners[i].y * quad.height),
-            static_cast<float>(quad.position.z + base_corners[i].z)
-        );
-        
-        // Adjust corner position based on face direction
-        switch (quad.face) {
-            case Face::LEFT:
-                world_corners[i] = Vector3f(corner.x, 
-                                          static_cast<float>(quad.position.y + (i == 1 || i == 2 ? quad.height : 0)), 
-                                          static_cast<float>(quad.position.z + (i == 0 || i == 1 ? quad.width : 0)));
-                break;
-            case Face::RIGHT:
-                world_corners[i] = Vector3f(corner.x + 1.0f,
-                                          static_cast<float>(quad.position.y + (i == 1 || i == 2 ? quad.height : 0)),
-                                          static_cast<float>(quad.position.z + (i == 2 || i == 3 ? quad.width : 0)));
-                break;
-            case Face::BOTTOM:
-                world_corners[i] = Vector3f(static_cast<float>(quad.position.x + (i == 1 || i == 2 ? quad.width : 0)),
-                                          corner.y,
-                                          static_cast<float>(quad.position.z + (i == 2 || i == 3 ? quad.height : 0)));
-                break;
-            case Face::TOP:
-                world_corners[i] = Vector3f(static_cast<float>(quad.position.x + (i == 2 || i == 3 ? quad.width : 0)),
-                                          corner.y + 1.0f,
-                                          static_cast<float>(quad.position.z + (i == 0 || i == 1 ? quad.height : 0)));
-                break;
-            case Face::BACK:
-                world_corners[i] = Vector3f(static_cast<float>(quad.position.x + (i == 1 || i == 2 ? quad.width : 0)),
-                                          static_cast<float>(quad.position.y + (i == 2 || i == 3 ? quad.height : 0)),
-                                          corner.z);
-                break;
-            case Face::FRONT:
-                world_corners[i] = Vector3f(static_cast<float>(quad.position.x + (i == 1 || i == 2 ? quad.width : 0)),
-                                          static_cast<float>(quad.position.y + (i == 2 || i == 3 ? quad.height : 0)),
-                                          corner.z + 1.0f);
-                break;
-        }
+
+    switch (quad.face) {
+        case Face::LEFT:  // -X, plane at x (width along Y, height along Z)
+            world_corners = {
+                Vector3f(x,     y,     z),
+                Vector3f(x,     y+w,   z),
+                Vector3f(x,     y+w,   z+h),
+                Vector3f(x,     y,     z+h)
+            };
+            break;
+        case Face::RIGHT: // +X, plane at x+1 (width along Y, height along Z)
+            world_corners = {
+                Vector3f(x+1.0f, y,     z),
+                Vector3f(x+1.0f, y+w,   z),
+                Vector3f(x+1.0f, y+w,   z+h),
+                Vector3f(x+1.0f, y,     z+h)
+            };
+            break;
+        case Face::BOTTOM: // -Y, plane at y
+            world_corners = {
+                Vector3f(x,     y, z),
+                Vector3f(x+w,   y, z),
+                Vector3f(x+w,   y, z+h),
+                Vector3f(x,     y, z+h)
+            };
+            break;
+        case Face::TOP: // +Y, plane at y+1
+            world_corners = {
+                Vector3f(x,     y+1.0f, z),
+                Vector3f(x+w,   y+1.0f, z),
+                Vector3f(x+w,   y+1.0f, z+h),
+                Vector3f(x,     y+1.0f, z+h)
+            };
+            break;
+        case Face::BACK: // -Z, plane at z
+            world_corners = {
+                Vector3f(x,     y,     z),
+                Vector3f(x+w,   y,     z),
+                Vector3f(x+w,   y+h,   z),
+                Vector3f(x,     y+h,   z)
+            };
+            break;
+        case Face::FRONT: // +Z, plane at z+1
+            world_corners = {
+                Vector3f(x,     y,     z+1.0f),
+                Vector3f(x+w,   y,     z+1.0f),
+                Vector3f(x+w,   y+h,   z+1.0f),
+                Vector3f(x,     y+h,   z+1.0f)
+            };
+            break;
     }
-    
-    // Create vertices
+
+    // Fill vertex data
     for (int i = 0; i < 4; ++i) {
         vertices[i].position = world_corners[i];
         vertices[i].normal = config_.generate_normals ? face_normal : Vector3f(0, 1, 0);
         vertices[i].texcoord = config_.generate_uvs ? tex_coords[i] : Vector2f(0, 0);
-        vertices[i].texture_id = static_cast<float>(quad.voxel_type); // Use voxel type as texture ID
-        
-        // Calculate ambient occlusion if enabled
-        if (config_.enable_ambient_occlusion) {
-            // TODO: Implement AO calculation
-            vertices[i].ambient_occlusion = 1.0f; // No occlusion for now
-        } else {
-            vertices[i].ambient_occlusion = 1.0f;
-        }
+        // Use texture_id as per-vertex voxel type for now
+        vertices[i].texture_id = static_cast<float>(quad.voxel_type);
+        vertices[i].ambient_occlusion = 1.0f;
     }
-    
+
     return vertices;
 }
 

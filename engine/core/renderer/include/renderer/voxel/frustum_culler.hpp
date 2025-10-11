@@ -6,7 +6,8 @@
 #include <vectors/vector4.hpp>
 #include <matrices/matrix4.hpp>
 #include <array>
-#include <vector>
+#include <cmath>
+#include <algorithm>
 #include <unordered_set>
 
 namespace PyNovaGE {
@@ -147,25 +148,87 @@ struct Frustum {
      * @param view_projection_matrix Combined view-projection matrix
      */
     void ExtractPlanes(const Matrix4f& view_projection_matrix) {
+        // NOTE: Matrix4f is stored in row-major order. Extract planes using row-wise indices.
+        // Rows: r0=[m0..m3], r1=[m4..m7], r2=[m8..m11], r3=[m12..m15]
         const float* m = view_projection_matrix.data.data();
 
-        // Left plane: m[3] + m[0], m[7] + m[4], m[11] + m[8], m[15] + m[12]
-        planes[LEFT] = Vector4f(m[3] + m[0], m[7] + m[4], m[11] + m[8], m[15] + m[12]).normalized();
+        // Left plane = row3 + row0
+        {
+            Vector4f p(
+                m[12] + m[0],
+                m[13] + m[4],
+                m[14] + m[8],
+                m[15] + m[3]
+            );
+            float nlen = std::sqrt(p.x * p.x + p.y * p.y + p.z * p.z);
+            if (nlen > 0.0f) { p.x /= nlen; p.y /= nlen; p.z /= nlen; p.w /= nlen; }
+            planes[LEFT] = p;
+        }
 
-        // Right plane: m[3] - m[0], m[7] - m[4], m[11] - m[8], m[15] - m[12]
-        planes[RIGHT] = Vector4f(m[3] - m[0], m[7] - m[4], m[11] - m[8], m[15] - m[12]).normalized();
+        // Right plane = row3 - row0
+        {
+            Vector4f p(
+                m[12] - m[0],
+                m[13] - m[4],
+                m[14] - m[8],
+                m[15] - m[3]
+            );
+            float nlen = std::sqrt(p.x * p.x + p.y * p.y + p.z * p.z);
+            if (nlen > 0.0f) { p.x /= nlen; p.y /= nlen; p.z /= nlen; p.w /= nlen; }
+            planes[RIGHT] = p;
+        }
 
-        // Bottom plane: m[3] + m[1], m[7] + m[5], m[11] + m[9], m[15] + m[13]
-        planes[BOTTOM] = Vector4f(m[3] + m[1], m[7] + m[5], m[11] + m[9], m[15] + m[13]).normalized();
+        // Bottom plane = row3 + row1
+        {
+            Vector4f p(
+                m[12] + m[4],
+                m[13] + m[5],
+                m[14] + m[6],
+                m[15] + m[7]
+            );
+            float nlen = std::sqrt(p.x * p.x + p.y * p.y + p.z * p.z);
+            if (nlen > 0.0f) { p.x /= nlen; p.y /= nlen; p.z /= nlen; p.w /= nlen; }
+            planes[BOTTOM] = p;
+        }
 
-        // Top plane: m[3] - m[1], m[7] - m[5], m[11] - m[9], m[15] - m[13]
-        planes[TOP] = Vector4f(m[3] - m[1], m[7] - m[5], m[11] - m[9], m[15] - m[13]).normalized();
+        // Top plane = row3 - row1
+        {
+            Vector4f p(
+                m[12] - m[4],
+                m[13] - m[5],
+                m[14] - m[6],
+                m[15] - m[7]
+            );
+            float nlen = std::sqrt(p.x * p.x + p.y * p.y + p.z * p.z);
+            if (nlen > 0.0f) { p.x /= nlen; p.y /= nlen; p.z /= nlen; p.w /= nlen; }
+            planes[TOP] = p;
+        }
 
-        // Near plane: m[3] + m[2], m[7] + m[6], m[11] + m[10], m[15] + m[14]
-        planes[NEAR] = Vector4f(m[3] + m[2], m[7] + m[6], m[11] + m[10], m[15] + m[14]).normalized();
+        // Near plane = row3 + row2
+        {
+            Vector4f p(
+                m[12] + m[8],
+                m[13] + m[9],
+                m[14] + m[10],
+                m[15] + m[11]
+            );
+            float nlen = std::sqrt(p.x * p.x + p.y * p.y + p.z * p.z);
+            if (nlen > 0.0f) { p.x /= nlen; p.y /= nlen; p.z /= nlen; p.w /= nlen; }
+            planes[NEAR] = p;
+        }
 
-        // Far plane: m[3] - m[2], m[7] - m[6], m[11] - m[10], m[15] - m[14]
-        planes[FAR] = Vector4f(m[3] - m[2], m[7] - m[6], m[11] - m[10], m[15] - m[14]).normalized();
+        // Far plane = row3 - row2
+        {
+            Vector4f p(
+                m[12] - m[8],
+                m[13] - m[9],
+                m[14] - m[10],
+                m[15] - m[11]
+            );
+            float nlen = std::sqrt(p.x * p.x + p.y * p.y + p.z * p.z);
+            if (nlen > 0.0f) { p.x /= nlen; p.y /= nlen; p.z /= nlen; p.w /= nlen; }
+            planes[FAR] = p;
+        }
     }
 
     /**
@@ -205,21 +268,34 @@ struct Frustum {
      * @return True if AABB intersects frustum
      */
     bool IntersectsAABB(const AABB& aabb) const {
+        // Robust plane-AABB test using both positive and negative support vertices
+        // See: Akenine-Moller, Real-Time Rendering
+        constexpr float epsilon = 1e-4f;
         for (const auto& plane : planes) {
-            // Find the positive vertex (farthest from plane normal)
-            Vector3f positive_vertex;
-            positive_vertex.x = (plane.x >= 0.0f) ? aabb.max.x : aabb.min.x;
-            positive_vertex.y = (plane.y >= 0.0f) ? aabb.max.y : aabb.min.y;
-            positive_vertex.z = (plane.z >= 0.0f) ? aabb.max.z : aabb.min.z;
+            // Positive vertex (farthest along plane normal)
+            Vector3f p;
+            p.x = (plane.x >= 0.0f) ? aabb.max.x : aabb.min.x;
+            p.y = (plane.y >= 0.0f) ? aabb.max.y : aabb.min.y;
+            p.z = (plane.z >= 0.0f) ? aabb.max.z : aabb.min.z;
 
-            // If positive vertex is outside plane, AABB is outside frustum
-            float distance = plane.x * positive_vertex.x + plane.y * positive_vertex.y + 
-                           plane.z * positive_vertex.z + plane.w;
-            if (distance < 0.0f) {
+            float d_p = plane.x * p.x + plane.y * p.y + plane.z * p.z + plane.w;
+            if (d_p < -epsilon) {
+                // Entire box is outside this plane
                 return false;
             }
+
+            // Negative vertex (closest along plane normal)
+            Vector3f n;
+            n.x = (plane.x >= 0.0f) ? aabb.min.x : aabb.max.x;
+            n.y = (plane.y >= 0.0f) ? aabb.min.y : aabb.max.y;
+            n.z = (plane.z >= 0.0f) ? aabb.min.z : aabb.max.z;
+
+            // Compute d_n (not strictly needed beyond documentation); keep to aid future classification
+            // float d_n = plane.x * n.x + plane.y * n.y + plane.z * n.z + plane.w;
+            // If d_n < -epsilon the box intersects the plane but is not fully outside,
+            // so we continue testing other planes.
         }
-        return true;
+        return true; // Not outside any plane
     }
 };
 
@@ -270,7 +346,9 @@ public:
         float lod_distance_thresholds[4] = {50.0f, 100.0f, 200.0f, 400.0f}; // LOD distances
         bool enable_early_z_rejection = true;    // Use early Z testing
         bool sort_by_distance = true;            // Sort chunks by distance for rendering
-        float culling_margin = 1.0f;             // Extra margin for frustum culling
+        float culling_margin = 2.0f;             // Extra margin for frustum culling (expanded to avoid corner pop)
+        float frustum_near_bias = 2.0f;          // Shift near plane backwards by this many world units
+        float frustum_guard_band = 16.0f;        // Expand all frustum planes outward by this many world units
     };
 
     /**
@@ -302,6 +380,12 @@ public:
         view_projection_matrix_ = camera.GetViewProjectionMatrix();
         frustum_.ExtractPlanes(view_projection_matrix_);
         camera_forward_ = camera.GetForward();
+        // Apply requested near-plane bias (shift near plane backwards to avoid popping large chunks near camera)
+        frustum_.planes[Frustum::NEAR].w += config_.frustum_near_bias;
+        // Apply a uniform world-space guard band to all planes to prevent near-edge popping with large chunks
+        for (auto& plane : frustum_.planes) {
+            plane.w += config_.frustum_guard_band;
+        }
     }
 
     /**

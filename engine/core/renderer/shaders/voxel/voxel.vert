@@ -1,48 +1,44 @@
-#version 450 core
+#version 330 core
 
 // Vertex attributes
 layout(location = 0) in vec3 a_position;     // World position
 layout(location = 1) in vec3 a_normal;       // Face normal
 layout(location = 2) in vec2 a_tex_coords;   // Texture coordinates
-layout(location = 3) in float a_light_level; // Light level (0-15)
+layout(location = 3) in float a_voxel_type; // Encoded voxel type per-vertex
 layout(location = 4) in float a_ao_factor;   // Ambient occlusion factor
 
-// Uniform matrices
-layout(std140, binding = 0) uniform CameraMatrices {
-    mat4 u_view_matrix;
-    mat4 u_projection_matrix;
-    mat4 u_view_projection_matrix;
-    vec3 u_camera_position;
-    float u_near_plane;
-    float u_far_plane;
-    float u_fov;
-    vec2 u_viewport_size;
-};
+// Camera matrices
+uniform mat4 u_view_matrix;
+uniform mat4 u_projection_matrix;
+uniform mat4 u_view_projection_matrix;
+uniform vec3 u_camera_position;
+uniform float u_near_plane;
+uniform float u_far_plane;
+uniform float u_fov;
+uniform vec2 u_viewport_size;
 
 // Model matrix for chunk positioning
 uniform mat4 u_model_matrix;
 
 // Lighting uniforms
-layout(std140, binding = 1) uniform LightingData {
-    vec3 u_sun_direction;      // Direction to sun
-    vec3 u_sun_color;          // Sun light color
-    float u_sun_intensity;     // Sun light intensity
-    vec3 u_ambient_color;      // Ambient light color
-    float u_ambient_intensity; // Ambient light intensity
-    float u_gamma;             // Gamma correction value
-    bool u_enable_fog;         // Enable distance fog
-    vec3 u_fog_color;          // Fog color
-    float u_fog_density;       // Fog density
-    float u_fog_start;         // Fog start distance
-    float u_fog_end;           // Fog end distance
-};
+uniform vec3 u_sun_direction;      // Direction to sun
+uniform vec3 u_sun_color;          // Sun light color
+uniform float u_sun_intensity;     // Sun light intensity
+uniform vec3 u_ambient_color;      // Ambient light color
+uniform float u_ambient_intensity; // Ambient light intensity
+uniform float u_gamma;             // Gamma correction value
+uniform bool u_enable_fog;         // Enable distance fog
+uniform vec3 u_fog_color;          // Fog color
+uniform float u_fog_density;       // Fog density
+uniform float u_fog_start;         // Fog start distance
+uniform float u_fog_end;           // Fog end distance
 
 // Voxel rendering settings
-uniform float u_texture_scale = 1.0;        // UV scale factor
-uniform float u_time = 0.0;                 // Time for animations
-uniform bool u_enable_lighting = true;      // Enable lighting calculations
-uniform bool u_enable_shadows = false;      // Enable shadow mapping
-uniform bool u_wireframe_mode = false;      // Wireframe debugging
+uniform float u_texture_scale;        // UV scale factor
+uniform float u_time;                 // Time for animations
+uniform bool u_enable_lighting;      // Enable lighting calculations
+uniform bool u_enable_shadows;      // Enable shadow mapping
+uniform bool u_wireframe_mode;      // Wireframe debugging
 
 // Output to fragment shader
 out vec3 v_world_position;    // World space position
@@ -51,17 +47,18 @@ out vec3 v_normal;            // World space normal
 out vec2 v_tex_coords;        // Texture coordinates
 out float v_light_level;      // Interpolated light level
 out float v_ao_factor;        // Ambient occlusion factor
+flat out int v_voxel_type;    // Voxel type (flat, not interpolated)
 out float v_fog_factor;       // Fog interpolation factor
 out vec3 v_sun_light;         // Sun light contribution
 out vec3 v_ambient_light;     // Ambient light contribution
 
 void main() {
-    // Transform vertex position
+    // Transform vertex position using standard MVP pipeline
     vec4 world_pos = u_model_matrix * vec4(a_position, 1.0);
     vec4 view_pos = u_view_matrix * world_pos;
-    vec4 clip_pos = u_projection_matrix * view_pos;
     
-    gl_Position = clip_pos;
+    // ALWAYS use consistent transformation - no wireframe conditional overrides
+    gl_Position = u_projection_matrix * view_pos;
     
     // Pass world and view positions
     v_world_position = world_pos.xyz;
@@ -74,9 +71,12 @@ void main() {
     // Pass texture coordinates with scaling
     v_tex_coords = a_tex_coords * u_texture_scale;
     
-    // Pass lighting attributes
-    v_light_level = a_light_level;
+    // Pass lighting attributes (use constant full brightness for now)
+    v_light_level = 15.0; // full light level
     v_ao_factor = a_ao_factor;
+    
+    // Pass voxel type (as flat int)
+    v_voxel_type = int(a_voxel_type + 0.5);
     
     // Calculate lighting contributions
     if (u_enable_lighting) {
@@ -106,12 +106,6 @@ void main() {
         // v_fog_factor = exp(-fog_coord * fog_coord);
     } else {
         v_fog_factor = 1.0;
-    }
-    
-    // Debug wireframe mode
-    if (u_wireframe_mode) {
-        // Slightly push vertices outward along normal for wireframe visibility
-        gl_Position = u_view_projection_matrix * (world_pos + vec4(v_normal * 0.001, 0.0));
     }
 }
 

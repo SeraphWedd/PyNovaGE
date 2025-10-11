@@ -1,4 +1,4 @@
-#version 450 core
+#version 330 core
 
 // Input from vertex shader
 in vec3 v_world_position;    // World space position
@@ -7,6 +7,7 @@ in vec3 v_normal;            // World space normal
 in vec2 v_tex_coords;        // Texture coordinates
 in float v_light_level;      // Interpolated light level (0-15)
 in float v_ao_factor;        // Ambient occlusion factor
+flat in int v_voxel_type;    // Voxel type (flat)
 in float v_fog_factor;       // Fog interpolation factor
 in vec3 v_sun_light;         // Sun light contribution
 in vec3 v_ambient_light;     // Ambient light contribution
@@ -17,51 +18,47 @@ uniform sampler2D u_noise_texture;          // Noise texture for effects
 uniform sampler2D u_normal_map;             // Normal mapping (optional)
 
 // Material properties
-uniform float u_material_roughness = 0.8;   // Surface roughness
-uniform float u_material_metallic = 0.0;    // Metallic factor
-uniform float u_material_emission = 0.0;    // Emission strength
-uniform vec3 u_material_emission_color = vec3(1.0); // Emission color
+uniform float u_material_roughness;   // Surface roughness
+uniform float u_material_metallic;    // Metallic factor
+uniform float u_material_emission;    // Emission strength
+uniform vec3 u_material_emission_color; // Emission color
 
 // Voxel-specific uniforms
-uniform int u_voxel_type = 0;               // Current voxel type for texture selection
-uniform bool u_use_texture_arrays = true;   // Enable texture array sampling
-uniform float u_texture_blend_factor = 1.0; // Texture blending strength
-uniform bool u_enable_normal_mapping = false; // Enable normal mapping
-uniform float u_normal_strength = 1.0;      // Normal map intensity
+// uniform int u_voxel_type;               // Replaced by per-vertex flat v_voxel_type
+uniform bool u_use_texture_arrays;   // Enable texture array sampling
+uniform float u_texture_blend_factor; // Texture blending strength
+uniform bool u_enable_normal_mapping; // Enable normal mapping
+uniform float u_normal_strength;      // Normal map intensity
 
-// Lighting settings (matching vertex shader)
-layout(std140, binding = 1) uniform LightingData {
-    vec3 u_sun_direction;      // Direction to sun
-    vec3 u_sun_color;          // Sun light color
-    float u_sun_intensity;     // Sun light intensity
-    vec3 u_ambient_color;      // Ambient light color
-    float u_ambient_intensity; // Ambient light intensity
-    float u_gamma;             // Gamma correction value
-    bool u_enable_fog;         // Enable distance fog
-    vec3 u_fog_color;          // Fog color
-    float u_fog_density;       // Fog density
-    float u_fog_start;         // Fog start distance
-    float u_fog_end;           // Fog end distance
-};
+// Lighting settings (individual uniforms for OpenGL 3.3)
+uniform vec3 u_sun_direction;      // Direction to sun
+uniform vec3 u_sun_color;          // Sun light color
+uniform float u_sun_intensity;     // Sun light intensity
+uniform vec3 u_ambient_color;      // Ambient light color
+uniform float u_ambient_intensity; // Ambient light intensity
+uniform float u_gamma;             // Gamma correction value
+uniform bool u_enable_fog;         // Enable distance fog
+uniform vec3 u_fog_color;          // Fog color
+uniform float u_fog_density;       // Fog density
+uniform float u_fog_start;         // Fog start distance
+uniform float u_fog_end;           // Fog end distance
 
 // Camera data for calculations
-layout(std140, binding = 0) uniform CameraMatrices {
-    mat4 u_view_matrix;
-    mat4 u_projection_matrix;
-    mat4 u_view_projection_matrix;
-    vec3 u_camera_position;
-    float u_near_plane;
-    float u_far_plane;
-    float u_fov;
-    vec2 u_viewport_size;
-};
+uniform mat4 u_view_matrix;
+uniform mat4 u_projection_matrix;
+uniform mat4 u_view_projection_matrix;
+uniform vec3 u_camera_position;
+uniform float u_near_plane;
+uniform float u_far_plane;
+uniform float u_fov;
+uniform vec2 u_viewport_size;
 
 // Debug and rendering options
-uniform bool u_show_wireframe = false;      // Show wireframe overlay
-uniform bool u_show_normals = false;        // Visualize normals
-uniform bool u_show_ao = false;             // Visualize ambient occlusion
-uniform bool u_show_light_levels = false;   // Visualize light levels
-uniform vec3 u_wireframe_color = vec3(1.0, 1.0, 0.0); // Wireframe color
+uniform bool u_show_wireframe;      // Show wireframe overlay
+uniform bool u_show_normals;        // Visualize normals
+uniform bool u_show_ao;             // Visualize ambient occlusion
+uniform bool u_show_light_levels;   // Visualize light levels
+uniform vec3 u_wireframe_color; // Wireframe color
 
 // Output
 out vec4 FragColor;
@@ -114,87 +111,43 @@ float dither4x4(vec2 position, float brightness) {
     return brightness > threshold ? 1.0 : 0.0;
 }
 
+vec3 voxelAlbedo(int t) {
+    // Simple debug colors by voxel type
+    if (t == 1) return vec3(0.55, 0.55, 0.6);   // STONE
+    if (t == 2) return vec3(0.45, 0.30, 0.18);  // DIRT
+    if (t == 3) return vec3(0.15, 0.55, 0.20);  // GRASS
+    if (t == 4) return vec3(0.45, 0.3, 0.15);   // WOOD
+    if (t == 5) return vec3(0.2, 0.5, 0.2);     // LEAVES
+    return vec3(0.7); // default
+}
+
 void main() {
-    vec3 normal = normalize(v_normal);
-    vec3 view_dir = normalize(u_camera_position - v_world_position);
-    
-    // Sample base color from texture array
-    vec3 base_color;
-    if (u_use_texture_arrays) {
-        base_color = texture(u_texture_array, vec3(v_tex_coords, float(u_voxel_type))).rgb;
-    } else {
-        // Fallback solid colors based on voxel type
-        if (u_voxel_type == 1) { // Stone
-            base_color = vec3(0.5, 0.5, 0.5);
-        } else if (u_voxel_type == 2) { // Dirt  
-            base_color = vec3(0.6, 0.4, 0.2);
-        } else if (u_voxel_type == 3) { // Grass
-            base_color = vec3(0.3, 0.8, 0.3);
-        } else { // Default/unknown
-            base_color = vec3(1.0, 0.0, 1.0); // Magenta for debugging
-        }
-    }
-    
-    // Apply texture blending
-    base_color = mix(base_color, vec3(1.0), 1.0 - u_texture_blend_factor);
-    
-    // Normal mapping (if enabled)
-    if (u_enable_normal_mapping) {
-        vec3 normal_map = texture(u_normal_map, v_tex_coords).rgb * 2.0 - 1.0;
-        // Simple normal perturbation (proper tangent space would be better)
-        normal = normalize(normal + normal_map * u_normal_strength);
-    }
-    
-    // Calculate lighting
-    vec3 final_color = vec3(0.0);
-    
-    // Ambient light
-    final_color += v_ambient_light * base_color;
-    
-    // Sun light (directional)
-    final_color += calculatePBRLighting(base_color, normal, view_dir, -u_sun_direction, v_sun_light);
-    
-    // Voxel light level contribution
-    float voxel_brightness = lightLevelToBrightness(v_light_level);
-    final_color += base_color * voxel_brightness * 0.5; // Scale down to prevent overbrightening
+    // Simple voxel fragment shader with basic albedo by voxel type
+    vec3 light = v_sun_light + v_ambient_light;
+vec3 albedo = voxelAlbedo(v_voxel_type);
+    vec3 final_color = albedo * light;
     
     // Apply ambient occlusion
     final_color *= v_ao_factor;
     
-    // Add emission
-    if (u_material_emission > 0.0) {
-        final_color += u_material_emission_color * u_material_emission;
-    }
+    // Apply light level
+    float brightness = lightLevelToBrightness(v_light_level);
+    final_color *= brightness;
     
     // Apply fog
     if (u_enable_fog) {
         final_color = mix(u_fog_color, final_color, v_fog_factor);
     }
     
-    // Debug visualizations
-    if (u_show_normals) {
-        final_color = normal * 0.5 + 0.5; // Visualize normals as colors
-    } else if (u_show_ao) {
-        final_color = vec3(v_ao_factor); // Visualize AO
-    } else if (u_show_light_levels) {
-        final_color = vec3(voxel_brightness); // Visualize light levels
-    }
-    
-    // Tone mapping
-    final_color = reinhard(final_color);
-    
     // Gamma correction
     final_color = gammaCorrect(final_color, u_gamma);
     
-    FragColor = vec4(final_color, 1.0);
-    
-    // Wireframe overlay
-    if (u_show_wireframe) {
-        // Simple wireframe effect using screen-space derivatives
-        vec2 grid = abs(fract(v_tex_coords * 16.0) - 0.5);
-        float line = smoothstep(0.0, 0.05, min(grid.x, grid.y));
-        FragColor.rgb = mix(u_wireframe_color, FragColor.rgb, line);
+    // Fallback tint if something is off
+    if (length(final_color) < 0.01) {
+        final_color = vec3(0.7, 0.7, 0.7);
     }
+    
+    FragColor = vec4(final_color, 1.0);
 }
 
 // Additional fragment shader utilities for future features:

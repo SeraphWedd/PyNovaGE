@@ -3,6 +3,12 @@
 #include <algorithm>
 #include <cmath>
 #include <iostream>
+#include <set>
+#include <glad/gl.h>
+
+#ifndef PVG_VOXEL_DEBUG_LOGS
+#define PVG_VOXEL_DEBUG_LOGS 0
+#endif
 
 namespace PyNovaGE {
 namespace Renderer {
@@ -202,9 +208,27 @@ void VoxelRenderer::UpdateChunkRenderData([[maybe_unused]] const Camera& camera)
     auto world_chunks = world_->GetAllChunks();
     stats_.total_chunks = world_chunks.size();
     
+    // Track existing chunks to identify new ones
+    std::set<size_t> existing_chunk_keys;
+    for (const auto& [key, _] : chunk_render_data_) {
+        existing_chunk_keys.insert(key);
+    }
+    
     // Update existing chunks and create new ones
     for (const auto& [chunk, world_pos] : world_chunks) {
+        size_t key = WorldPositionToKey(world_pos);
+        bool is_new_chunk = existing_chunk_keys.find(key) == existing_chunk_keys.end();
+        
         ChunkRenderData& render_data = GetOrCreateChunkRenderData(world_pos);
+        
+        // Mark new chunks for remeshing immediately
+        if (is_new_chunk) {
+            render_data.needs_remesh = true;
+            render_data.last_modified_frame = current_frame_;
+#if PVG_VOXEL_DEBUG_LOGS
+            std::cout << "New chunk at (" << world_pos.x << ", " << world_pos.y << ", " << world_pos.z << ") marked for meshing" << std::endl;
+#endif
+        }
         
         // Check if chunk was modified
         if (world_->WasChunkModified(world_pos, render_data.last_modified_frame)) {
@@ -218,11 +242,69 @@ void VoxelRenderer::UpdateChunkRenderData([[maybe_unused]] const Camera& camera)
 }
 
 void VoxelRenderer::ProcessMeshQueue() {
+    size_t processed = 0;
+    
     if (!config_.enable_multithreaded_meshing) {
+        // Handle immediate meshing when multithreading is disabled
+        for (auto& [key, render_data] : chunk_render_data_) {
+            if (render_data->needs_remesh && !render_data->is_uploading && 
+                processed < config_.max_remesh_per_frame) {
+                
+                const Chunk* chunk = world_->GetChunk(render_data->world_position);
+                if (chunk) {
+#if PVG_VOXEL_DEBUG_LOGS
+                    std::cout << "Processing immediate mesh for chunk at (" 
+                              << render_data->world_position.x << ", " 
+                              << render_data->world_position.y << ", " 
+                              << render_data->world_position.z << ")" << std::endl;
+#endif
+                    
+                    // Get neighbor chunks for better meshing
+                    std::array<const Chunk*, 6> neighbors = {};
+                    const Vector3f& wp = render_data->world_position;
+                    neighbors[static_cast<size_t>(Face::LEFT)]   = world_->GetChunk(Vector3f(wp.x - CHUNK_SIZE, wp.y, wp.z));
+                    neighbors[static_cast<size_t>(Face::RIGHT)]  = world_->GetChunk(Vector3f(wp.x + CHUNK_SIZE, wp.y, wp.z));
+                    neighbors[static_cast<size_t>(Face::BOTTOM)] = world_->GetChunk(Vector3f(wp.x, wp.y - CHUNK_SIZE, wp.z));
+                    neighbors[static_cast<size_t>(Face::TOP)]    = world_->GetChunk(Vector3f(wp.x, wp.y + CHUNK_SIZE, wp.z));
+                    neighbors[static_cast<size_t>(Face::BACK)]   = world_->GetChunk(Vector3f(wp.x, wp.y, wp.z - CHUNK_SIZE));
+                    neighbors[static_cast<size_t>(Face::FRONT)]  = world_->GetChunk(Vector3f(wp.x, wp.y, wp.z + CHUNK_SIZE));
+                    
+                    // Generate mesh immediately
+                    auto mesh_data = mesher_.GenerateMeshWithNeighbors(*chunk, neighbors);
+                    
+                    // Create VoxelMesh and upload immediately
+                    if (!mesh_data.vertices.empty()) {
+                        auto mesh = std::make_unique<VoxelMesh>();
+                        
+                        // Convert Vertex to VoxelVertex if needed
+                        std::vector<VoxelVertex> voxel_vertices;
+                        voxel_vertices.reserve(mesh_data.vertices.size());
+                        for (const auto& v : mesh_data.vertices) {
+                            voxel_vertices.push_back(v);
+                        }
+                        
+                        // Upload to GPU
+                        mesh->UploadData(voxel_vertices, mesh_data.indices);
+                        
+                        // Assign to render data
+                        render_data->mesh = std::move(mesh);
+                        
+#if PVG_VOXEL_DEBUG_LOGS
+                        std::cout << "Immediate mesh completed: " << voxel_vertices.size() 
+                                  << " vertices, " << mesh_data.indices.size() << " indices" << std::endl;
+#endif
+                    }
+                    
+                    render_data->needs_remesh = false;
+                    processed++;
+                    stats_.chunks_remeshed++;
+                }
+            }
+        }
         return;
     }
     
-    size_t processed = 0;
+    // Multithreaded meshing path
     std::lock_guard<std::mutex> lock(mesh_queue_mutex_);
     
     // Add chunks that need remeshing to queue
@@ -232,12 +314,18 @@ void VoxelRenderer::ProcessMeshQueue() {
             
             const Chunk* chunk = world_->GetChunk(render_data->world_position);
             if (chunk) {
-                // Get neighbor chunks for better meshing
-                std::array<const Chunk*, 6> neighbors = {};
-                // TODO: Get actual neighbors from world
-                
-                MeshTask task(chunk, render_data->world_position, next_task_id_++);
-                task.neighbors = neighbors;
+            // Get neighbor chunks for better meshing
+            std::array<const Chunk*, 6> neighbors = {};
+            const Vector3f& wp = render_data->world_position;
+            neighbors[static_cast<size_t>(Face::LEFT)]   = world_->GetChunk(Vector3f(wp.x - CHUNK_SIZE, wp.y, wp.z));
+            neighbors[static_cast<size_t>(Face::RIGHT)]  = world_->GetChunk(Vector3f(wp.x + CHUNK_SIZE, wp.y, wp.z));
+            neighbors[static_cast<size_t>(Face::BOTTOM)] = world_->GetChunk(Vector3f(wp.x, wp.y - CHUNK_SIZE, wp.z));
+            neighbors[static_cast<size_t>(Face::TOP)]    = world_->GetChunk(Vector3f(wp.x, wp.y + CHUNK_SIZE, wp.z));
+            neighbors[static_cast<size_t>(Face::BACK)]   = world_->GetChunk(Vector3f(wp.x, wp.y, wp.z - CHUNK_SIZE));
+            neighbors[static_cast<size_t>(Face::FRONT)]  = world_->GetChunk(Vector3f(wp.x, wp.y, wp.z + CHUNK_SIZE));
+            
+            MeshTask task(chunk, render_data->world_position, next_task_id_++);
+            task.neighbors = neighbors;
                 
                 mesh_queue_.push(task);
                 render_data->needs_remesh = false;
@@ -256,9 +344,9 @@ void VoxelRenderer::UploadMeshesToGPU() {
         completed_meshes_.pop();
         
         // Find the corresponding chunk render data
-        // Simple approach: find first chunk that needs_remesh and has no mesh
+        // Look for chunks that have no mesh (regardless of needs_remesh flag)
         for (auto& [key, render_data] : chunk_render_data_) {
-            if (!render_data->mesh && render_data->needs_remesh) {
+            if (!render_data->mesh) {
                 // Create VoxelMesh from mesh_data
                 if (!mesh_data.vertices.empty()) {
                     auto mesh = std::make_unique<VoxelMesh>();
@@ -324,16 +412,29 @@ std::vector<ChunkRenderData*> VoxelRenderer::CullChunks([[maybe_unused]] const C
 
 void VoxelRenderer::RenderChunks(const std::vector<ChunkRenderData*>& chunks, const Camera& camera) {
     if (chunks.empty()) {
+#if PVG_VOXEL_DEBUG_LOGS
+        std::cout << "RenderChunks: No chunks to render!" << std::endl;
+#endif
         return;
     }
+    
+#if PVG_VOXEL_DEBUG_LOGS
+    std::cout << "RenderChunks: Rendering " << chunks.size() << " chunks" << std::endl;
+#endif
     
     // Get shader program
     auto* shader = shader_manager_.GetShaderProgram(VoxelShaderManager::ShaderPreset::Standard);
     if (!shader || !shader->IsValid()) {
+#if PVG_VOXEL_DEBUG_LOGS
+        std::cout << "RenderChunks: Shader program is invalid!" << std::endl;
+#endif
         return;
     }
     
     shader->Use();
+#if PVG_VOXEL_DEBUG_LOGS
+    std::cout << "RenderChunks: Shader activated" << std::endl;
+#endif
     
     // Set per-frame uniforms
     VoxelShaderManager::CameraMatrices camera_matrices{};
@@ -347,60 +448,247 @@ void VoxelRenderer::RenderChunks(const std::vector<ChunkRenderData*>& chunks, co
     // TODO: Get viewport size from somewhere
     camera_matrices.viewport_size = Vector2f(1920.0f, 1080.0f);
     
-    shader_manager_.UpdateCameraMatrices(camera_matrices);
+    // Debug: Print camera settings once
+    static bool first_frame_debug = true;
+#if !PVG_VOXEL_DEBUG_LOGS
+    (void)first_frame_debug;
+#endif
+#if PVG_VOXEL_DEBUG_LOGS
+    if (first_frame_debug) {
+        std::cout << "=== CAMERA DEBUG INFO ===" << std::endl;
+        std::cout << "Camera position: (" << camera_matrices.camera_position.x << ", "
+                  << camera_matrices.camera_position.y << ", " << camera_matrices.camera_position.z << ")" << std::endl;
+        std::cout << "Camera FOV: " << camera_matrices.fov << " degrees" << std::endl;
+        std::cout << "Near/Far planes: " << camera_matrices.near_plane << " / " << camera_matrices.far_plane << std::endl;
+        
+        // Debug: Print projection matrix
+        const float* proj = camera_matrices.projection_matrix.data.data();
+        std::cout << "Projection matrix:" << std::endl;
+        for (int row = 0; row < 4; ++row) {
+            std::cout << "  [" << proj[row*4+0] << ", " << proj[row*4+1] << ", " << proj[row*4+2] << ", " << proj[row*4+3] << "]" << std::endl;
+        }
+        
+        // Debug: Print view matrix
+        const float* view = camera_matrices.view_matrix.data.data();
+        std::cout << "View matrix:" << std::endl;
+        for (int row = 0; row < 4; ++row) {
+            std::cout << "  [" << view[row*4+0] << ", " << view[row*4+1] << ", " << view[row*4+2] << ", " << view[row*4+3] << "]" << std::endl;
+        }
+        
+        first_frame_debug = false;
+    }
+#endif
     
-    // Set lighting uniforms
-    VoxelShaderManager::LightingData lighting{};
-    lighting.sun_direction = Vector3f(-0.3f, -0.7f, -0.2f).normalized();
-    lighting.sun_color = Vector3f(1.0f, 0.95f, 0.8f);
-    lighting.sun_intensity = 1.0f;
-    lighting.ambient_color = Vector3f(0.4f, 0.4f, 0.6f);
-    lighting.ambient_intensity = 0.3f;
-    lighting.gamma = 2.2f;
-    lighting.enable_fog = true;
-    lighting.fog_color = Vector3f(0.7f, 0.8f, 1.0f);
-    lighting.fog_density = 0.02f;
-    lighting.fog_start = 100.0f;
-    lighting.fog_end = config_.max_render_distance;
+    // Set camera matrix uniforms individually
+    shader->SetUniform("u_view_matrix", camera_matrices.view_matrix);
+    shader->SetUniform("u_projection_matrix", camera_matrices.projection_matrix);
+    shader->SetUniform("u_view_projection_matrix", camera_matrices.view_projection_matrix);
+    shader->SetUniform("u_camera_position", camera_matrices.camera_position);
+    shader->SetUniform("u_near_plane", camera_matrices.near_plane);
+    shader->SetUniform("u_far_plane", camera_matrices.far_plane);
+    shader->SetUniform("u_fov", camera_matrices.fov);
+    shader->SetUniform("u_viewport_size", camera_matrices.viewport_size);
     
-    shader_manager_.UpdateLightingData(lighting);
+    // Set lighting uniforms individually
+    Vector3f sun_direction = Vector3f(-0.3f, -0.7f, -0.2f).normalized();
+    Vector3f sun_color = Vector3f(1.0f, 0.95f, 0.8f);
+    float sun_intensity = 1.0f;
+    Vector3f ambient_color = Vector3f(0.4f, 0.4f, 0.6f);
+    float ambient_intensity = 0.3f;
+    float gamma = 2.2f;
+    bool enable_fog = true;
+    Vector3f fog_color = Vector3f(0.7f, 0.8f, 1.0f);
+    float fog_density = 0.02f;
+    float fog_start = 100.0f;
+    float fog_end = config_.max_render_distance;
+    
+    shader->SetUniform("u_sun_direction", sun_direction);
+    shader->SetUniform("u_sun_color", sun_color);
+    shader->SetUniform("u_sun_intensity", sun_intensity);
+    shader->SetUniform("u_ambient_color", ambient_color);
+    shader->SetUniform("u_ambient_intensity", ambient_intensity);
+    shader->SetUniform("u_gamma", gamma);
+    shader->SetUniform("u_enable_fog", enable_fog);
+    shader->SetUniform("u_fog_color", fog_color);
+    shader->SetUniform("u_fog_density", fog_density);
+    shader->SetUniform("u_fog_start", fog_start);
+    shader->SetUniform("u_fog_end", fog_end);
+    
+    // Set per-scene uniforms (once per frame)
+    shader->SetUniform("u_use_texture_arrays", false);  // Disable texture arrays for now
+    shader->SetUniform("u_texture_blend_factor", 1.0f);
+    shader->SetUniform("u_enable_normal_mapping", false);
+    shader->SetUniform("u_normal_strength", 1.0f);
+    shader->SetUniform("u_material_roughness", 0.8f);
+    shader->SetUniform("u_material_metallic", 0.0f);
+    shader->SetUniform("u_material_emission", 0.0f);
+    shader->SetUniform("u_material_emission_color", Vector3f(1.0f, 1.0f, 1.0f));
+    shader->SetUniform("u_texture_scale", 1.0f);
+    shader->SetUniform("u_time", 0.0f);
+    shader->SetUniform("u_enable_lighting", true);
+    shader->SetUniform("u_enable_shadows", false);
+    shader->SetUniform("u_wireframe_mode", false);  // Disable wireframe mode - use solid rendering
+    shader->SetUniform("u_show_wireframe", false);  // Disable wireframe overlay
+    shader->SetUniform("u_show_normals", false);
+    shader->SetUniform("u_show_ao", false);
+    shader->SetUniform("u_show_light_levels", false);
+    shader->SetUniform("u_wireframe_color", Vector3f(1.0f, 1.0f, 0.0f)); // Bright yellow wireframe
+    
+    // Debug: Log wireframe mode
+#if PVG_VOXEL_DEBUG_LOGS
+    if (first_frame_debug) {
+        std::cout << "Shader wireframe mode: DISABLED (solid rendering)" << std::endl;
+    }
+#endif
     
     // Render each chunk
+    static int debug_chunk_prints = 0;
     for (ChunkRenderData* render_data : chunks) {
         if (!render_data->mesh) continue;
         
         // Set model matrix for chunk position
-        Matrix4f model_matrix = Matrix4f::Identity();
-        float* m_data = model_matrix.data.data();
-        m_data[12] = render_data->world_position.x;
-        m_data[13] = render_data->world_position.y;
-        m_data[14] = render_data->world_position.z;
+        // Build model matrix with correct row-major translation
+        Matrix4f model_matrix = Matrix4f::Translation(
+            render_data->world_position.x,
+            render_data->world_position.y,
+            render_data->world_position.z);
+        
+        if (debug_chunk_prints < 5) {
+            std::cout << "Rendering chunk at world pos: (" << render_data->world_position.x << ", "
+                      << render_data->world_position.y << ", " << render_data->world_position.z << ")" << std::endl;
+            std::cout << "  Model matrix translation: [0,3]="  << model_matrix.at(0,3)
+                      << ", [1,3]=" << model_matrix.at(1,3)
+                      << ", [2,3]=" << model_matrix.at(2,3) << std::endl;
+            
+            // Debug: Calculate where a test vertex should end up in NDC space
+            // Let's test a vertex at the center of this chunk
+            Vector3f test_vertex = render_data->world_position + Vector3f(8.0f, 8.0f, 8.0f); // Center of 16x16x16 chunk
+            
+            // Transform to clip space
+            Matrix4f mvp = camera_matrices.view_projection_matrix * model_matrix;
+            const float* mvp_data = mvp.data.data();
+            
+            // Manual matrix-vector multiply for row-major storage
+            float clip_x = mvp_data[0]*test_vertex.x + mvp_data[1]*test_vertex.y + mvp_data[2]*test_vertex.z + mvp_data[3];
+            float clip_y = mvp_data[4]*test_vertex.x + mvp_data[5]*test_vertex.y + mvp_data[6]*test_vertex.z + mvp_data[7];
+            float clip_z = mvp_data[8]*test_vertex.x + mvp_data[9]*test_vertex.y + mvp_data[10]*test_vertex.z + mvp_data[11];
+            float clip_w = mvp_data[12]*test_vertex.x + mvp_data[13]*test_vertex.y + mvp_data[14]*test_vertex.z + mvp_data[15];
+            
+            // NDC coords
+            float ndc_x = clip_w != 0.0f ? clip_x / clip_w : clip_x;
+            float ndc_y = clip_w != 0.0f ? clip_y / clip_w : clip_y;
+            float ndc_z = clip_w != 0.0f ? clip_z / clip_w : clip_z;
+            
+            std::cout << "  Test vertex world pos: (" << test_vertex.x << ", " << test_vertex.y << ", " << test_vertex.z << ")" << std::endl;
+            std::cout << "  Clip coords: (" << clip_x << ", " << clip_y << ", " << clip_z << ", " << clip_w << ")" << std::endl;
+            std::cout << "  NDC coords: (" << ndc_x << ", " << ndc_y << ", " << ndc_z << ")" << std::endl;
+            if (ndc_x >= -1.0f && ndc_x <= 1.0f && ndc_y >= -1.0f && ndc_y <= 1.0f && ndc_z >= -1.0f && ndc_z <= 1.0f) {
+                std::cout << "  -> VERTEX SHOULD BE VISIBLE" << std::endl;
+            } else {
+                std::cout << "  -> VERTEX IS OUTSIDE VIEW FRUSTUM" << std::endl;
+            }
+            
+            debug_chunk_prints++;
+        }
         
         shader->SetUniform("u_model_matrix", model_matrix);
         
+        // Set per-chunk uniforms
+        shader->SetUniform("u_voxel_type", 1);  // Default to stone type
+        
         // Bind and draw mesh
+        if (debug_chunk_prints < 5) {
+            std::cout << "  Binding and drawing mesh..." << std::endl;
+        }
         render_data->mesh->Bind();
+        
+        // Check for OpenGL errors before draw
+        GLenum error = glGetError();
+        if (error != GL_NO_ERROR && debug_chunk_prints < 5) {
+            std::cout << "  OpenGL error before draw: " << error << std::endl;
+        }
+        
         render_data->mesh->Draw();
+        
+        // Check for OpenGL errors after draw
+        error = glGetError();
+        if (error != GL_NO_ERROR && debug_chunk_prints < 5) {
+            std::cout << "  OpenGL error after draw: " << error << std::endl;
+        }
+        
+        if (debug_chunk_prints < 5 && debug_chunk_prints >= 0) {
+            std::cout << "  Mesh draw complete" << std::endl;
+        }
         
         stats_.draw_calls++;
         // TODO: Update vertex/index counts from mesh data
     }
     
     stats_.rendered_chunks = chunks.size();
+    
 }
 
 void VoxelRenderer::SetupRenderState([[maybe_unused]] const Camera& camera) {
-    // TODO: Setup OpenGL state for voxel rendering
-    // - Enable depth testing
-    // - Set blending mode
-    // - Configure face culling
-    // - Bind texture arrays
+    // Enable depth testing for proper 3D rendering
+    glEnable(GL_DEPTH_TEST);
+    glDepthFunc(GL_LESS);
+#if PVG_VOXEL_DEBUG_LOGS
+    std::cout << "SetupRenderState: Depth testing ENABLED" << std::endl;
+#endif
+    
+    // TEMPORARILY disable face culling to check if geometry is being culled incorrectly
+    glDisable(GL_CULL_FACE);
+    
+    // Ensure OpenGL front face is set to counter-clockwise (default)
+    glFrontFace(GL_CCW);
+    
+    // Debug: Check current OpenGL state
+#if PVG_VOXEL_DEBUG_LOGS
+    GLboolean culling_enabled = glIsEnabled(GL_CULL_FACE);
+    GLint front_face;
+    glGetIntegerv(GL_FRONT_FACE, &front_face);
+    std::cout << "SetupRenderState: Face culling " << (culling_enabled ? "ENABLED" : "DISABLED") << " for debugging" << std::endl;
+    std::cout << "SetupRenderState: Front face = " << (front_face == GL_CCW ? "GL_CCW" : "GL_CW") << std::endl;
+#endif
+    
+    // Disable blending for solid voxels (enable for transparent ones later)
+    glDisable(GL_BLEND);
+    
+    // Enable polygon offset to avoid z-fighting
+    glEnable(GL_POLYGON_OFFSET_FILL);
+    glPolygonOffset(1.0f, 1.0f);
+    
+    // Ensure proper viewport and scissor settings
+    // Note: Viewport should be set by the main renderer, but we'll ensure it's not clipped
+    glDisable(GL_SCISSOR_TEST);
+    
+    // Debug: Print viewport information
+    GLint viewport[4];
+    glGetIntegerv(GL_VIEWPORT, viewport);
+#if PVG_VOXEL_DEBUG_LOGS
+    std::cout << "SetupRenderState: Viewport = (" << viewport[0] << ", " << viewport[1] 
+              << ", " << viewport[2] << ", " << viewport[3] << ")" << std::endl;
+#endif
+    
+    // Store previous OpenGL state if needed for restoration
+    // (For now, we'll just set what we need)
 }
 
 void VoxelRenderer::CleanupRenderState() {
-    // TODO: Restore previous OpenGL state
-    // - Unbind textures
-    // - Reset shader program
+    // Unbind shader program
+    glUseProgram(0);
+    
+    // Unbind VAO
+    glBindVertexArray(0);
+    
+    // Unbind any textures (when we add texture support)
+    // glBindTexture(GL_TEXTURE_2D, 0);
+    
+    // Restore default OpenGL state if needed
+    // For now, leave depth testing enabled as it's commonly needed
+    // glDisable(GL_DEPTH_TEST);
+    // glDisable(GL_CULL_FACE);
+    // glDisable(GL_POLYGON_OFFSET_FILL);
 }
 
 void VoxelRenderer::GenerateMesh(const MeshTask& task) {
