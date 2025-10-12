@@ -26,7 +26,7 @@ target_include_directories(audio_tests
         ../include
         ../../asset/include
         ../../../foundation/math/include
-        ${OpenAL_INCLUDE_DIRS}
+        ${OPENAL_INCLUDE_DIRS}
 )
 
 # Link libraries
@@ -37,7 +37,7 @@ target_link_libraries(audio_tests
         math
         gtest
         gtest_main
-        ${OpenAL_LIBRARIES}
+        ${OPENAL_LIBRARIES}
 )
 
 # Add test to CTest

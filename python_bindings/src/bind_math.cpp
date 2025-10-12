@@ -160,6 +160,16 @@ void bind_math(py::module& m) {
         .def_readwrite("y", &PyNovaGE::Vector4f::y)
         .def_readwrite("z", &PyNovaGE::Vector4f::z)
         .def_readwrite("w", &PyNovaGE::Vector4f::w)
+        // Color component aliases
+        .def_readwrite("r", &PyNovaGE::Vector4f::r)
+        .def_readwrite("g", &PyNovaGE::Vector4f::g)
+        .def_readwrite("b", &PyNovaGE::Vector4f::b)
+        .def_readwrite("a", &PyNovaGE::Vector4f::a)
+        // Texture coordinate aliases
+        .def_readwrite("s", &PyNovaGE::Vector4f::s)
+        .def_readwrite("t", &PyNovaGE::Vector4f::t)
+        .def_readwrite("p", &PyNovaGE::Vector4f::p)
+        .def_readwrite("q", &PyNovaGE::Vector4f::q)
         .def(py::self + py::self)
         .def(py::self - py::self)
         .def(py::self * py::self)

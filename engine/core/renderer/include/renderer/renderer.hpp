@@ -170,6 +170,16 @@ public:
      * @return true if no errors, false if errors were found
      */
     static bool CheckGLError(const std::string& operation = "");
+    
+    /**
+     * @brief Read pixels from the framebuffer
+     * @param x X coordinate to start reading from
+     * @param y Y coordinate to start reading from
+     * @param width Width of the region to read
+     * @param height Height of the region to read
+     * @param data Output buffer for pixel data (RGBA format)
+     */
+    static void ReadPixels(int x, int y, int width, int height, unsigned char* data);
 
 private:
     Renderer() = delete;

@@ -49,6 +49,12 @@ void main() {
     int texIndex = int(v_textureIndex);
     vec4 texColor = vec4(1.0); // Default white
     
+    // Handle non-textured primitives (texture index -1)
+    if (texIndex < 0) {
+        fragColor = v_color; // Use vertex color directly for primitives
+        return;
+    }
+    
     // Sample from the appropriate texture
     if (texIndex == 0) texColor = texture(u_textures[0], v_texCoords);
     else if (texIndex == 1) texColor = texture(u_textures[1], v_texCoords);
@@ -187,7 +193,11 @@ bool BatchRenderer::AddSprite(const Sprite& sprite) {
 }
 
 void BatchRenderer::FlushBatch() {
-    if (!batch_started_ || current_sprite_count_ == 0) {
+    // NOTE: Previously this early-exited when current_sprite_count_ == 0.
+    // That prevented rendering when a batch contained only primitives
+    // (rects/lines/circles) because those do not increment sprite count.
+    // Use actual geometry presence instead.
+    if (!batch_started_ || vertices_.empty() || indices_.empty()) {
         return; // Nothing to flush
     }
     
@@ -442,7 +452,8 @@ static void PushQuad(std::vector<BatchVertex>& vertices,
 
 static inline Vector3f ScreenToNDC(float x, float y, int screenW, int screenH) {
     float nx = (x / static_cast<float>(screenW)) * 2.0f - 1.0f;
-    float ny = (y / static_cast<float>(screenH)) * 2.0f - 1.0f;
+    // Flip Y coordinate: screen (0,0) = top-left, NDC (-1,-1) = bottom-left
+    float ny = 1.0f - (y / static_cast<float>(screenH)) * 2.0f;
     return {nx, ny, 0.0f};
 }
 

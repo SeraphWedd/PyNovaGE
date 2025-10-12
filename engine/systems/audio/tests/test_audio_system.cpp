@@ -15,7 +15,7 @@ class AudioSystemTest : public ::testing::Test {
 protected:
     void SetUp() override {
         // Initialize asset manager for audio clip loading
-        asset_manager_ = std::make_unique<Asset::AssetManager>();
+        asset_manager_ = &Asset::AssetManager::Instance();
         asset_manager_->Initialize("test_assets/");
         
         // Create test WAV data
@@ -76,7 +76,7 @@ protected:
     
     bool initialized_ = false;
     AudioSystem* audio_system_ = nullptr;
-    std::unique_ptr<Asset::AssetManager> asset_manager_;
+    Asset::AssetManager* asset_manager_ = nullptr;
     const float EPSILON = 1e-6f;
 };
 

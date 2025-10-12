@@ -68,6 +68,42 @@ void bind_particles(py::module_ &m) {
         .def_readwrite("count", &PyNovaGE::Particles::EmissionBurst::count)
         .def_readwrite("probability", &PyNovaGE::Particles::EmissionBurst::probability);
     
+    // Bind nested anonymous structs of EmitterConfig via decltype type aliases
+    using EmitterInitial = decltype(PyNovaGE::Particles::EmitterConfig::initial);
+    using EmitterAnimation = decltype(PyNovaGE::Particles::EmitterConfig::animation);
+
+    // EmitterConfig.Initial binding
+    py::class_<EmitterInitial>(particles_module, "EmitterInitial")
+        .def(py::init<>())
+        .def_readwrite("position_min", &EmitterInitial::position_min)
+        .def_readwrite("position_max", &EmitterInitial::position_max)
+        .def_readwrite("velocity_min", &EmitterInitial::velocity_min)
+        .def_readwrite("velocity_max", &EmitterInitial::velocity_max)
+        .def_readwrite("rotation_min", &EmitterInitial::rotation_min)
+        .def_readwrite("rotation_max", &EmitterInitial::rotation_max)
+        .def_readwrite("angular_velocity_min", &EmitterInitial::angular_velocity_min)
+        .def_readwrite("angular_velocity_max", &EmitterInitial::angular_velocity_max)
+        .def_readwrite("size_min", &EmitterInitial::size_min)
+        .def_readwrite("size_max", &EmitterInitial::size_max)
+        .def_readwrite("color_min", &EmitterInitial::color_min)
+        .def_readwrite("color_max", &EmitterInitial::color_max)
+        .def_readwrite("lifetime_min", &EmitterInitial::lifetime_min)
+        .def_readwrite("lifetime_max", &EmitterInitial::lifetime_max)
+        .def_readwrite("acceleration_min", &EmitterInitial::acceleration_min)
+        .def_readwrite("acceleration_max", &EmitterInitial::acceleration_max)
+        .def_readwrite("mass_min", &EmitterInitial::mass_min)
+        .def_readwrite("mass_max", &EmitterInitial::mass_max)
+        .def_readwrite("drag_min", &EmitterInitial::drag_min)
+        .def_readwrite("drag_max", &EmitterInitial::drag_max);
+
+    // EmitterConfig.Animation binding
+    py::class_<EmitterAnimation>(particles_module, "EmitterAnimation")
+        .def(py::init<>())
+        .def_readwrite("size_start", &EmitterAnimation::size_start)
+        .def_readwrite("size_end", &EmitterAnimation::size_end)
+        .def_readwrite("color_start", &EmitterAnimation::color_start)
+        .def_readwrite("color_end", &EmitterAnimation::color_end);
+
     // EmitterConfig struct  
     py::class_<PyNovaGE::Particles::EmitterConfig>(particles_module, "EmitterConfig")
         .def(py::init<>())

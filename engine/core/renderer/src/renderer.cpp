@@ -237,6 +237,22 @@ std::string Renderer::GetRendererInfo() {
     return info.str();
 }
 
+void Renderer::ReadPixels(int x, int y, int width, int height, unsigned char* data) {
+    if (!s_initialized_) {
+        std::cerr << "Renderer not initialized for ReadPixels!" << std::endl;
+        return;
+    }
+    
+    if (!data) {
+        std::cerr << "ReadPixels: data buffer is null!" << std::endl;
+        return;
+    }
+    
+    // Read pixels from the current framebuffer
+    glReadPixels(x, y, width, height, GL_RGBA, GL_UNSIGNED_BYTE, data);
+    CheckGLError("ReadPixels");
+}
+
 bool Renderer::CheckGLError(const std::string& operation) {
     GLenum error = glGetError();
     if (error != GL_NO_ERROR) {

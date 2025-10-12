@@ -119,8 +119,12 @@ def display_set_mode(size, flags=0, depth=32, display=0):
     config.title = "PyNovaGE Game"
     config.resizable = True
     config.vsync = True
+    config.visible = True  # Ensure window is visible
     
     _window = pynovage_core.window.Window(config)
+    
+    # Explicitly ensure window is shown
+    _window.show()
     
     # Initialize renderer
     renderer_config = pynovage_core.renderer.RendererConfig()
@@ -132,6 +136,11 @@ def display_set_mode(size, flags=0, depth=32, display=0):
     # Set viewport to match window
     window_size = _window.get_framebuffer_size()
     _screen_size = (int(window_size.x), int(window_size.y))
+    print(f"Setting viewport: 0, 0, {window_size.x}, {window_size.y}")
+    print(f"Window is visible: {not _window.is_minimized()}")
+    print(f"Window is focused: {_window.is_focused()}")
+    print(f"Window size: {_window.get_size()}")
+    print(f"Framebuffer size: {window_size}")
     pynovage_core.renderer.set_viewport(0, 0, window_size.x, window_size.y)
     
     # Initialize input manager
@@ -142,7 +151,8 @@ def display_set_mode(size, flags=0, depth=32, display=0):
     
     # Begin first frame and start a batch
     pynovage_core.renderer.begin_frame()
-    br = pynovage_core.renderer.get_batch_renderer()
+    import pynovage
+    br = pynovage.renderer.get_batch_renderer()
     if br:
         br.begin_batch()
         _batch_started = True
@@ -154,9 +164,11 @@ def display_flip():
     if _window:
         # End the current batch before finishing the frame
         global _batch_started
-        br = pynovage_core.renderer.get_batch_renderer()
+        import pynovage
+        br = pynovage.renderer.get_batch_renderer()
         if br and _batch_started:
             br.end_batch()
+            br.flush_batch()
             _batch_started = False
         
         # End the frame and swap buffers
@@ -253,7 +265,8 @@ def draw_rect(surface, color, rect, width=0):
     
     # If drawing to the screen, use the batch renderer primitives
     if surface == _screen_surface:
-        br = pynovage_core.renderer.get_batch_renderer()
+        import pynovage
+        br = pynovage.renderer.get_batch_renderer()
         if not br:
             return
         screen_w, screen_h = _screen_size
@@ -295,7 +308,8 @@ def draw_line(surface, color, start_pos, end_pos, width=1):
         color = Color(color)
     
     if surface == _screen_surface:
-        br = pynovage_core.renderer.get_batch_renderer()
+        import pynovage
+        br = pynovage.renderer.get_batch_renderer()
         if not br:
             return
         screen_w, screen_h = _screen_size
@@ -323,7 +337,8 @@ def draw_polygon(surface, color, points, width=0):
         color = Color(color)
     
     if surface == _screen_surface and points:
-        br = pynovage_core.renderer.get_batch_renderer()
+        import pynovage
+        br = pynovage.renderer.get_batch_renderer()
         if not br:
             return
         screen_w, screen_h = _screen_size
@@ -358,7 +373,8 @@ def draw_circle(surface, color, center, radius, width=0):
         color = Color(color)
     
     if surface == _screen_surface:
-        br = pynovage_core.renderer.get_batch_renderer()
+        import pynovage
+        br = pynovage.renderer.get_batch_renderer()
         if not br:
             return
         screen_w, screen_h = _screen_size
@@ -398,7 +414,16 @@ def fill_screen(color):
     if not isinstance(color, Color):
         color = Color(color)
     
-    # Use renderer to clear with color
+    # Try alternative approach: Use batch renderer to draw a full-screen rectangle
+    import pynovage
+    br = pynovage.renderer.get_batch_renderer()
+    if br:
+        screen_w, screen_h = _screen_size
+        # Draw a full-screen rectangle
+        br.add_rect_screen(0.0, 0.0, float(screen_w), float(screen_h), 
+                          int(screen_w), int(screen_h), color.to_vector4f())
+    
+    # Also try the original clear command in case it works
     pynovage_core.renderer.clear(color.to_vector4f())
 
 def blit_surface(dest, source, dest_pos, source_area=None):

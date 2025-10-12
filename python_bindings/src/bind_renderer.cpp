@@ -81,6 +81,12 @@ void bind_renderer(py::module& m) {
     renderer_module.def("get_renderer_info", &PyNovaGE::Renderer::Renderer::GetRendererInfo);
     renderer_module.def("check_gl_error", &PyNovaGE::Renderer::Renderer::CheckGLError,
                        py::arg("operation") = "");
+    renderer_module.def("read_pixels", [](int x, int y, int width, int height) {
+        std::vector<unsigned char> data(width * height * 4);
+        PyNovaGE::Renderer::Renderer::ReadPixels(x, y, width, height, data.data());
+        return py::bytes(reinterpret_cast<const char*>(data.data()), data.size());
+    }, py::arg("x"), py::arg("y"), py::arg("width"), py::arg("height"),
+    "Read pixels from framebuffer as RGBA bytes");
     // Renderer instances
     renderer_module.def("get_sprite_renderer", &PyNovaGE::Renderer::Renderer::GetSpriteRenderer,
                        py::return_value_policy::reference);

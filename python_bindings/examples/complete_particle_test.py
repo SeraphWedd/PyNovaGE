@@ -61,10 +61,11 @@ def test_particle_init_data():
         init_data.lifetime = 2.5
         init_data.drag = 0.1
         
-        assert init_data.position.x == 50
-        assert init_data.color.y == 0.8  # Vector4 uses x,y,z,w not r,g,b,a
-        assert init_data.lifetime == 2.5
-        assert init_data.drag == 0.1
+        # Use floating point tolerance and correct component access
+        assert abs(init_data.position.x - 50.0) < 0.001
+        assert abs(init_data.color.g - 0.8) < 0.001  # Using g component for green
+        assert abs(init_data.lifetime - 2.5) < 0.001
+        assert abs(init_data.drag - 0.1) < 0.001
         
         print("  ✅ Particle init data works")
         return True
@@ -86,9 +87,9 @@ def test_emission_config():
         
         # Create emission burst
         burst = pynovage.particles.EmissionBurst(1.0, 20, 0.8)  # time=1.0s, count=20, probability=0.8
-        assert burst.time == 1.0
+        assert abs(burst.time - 1.0) < 0.001
         assert burst.count == 20
-        assert burst.probability == 0.8
+        assert abs(burst.probability - 0.8) < 0.001
         
         # Create emitter config
         config = pynovage.particles.EmitterConfig()
@@ -101,18 +102,23 @@ def test_emission_config():
         config.shape_data = pynovage.math.Vector2(25, 25)  # radius
         config.gravity = pynovage.math.Vector2(0, -98.1)
         
-        # Add burst to config (may not be fully functional due to nested structures)
-        try:
-            config.bursts = [burst]
-            assert len(config.bursts) == 1
-        except:
-            # Skip nested structure test for now
-            pass
+        # Add burst to config - should work now
+        config.bursts = [burst]
+        assert len(config.bursts) == 1
         
-        assert config.position.x == 300
-        assert config.emission_rate == 50.0
+        # Test nested struct access - should work now
+        config.initial.position_min = pynovage.math.Vector2(-10, -10)
+        config.initial.position_max = pynovage.math.Vector2(10, 10)
+        config.animation.size_start = 2.0
+        config.animation.size_end = 0.5
+        
+        # Verify values with floating point tolerance
+        assert abs(config.position.x - 300.0) < 0.001
+        assert abs(config.emission_rate - 50.0) < 0.001
         assert config.shape == pynovage.particles.EmissionShape.Circle
-        assert config.gravity.y == -98.1
+        assert abs(config.gravity.y - (-98.1)) < 0.001
+        assert abs(config.initial.position_max.x - 10.0) < 0.001
+        assert abs(config.animation.size_start - 2.0) < 0.001
         
         print("  ✅ Emitter configuration works")
         return True
