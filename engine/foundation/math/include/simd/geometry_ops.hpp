@@ -22,6 +22,7 @@
 #include "types.hpp"
 #include "vector_ops.hpp"
 #include "matrix_ops.hpp"
+#include <limits>
 
 namespace PyNovaGE {
 namespace SIMD {
@@ -217,21 +218,33 @@ public:
 
     // Intersect ray with AABB
     bool intersects(const AABB<T>& box, T& t) const {
-        Vector<T, 3> dirfrac(T(1) / direction[0], T(1) / direction[1], T(1) / direction[2]);
+        T tmin = T(0);
+        T tmax = std::numeric_limits<T>::max();
         
-        T t1 = (box.min[0] - origin[0]) * dirfrac[0];
-        T t2 = (box.max[0] - origin[0]) * dirfrac[0];
-        T t3 = (box.min[1] - origin[1]) * dirfrac[1];
-        T t4 = (box.max[1] - origin[1]) * dirfrac[1];
-        T t5 = (box.min[2] - origin[2]) * dirfrac[2];
-        T t6 = (box.max[2] - origin[2]) * dirfrac[2];
-
-        T tmin = std::max(std::max(std::min(t1, t2), std::min(t3, t4)), std::min(t5, t6));
-        T tmax = std::min(std::min(std::max(t1, t2), std::max(t3, t4)), std::max(t5, t6));
-
+        for (int i = 0; i < 3; ++i) {
+            if (std::abs(direction[i]) < T(1e-8)) {
+                // Ray is parallel to slab - check if origin is within slab bounds
+                if (origin[i] < box.min[i] || origin[i] > box.max[i]) {
+                    return false;
+                }
+            } else {
+                // Compute intersection t values
+                T ood = T(1) / direction[i];
+                T t1 = (box.min[i] - origin[i]) * ood;
+                T t2 = (box.max[i] - origin[i]) * ood;
+                
+                if (t1 > t2) std::swap(t1, t2);
+                
+                tmin = std::max(tmin, t1);
+                tmax = std::min(tmax, t2);
+                
+                if (tmin > tmax) return false;
+            }
+        }
+        
         // Ray intersection occurs when tmax >= tmin and tmax >= 0
-        if (tmax < T(0) || tmin > tmax) return false;
-
+        if (tmax < T(0)) return false;
+        
         t = tmin < T(0) ? tmax : tmin;
         return true;
     }

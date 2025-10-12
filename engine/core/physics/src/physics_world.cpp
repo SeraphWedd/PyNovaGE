@@ -271,7 +271,8 @@ PhysicsWorld::RaycastHit PhysicsWorld::raycast(const Vector2<float>& start, cons
         return result; // Invalid ray
     }
     
-    direction = safeDivide(direction, maxDistance);
+    // Normalize direction
+    direction = direction / maxDistance;
     result.distance = maxDistance;
     
     // Simple raycast against all body AABBs
@@ -285,7 +286,7 @@ PhysicsWorld::RaycastHit PhysicsWorld::raycast(const Vector2<float>& start, cons
         );
         
         float t;
-        if (ray.intersects(bounds, t) && t < result.distance && t >= 0.0f) {
+        if (ray.intersects(bounds, t) && t <= result.distance && t >= 0.0f) {
             result.hasHit = true;
             result.distance = t;
             result.point = start + direction * t;
