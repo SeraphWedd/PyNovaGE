@@ -17,6 +17,7 @@ RendererConfig Renderer::s_config_;
 RenderStats Renderer::s_stats_;
 std::unique_ptr<SpriteRenderer> Renderer::s_sprite_renderer_;
 std::unique_ptr<BatchRenderer> Renderer::s_batch_renderer_;
+Vector2f Renderer::s_projection_scale_{1.0f, 1.0f};
 
 bool Renderer::Initialize(const RendererConfig& config) {
     if (s_initialized_) {
@@ -138,6 +139,14 @@ void Renderer::EndFrame() {
 void Renderer::SetViewport(int x, int y, int width, int height) {
     glViewport(x, y, width, height);
     CheckGLError("SetViewport");
+}
+
+void Renderer::SetProjectionScale(const Vector2f& scale) {
+    s_projection_scale_ = scale;
+}
+
+const Vector2f& Renderer::GetProjectionScale() {
+    return s_projection_scale_;
 }
 
 void Renderer::Clear(const Vector4f& color) {

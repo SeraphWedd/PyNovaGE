@@ -5,6 +5,8 @@
 #include <vectors/vector4.hpp>
 #include <memory>
 #include <string>
+#include "frame_buffer.hpp"
+#include "screen_quad.hpp"
 
 namespace PyNovaGE {
 namespace Renderer {
@@ -56,6 +58,8 @@ class Shader;
 class Texture;
 class SpriteRenderer;
 class BatchRenderer;
+class FrameBuffer;
+class ScreenQuad;
 
 /**
  * @brief Core renderer class
@@ -107,6 +111,17 @@ public:
      * @param height Viewport height
      */
     static void SetViewport(int x, int y, int width, int height);
+
+    /**
+     * @brief Set the projection scale for 2D rendering
+     * @param scale Vector2f containing x and y scaling factors
+     */
+    static void SetProjectionScale(const Vector2f& scale);
+
+    /**
+     * @brief Get the current projection scale
+     */
+    static const Vector2f& GetProjectionScale();
     
     /**
      * @brief Clear the screen with specified color
@@ -190,6 +205,7 @@ private:
     static RenderStats s_stats_;
     static std::unique_ptr<SpriteRenderer> s_sprite_renderer_;
     static std::unique_ptr<BatchRenderer> s_batch_renderer_;
+    static Vector2f s_projection_scale_;  // Default (1,1)
 };
 
 /**

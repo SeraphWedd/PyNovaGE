@@ -6,6 +6,8 @@
 #include <memory>
 #include <string>
 #include <functional>
+#include <typeindex>
+#include <algorithm>
 
 namespace PyNovaGE {
 namespace Scene {
@@ -19,8 +21,7 @@ namespace Scene {
  */
 class SceneNode {
 public:
-    using VisitFunc = std::function<void(SceneNode&)>;
-    using ConstVisitFunc = std::function<void(const SceneNode&)>;
+    using NodeVisitor = std::function<void(const SceneNode&)>;
 
     /**
      * @brief Constructor
@@ -104,10 +105,8 @@ public:
     void UpdateTransforms();
     void UpdateTransforms(const Matrix3f& parent_world_matrix);
 
-    void VisitChildren(const VisitFunc& func);
-    void VisitChildren(const ConstVisitFunc& func) const;
-    void VisitDescendants(const VisitFunc& func); // Depth-first
-    void VisitDescendants(const ConstVisitFunc& func) const; // Depth-first
+    void VisitChildren(const NodeVisitor& func) const;
+    void VisitDescendants(const NodeVisitor& func) const;
 
     // Z-order sorting for rendering
     void SortChildrenByZOrder();

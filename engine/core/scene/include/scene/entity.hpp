@@ -1,9 +1,11 @@
 #pragma once
 
-#include <cstdint>
-#include <memory>
-#include <typeindex>
 #include <unordered_map>
+#include <typeindex>
+#include <any>
+#include <stdexcept>
+#include <unordered_map>
+#include <memory>
 
 namespace PyNovaGE {
 namespace Scene {
@@ -226,6 +228,21 @@ public:
             return storage->GetTypedComponent(entity);
         }
         return nullptr;
+    }
+
+    // Get access to the component storages
+    const std::unordered_map<std::type_index, std::unique_ptr<IComponentStorage>>& GetStorages() const {
+        return component_storages_;
+    }
+
+    // Initialization
+    void Initialize() { Clear(); }
+    std::vector<EntityID> GetAllEntities() const {
+        std::vector<EntityID> result;
+        for (const auto& [id, gen] : entities_) {
+            result.emplace_back(EntityID(id, gen));
+        }
+        return result;
     }
 
     template<typename T>

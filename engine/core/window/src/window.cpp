@@ -1,4 +1,5 @@
 #include "window/window.hpp"
+#include <glad/gl.h>
 #include <GLFW/glfw3.h>
 #include <stdexcept>
 #include <iostream>
@@ -84,6 +85,12 @@ Window::Window(const WindowConfig& config) : config_(config), window_(nullptr) {
     
     // Make context current and setup callbacks
     glfwMakeContextCurrent(window_);
+
+    // Initialize glad
+    if (!gladLoadGL(glfwGetProcAddress)) {
+        throw std::runtime_error("Failed to initialize OpenGL context");
+    }
+
     SetVSync(config.vsync);
     SetupCallbacks();
 }

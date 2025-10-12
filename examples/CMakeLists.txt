@@ -14,6 +14,8 @@ if(BUILD_EXAMPLES)
     add_subdirectory(texture_test)
     add_subdirectory(sprite_test)
     add_subdirectory(voxel_demo)
+    add_subdirectory(platformer)
+    add_subdirectory(framebuffer_example)
     
     message(STATUS "Examples configured successfully")
 else()

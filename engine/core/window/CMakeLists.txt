@@ -13,8 +13,13 @@ file(GLOB_RECURSE WINDOW_HEADERS
     "${CMAKE_CURRENT_SOURCE_DIR}/include/*.hpp"
 )
 
+# Add glad
+set(GLAD_SOURCES
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../../third_party/glad/src/gl.c
+)
+
 # Create window library
-add_library(window ${WINDOW_SOURCES} ${WINDOW_HEADERS})
+add_library(window ${WINDOW_SOURCES} ${WINDOW_HEADERS} ${GLAD_SOURCES})
 add_library(PyNovaGE::Window ALIAS window)
 
 # Set target properties
@@ -29,6 +34,7 @@ target_include_directories(window
     PUBLIC
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
         $<INSTALL_INTERFACE:include>
+        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/../../../third_party/glad/include>
     PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/src
 )

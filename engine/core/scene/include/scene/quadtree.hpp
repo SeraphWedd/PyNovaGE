@@ -133,6 +133,9 @@ public:
     size_t GetMaxDepth() const;
     void GetStatistics(size_t& total_objects, size_t& total_nodes, size_t& max_depth) const;
     
+    // For rebuilding purposes
+    const std::vector<SpatialObject>& GetObjectsInNode() const { return objects_; }
+    
     const AABB2D& GetBounds() const { return bounds_; }
     bool IsEmpty() const { return objects_.empty() && children_[0] == nullptr; }
     
@@ -179,6 +182,16 @@ private:
 class SpatialManager {
 public:
     explicit SpatialManager(const AABB2D& world_bounds);
+
+    // Object management
+    void Insert(const SpatialObject& object);
+    void Insert(EntityID entity, const AABB2D& bounds, void* user_data = nullptr);
+    bool Remove(EntityID entity);
+    bool Update(EntityID entity, const AABB2D& bounds);
+
+    // Initialization and cleanup
+    void Initialize();
+    void Clear();
 
     // Object management
     void RegisterObject(EntityID entity, const AABB2D& bounds, void* user_data = nullptr);

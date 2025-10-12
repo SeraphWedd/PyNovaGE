@@ -2,6 +2,7 @@
 
 #include "scene/entity.hpp"
 #include "scene/transform2d.hpp"
+#include "scene/scene_node.hpp"
 #include <vectors/vectors.hpp>
 #include <memory>
 #include <string>

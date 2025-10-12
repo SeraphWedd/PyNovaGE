@@ -8,6 +8,7 @@
 #define M_PI 3.14159265358979323846
 #endif
 
+#include "../vectors/vector2.hpp"
 #include "../vectors/vector3.hpp"
 
 namespace PyNovaGE {
@@ -101,6 +102,15 @@ public:
         };
     }
 
+    // Handle Vector2 transformation by treating it as Vector3 with z = 0 for direction or 1 for point
+    Vector2<T> operator*(const Vector2<T>& vec) const noexcept {
+        const T* m = data.data();
+        return Vector2<T>{
+            m[0]*vec.x + m[1]*vec.y + m[2],
+            m[3]*vec.x + m[4]*vec.y + m[5]
+        };
+    }
+
     // Determinant - direct array access
     T determinant() const noexcept {
         const T* m = data.data();
@@ -119,7 +129,7 @@ public:
         T c02 = m[3] * m[7] - m[4] * m[6];
         
         T det = m[0] * c00 + m[1] * c01 + m[2] * c02;
-        if (det == T(0)) return *this;
+        if (std::abs(det) < std::numeric_limits<T>::epsilon()) return *this;
         
         T invDet = T(1) / det;
         
@@ -214,6 +224,37 @@ public:
             0, 1, y,
             0, 0, 1
         };
+    }
+
+    // Get/Set translation components
+    void SetTranslation(const Vector2<T>& translation) noexcept {
+        data[2] = translation.x;
+        data[5] = translation.y;
+    }
+
+    Vector2<T> GetTranslation() const noexcept {
+        return Vector2<T>{data[2], data[5]};
+    }
+
+    // Point and direction transformation
+    Vector2<T> TransformPoint(const Vector2<T>& point) const noexcept {
+        // Apply full transformation including translation
+        return Vector2<T>{
+            data[0] * point.x + data[1] * point.y + data[2],
+            data[3] * point.x + data[4] * point.y + data[5]
+        };
+    }
+
+    Vector2<T> TransformDirection(const Vector2<T>& direction) const noexcept {
+        // Apply only rotation and scale, not translation
+        return Vector2<T>{
+            data[0] * direction.x + data[1] * direction.y,
+            data[3] * direction.x + data[4] * direction.y
+        };
+    }
+
+    Matrix3 GetInverse() const noexcept {
+        return inverse();
     }
 };
 

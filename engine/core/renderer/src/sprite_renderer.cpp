@@ -1,4 +1,5 @@
 #include "renderer/sprite_renderer.hpp"
+#include <glad/gl.h>
 #include "renderer/renderer.hpp"
 #include <iostream>
 #include <cmath>
@@ -25,8 +26,7 @@ void main() {
     v_texCoord = a_texCoord;
     v_color = u_color;
     
-    // For now, use simple orthographic projection
-    // This will be improved when matrices are fully implemented
+    // Position is already in NDC space after projection scale is applied
     gl_Position = vec4(a_position, 1.0);
 }
 )";
@@ -65,15 +65,19 @@ bool SpriteRenderer::Initialize() {
     }
     
     // Create default shader
+    std::cout << "Creating default shader..." << std::endl;
     default_shader_ = std::make_shared<Shader>();
     if (!default_shader_->LoadFromSource(default_vertex_shader_source, default_fragment_shader_source)) {
         std::cerr << "Failed to create default sprite shader: " << default_shader_->GetErrorLog() << std::endl;
         return false;
     }
+    std::cout << "Default shader created successfully" << std::endl;
     
     // Setup quad geometry
+    std::cout << "Setting up quad data..." << std::endl;
     SetupQuadData();
-    
+    std::cout << "Quad data setup complete" << std::endl;
+
     initialized_ = true;
     std::cout << "SpriteRenderer initialized successfully" << std::endl;
     return true;
@@ -117,10 +121,11 @@ void SpriteRenderer::RenderSprite(const Sprite& sprite) {
         return;
     }
     
-    if (!sprite.texture) {
-        std::cerr << "Sprite has no texture!" << std::endl;
-        return;
-    }
+    std::cout << "Rendering sprite at position: (" << sprite.position.x << ", " << sprite.position.y << ")" << std::endl;
+    std::cout << "Sprite size: (" << sprite.size.x << ", " << sprite.size.y << ")" << std::endl;
+    std::cout << "Sprite color: (" << sprite.color.x << ", " << sprite.color.y << ", " << sprite.color.z << ", " << sprite.color.w << ")" << std::endl;
+    
+    // It's okay if there's no texture; we'll render a solid color quad
     
     // Bind shader
     default_shader_->Bind();
@@ -250,11 +255,13 @@ void SpriteRenderer::GenerateVertices(const Sprite& sprite, float* vertices) {
         quad_vertices[i].x += sprite.position.x;
         quad_vertices[i].y += sprite.position.y;
         
-        // Store in output array (convert to normalized device coordinates)
-        // For now, we'll do a simple conversion assuming screen size of 800x600
-        // This will be improved when proper matrices are implemented
-        vertices[i * 3 + 0] = (quad_vertices[i].x / 400.0f) - 1.0f; // X: [-1, 1]
-        vertices[i * 3 + 1] = (quad_vertices[i].y / 300.0f) - 1.0f; // Y: [-1, 1]  
+        // Get the current projection scale
+        const Vector2f& proj_scale = Renderer::GetProjectionScale();
+
+        // Convert from world coordinates to NDC using projection scale
+        // Project to NDC space [-1, 1] with proper aspect ratio correction
+        vertices[i * 3 + 0] = quad_vertices[i].x * proj_scale.x;  // X: [-1, 1]
+        vertices[i * 3 + 1] = quad_vertices[i].y * proj_scale.y;  // Y: [-1, 1]
         vertices[i * 3 + 2] = 0.0f; // Z
     }
 }

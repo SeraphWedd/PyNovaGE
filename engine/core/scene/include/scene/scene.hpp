@@ -136,8 +136,8 @@ public:
 
 protected:
     // Internal update phases
-    virtual void OnPreUpdate(float delta_time) {}
-    virtual void OnPostUpdate(float delta_time) {}
+    virtual void OnPreUpdate([[maybe_unused]] float delta_time) {}
+    virtual void OnPostUpdate([[maybe_unused]] float delta_time) {}
     virtual void OnTransformsUpdated() {}
     virtual void OnSpatialPartitioningUpdated() {}
 

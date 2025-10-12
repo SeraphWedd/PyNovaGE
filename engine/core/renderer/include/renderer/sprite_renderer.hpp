@@ -16,7 +16,8 @@ namespace Renderer {
  * Contains all data needed to render a 2D sprite including position,
  * rotation, scale, color, texture coordinates, and texture reference.
  */
-struct Sprite {
+class Sprite {
+public:
     // Transform properties
     Vector2f position = {0.0f, 0.0f};           ///< World position
     float rotation = 0.0f;                      ///< Rotation in radians
@@ -128,6 +129,7 @@ public:
      * @return true if successful, false otherwise
      */
     bool Initialize();
+
     
     /**
      * @brief Shutdown and cleanup resources
