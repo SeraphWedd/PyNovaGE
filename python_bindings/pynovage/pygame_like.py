@@ -133,6 +133,11 @@ def display_set_mode(size, flags=0, depth=32, display=0):
     if not _renderer_guard.is_initialized():
         raise RuntimeError("Failed to initialize renderer")
     
+    # For 2D rendering, ensure sane defaults
+    pynovage_core.renderer.set_depth_test(False)
+    pynovage_core.renderer.set_culling(False)
+    pynovage_core.renderer.set_blending(True)
+
     # Set viewport to match window
     window_size = _window.get_framebuffer_size()
     _screen_size = (int(window_size.x), int(window_size.y))
