@@ -98,9 +98,88 @@ void bind_renderer(py::module& m) {
                    std::to_string(texture.GetWidth()) + "x" + std::to_string(texture.GetHeight()) + ")";
         });
     
-    // SpriteRenderer class (basic binding - actual methods to be added based on real API)
-    py::class_<PyNovaGE::Renderer::SpriteRenderer>(renderer_module, "SpriteRenderer");
-    // Note: Actual SpriteRenderer methods need to be examined and added
+    // Sprite data structure
+    py::class_<PyNovaGE::Renderer::Sprite>(renderer_module, "Sprite")
+        .def(py::init<>())
+        .def(py::init<const PyNovaGE::Vector2f&, std::shared_ptr<PyNovaGE::Renderer::Texture>>())
+        .def_readwrite("position", &PyNovaGE::Renderer::Sprite::position)
+        .def_readwrite("rotation", &PyNovaGE::Renderer::Sprite::rotation)
+        .def_readwrite("scale", &PyNovaGE::Renderer::Sprite::scale)
+        .def_readwrite("origin", &PyNovaGE::Renderer::Sprite::origin)
+        .def_readwrite("color", &PyNovaGE::Renderer::Sprite::color)
+        .def_readwrite("texture", &PyNovaGE::Renderer::Sprite::texture)
+        .def_readwrite("size", &PyNovaGE::Renderer::Sprite::size)
+        .def("set_texture_region", &PyNovaGE::Renderer::Sprite::SetTextureRegion)
+        .def("set_texture_region_normalized", &PyNovaGE::Renderer::Sprite::SetTextureRegionNormalized)
+        .def("__str__", [](const PyNovaGE::Renderer::Sprite& sprite) {
+            return "Sprite(pos=(" + std::to_string(sprite.position.x) + "," + 
+                   std::to_string(sprite.position.y) + "), size=(" + 
+                   std::to_string(sprite.size.x) + "," + std::to_string(sprite.size.y) + "))";
+        });
+    
+    // SpriteRenderer class with proper method bindings
+    py::class_<PyNovaGE::Renderer::SpriteRenderer>(renderer_module, "SpriteRenderer")
+        .def(py::init<>())
+        .def("initialize", &PyNovaGE::Renderer::SpriteRenderer::Initialize)
+        .def("shutdown", &PyNovaGE::Renderer::SpriteRenderer::Shutdown)
+        .def("render_sprite", &PyNovaGE::Renderer::SpriteRenderer::RenderSprite)
+        .def("is_initialized", &PyNovaGE::Renderer::SpriteRenderer::IsInitialized)
+        .def("__str__", [](const PyNovaGE::Renderer::SpriteRenderer& renderer) {
+            return "SpriteRenderer(initialized=" + std::to_string(renderer.IsInitialized()) + ")";
+        });
+    
+    // BatchVertex structure
+    py::class_<PyNovaGE::Renderer::BatchVertex>(renderer_module, "BatchVertex")
+        .def(py::init<>())
+        .def(py::init<const PyNovaGE::Vector3f&, const PyNovaGE::Vector2f&, const PyNovaGE::Vector4f&, float>())
+        .def_readwrite("position", &PyNovaGE::Renderer::BatchVertex::position)
+        .def_readwrite("tex_coords", &PyNovaGE::Renderer::BatchVertex::texCoords)
+        .def_readwrite("color", &PyNovaGE::Renderer::BatchVertex::color)
+        .def_readwrite("texture_index", &PyNovaGE::Renderer::BatchVertex::textureIndex);
+    
+    // BatchStats structure
+    py::class_<PyNovaGE::Renderer::BatchStats>(renderer_module, "BatchStats")
+        .def_readonly("draw_calls", &PyNovaGE::Renderer::BatchStats::draw_calls)
+        .def_readonly("sprites_batched", &PyNovaGE::Renderer::BatchStats::sprites_batched)
+        .def_readonly("batches_flushed", &PyNovaGE::Renderer::BatchStats::batches_flushed)
+        .def_readonly("texture_binds", &PyNovaGE::Renderer::BatchStats::texture_binds)
+        .def_readonly("avg_sprites_per_batch", &PyNovaGE::Renderer::BatchStats::avg_sprites_per_batch)
+        .def("reset", &PyNovaGE::Renderer::BatchStats::Reset)
+        .def("update_average", &PyNovaGE::Renderer::BatchStats::UpdateAverage);
+    
+    // BatchRenderer class with drawing primitives
+    py::class_<PyNovaGE::Renderer::BatchRenderer>(renderer_module, "BatchRenderer")
+        .def(py::init<int, int>(), py::arg("max_sprites") = 1000, py::arg("max_textures") = 16)
+        .def("initialize", &PyNovaGE::Renderer::BatchRenderer::Initialize)
+        .def("shutdown", &PyNovaGE::Renderer::BatchRenderer::Shutdown)
+        .def("is_initialized", &PyNovaGE::Renderer::BatchRenderer::IsInitialized)
+        // Batch control
+        .def("begin_batch", &PyNovaGE::Renderer::BatchRenderer::BeginBatch)
+        .def("add_sprite", &PyNovaGE::Renderer::BatchRenderer::AddSprite)
+        .def("flush_batch", &PyNovaGE::Renderer::BatchRenderer::FlushBatch)
+        .def("end_batch", &PyNovaGE::Renderer::BatchRenderer::EndBatch)
+        // Sprite rendering
+        .def("render_sprites", py::overload_cast<const std::vector<PyNovaGE::Renderer::Sprite>&>(&PyNovaGE::Renderer::BatchRenderer::RenderSprites))
+        // Primitive drawing functions
+        .def("add_rect_screen", &PyNovaGE::Renderer::BatchRenderer::AddRectScreen)
+        .def("add_line_screen", &PyNovaGE::Renderer::BatchRenderer::AddLineScreen)
+        .def("add_textured_quad_screen", &PyNovaGE::Renderer::BatchRenderer::AddTexturedQuadScreen,
+             py::arg("x"), py::arg("y"), py::arg("w"), py::arg("h"), 
+             py::arg("screen_w"), py::arg("screen_h"), py::arg("texture"),
+             py::arg("color") = PyNovaGE::Vector4f{1.0f, 1.0f, 1.0f, 1.0f})
+        .def("add_circle_screen", &PyNovaGE::Renderer::BatchRenderer::AddCircleScreen,
+             py::arg("x"), py::arg("y"), py::arg("radius"), 
+             py::arg("screen_w"), py::arg("screen_h"), py::arg("color"),
+             py::arg("segments") = 32)
+        // Statistics
+        .def("get_stats", &PyNovaGE::Renderer::BatchRenderer::GetStats, py::return_value_policy::reference_internal)
+        .def("reset_stats", &PyNovaGE::Renderer::BatchRenderer::ResetStats)
+        .def("get_max_sprites", &PyNovaGE::Renderer::BatchRenderer::GetMaxSprites)
+        .def("get_max_textures", &PyNovaGE::Renderer::BatchRenderer::GetMaxTextures)
+        .def("__str__", [](const PyNovaGE::Renderer::BatchRenderer& renderer) {
+            return "BatchRenderer(max_sprites=" + std::to_string(renderer.GetMaxSprites()) + 
+                   ", max_textures=" + std::to_string(renderer.GetMaxTextures()) + ")";
+        });
     
     // Helper functions will be added later when texture loading is properly implemented
     

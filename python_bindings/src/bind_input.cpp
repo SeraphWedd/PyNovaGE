@@ -3,8 +3,15 @@
 #include <pybind11/functional.h>
 
 #include <window/input.hpp>
+#include <window/window.hpp>
+
+// Include GLFW for proper GLFWwindow definition
+#include <GLFW/glfw3.h>
 
 namespace py = pybind11;
+
+// Forward declare GLFWwindow to pybind11 as an opaque type
+PYBIND11_MAKE_OPAQUE(GLFWwindow*);
 
 void bind_input(py::module& m) {
     auto input_module = m.def_submodule("input", "Input handling system");
@@ -216,7 +223,10 @@ void bind_input(py::module& m) {
     
     // InputManager class
     py::class_<PyNovaGE::Window::InputManager>(input_module, "InputManager")
-        // Note: Constructor with GLFWwindow* not exposed due to forward declaration
+        .def(py::init([](PyNovaGE::Window::Window& window) {
+            return std::make_unique<PyNovaGE::Window::InputManager>(window.GetNativeWindow());
+        }), py::arg("window"), 
+             "Create InputManager with Window")
         
         // Core update
         .def("update", &PyNovaGE::Window::InputManager::Update)

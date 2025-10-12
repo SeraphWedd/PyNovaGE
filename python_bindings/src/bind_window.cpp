@@ -4,7 +4,13 @@
 
 #include <window/window.hpp>
 
+// Include GLFW for proper GLFWwindow definition
+#include <GLFW/glfw3.h>
+
 namespace py = pybind11;
+
+// Forward declare GLFWwindow to pybind11 as an opaque type
+PYBIND11_MAKE_OPAQUE(GLFWwindow*);
 
 void bind_window(py::module& m) {
     auto window_module = m.def_submodule("window", "Window management system");
@@ -108,6 +114,12 @@ void bind_window(py::module& m) {
         
         // Event callback
         .def("set_event_callback", &PyNovaGE::Window::Window::SetEventCallback)
+        
+        // Native window handle (as opaque pointer)
+        .def("get_native_window", [](const PyNovaGE::Window::Window& window) -> void* {
+            return static_cast<void*>(window.GetNativeWindow());
+        }, py::return_value_policy::reference_internal,
+           "Get native GLFW window handle (opaque pointer)")
         
         // String representation
         .def("__str__", [](const PyNovaGE::Window::Window& window) {

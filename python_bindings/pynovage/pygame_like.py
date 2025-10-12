@@ -131,19 +131,28 @@ def display_set_mode(size, flags=0, depth=32, display=0):
     window_size = _window.get_framebuffer_size()
     pynovage_core.renderer.set_viewport(0, 0, window_size.x, window_size.y)
     
-    # Initialize input manager (disabled for now until get_native_window is bound)
-    # _input_manager = pynovage_core.input.InputManager(_window.get_native_window())
-    _input_manager = None
+    # Initialize input manager
+    _input_manager = pynovage_core.input.InputManager(_window)
     
     # Create screen surface
     _screen_surface = Surface(size)
+    
+    # Begin first frame
+    pynovage_core.renderer.begin_frame()
     
     return _screen_surface
 
 def display_flip():
     """Update the display - swap front and back buffers."""
     if _window:
+        # End the frame and flush all batched drawing commands
+        pynovage_core.renderer.end_frame()
+        
+        # Swap buffers to display the rendered frame
         _window.swap_buffers()
+        
+        # Begin new frame for next render cycle
+        pynovage_core.renderer.begin_frame()
 
 def display_update():
     """Update portions of the display - currently same as flip()."""
@@ -227,26 +236,18 @@ def draw_rect(surface, color, rect, width=0):
     if not isinstance(rect, Rect):
         rect = Rect(rect)
     
-    # For now, this is a placeholder implementation
-    # In a full implementation, this would use the sprite renderer or draw calls
-    pass
+    # Create a small colored surface and blit it
+    # This is a software-rendering approach but should work
+    if surface == _screen_surface:
+        # For screen surface, we need to create a temporary texture
+        # For now, just skip drawing to avoid crashes
+        # TODO: Implement proper drawing once texture creation is working
+        pass
+    else:
+        # For other surfaces, use the fill method if available
+        if hasattr(surface, 'fill_rect'):
+            surface.fill_rect(rect, color)
 
-def draw_circle(surface, color, center, radius, width=0):
-    """
-    Draw a circle on a surface.
-    
-    Args:
-        surface: Surface to draw on
-        color: Color to draw with  
-        center: Center point (x, y)
-        radius: Circle radius
-        width: Line width (0 for filled circle)
-    """
-    if not isinstance(color, Color):
-        color = Color(color)
-    
-    # Placeholder implementation
-    pass
 
 def draw_line(surface, color, start_pos, end_pos, width=1):
     """
@@ -280,6 +281,32 @@ def draw_polygon(surface, color, points, width=0):
     
     # Placeholder implementation
     pass
+
+def draw_circle(surface, color, center, radius, width=0):
+    """
+    Draw a circle on a surface.
+    
+    Args:
+        surface: Surface to draw on
+        color: Color to draw with  
+        center: Center point (x, y)
+        radius: Circle radius
+        width: Line width (0 for filled circle)
+    """
+    if not isinstance(color, Color):
+        color = Color(color)
+    
+    # For now, just draw a square as a placeholder for circles
+    # TODO: Implement proper circle drawing
+    size = int(radius * 2)
+    rect = Rect(center[0] - radius, center[1] - radius, size, size)
+    draw_rect(surface, color, rect)
+    
+def set_window_title(title):
+    """Set the window title."""
+    global _window
+    if _window:
+        _window.set_title(title)
 
 def fill_screen(color):
     """Fill the screen with a solid color."""
@@ -360,3 +387,95 @@ def load_image(filename):
 def make_surface(size, flags=0):
     """Create a new Surface."""
     return Surface(size, flags)
+
+# Create display module to match pygame structure
+class DisplayModule:
+    """Display module - similar to pygame.display"""
+    
+    @staticmethod
+    def set_mode(size, flags=0, depth=32, display=0):
+        """Create a display window."""
+        return display_set_mode(size, flags, depth, display)
+    
+    @staticmethod
+    def flip():
+        """Update the display."""
+        return display_flip()
+    
+    @staticmethod
+    def update():
+        """Update portions of the display."""
+        return display_update()
+    
+    @staticmethod
+    def get_surface():
+        """Get the main display surface."""
+        return display_get_surface()
+
+# Create event module to match pygame structure
+class EventModule:
+    """Event module - similar to pygame.event"""
+    
+    @staticmethod
+    def get():
+        """Get all pending events."""
+        return event_get()
+    
+    @staticmethod
+    def pump():
+        """Process events without returning them."""
+        return event_pump()
+
+# Create key module to match pygame structure
+class KeyModule:
+    """Key module - similar to pygame.key"""
+    
+    @staticmethod
+    def get_pressed():
+        """Get the state of all keyboard buttons."""
+        return key_get_pressed()
+
+# Create mouse module to match pygame structure
+class MouseModule:
+    """Mouse module - similar to pygame.mouse"""
+    
+    @staticmethod
+    def get_pos():
+        """Get the mouse cursor position."""
+        return mouse_get_pos()
+    
+    @staticmethod
+    def get_pressed():
+        """Get the state of mouse buttons."""
+        return mouse_get_pressed()
+
+# Create draw module to match pygame structure
+class DrawModule:
+    """Draw module - similar to pygame.draw"""
+    
+    @staticmethod
+    def rect(surface, color, rect, width=0):
+        """Draw a rectangle."""
+        return draw_rect(surface, color, rect, width)
+    
+    @staticmethod
+    def circle(surface, color, center, radius, width=0):
+        """Draw a circle."""
+        return draw_circle(surface, color, center, radius, width)
+    
+    @staticmethod
+    def line(surface, color, start_pos, end_pos, width=1):
+        """Draw a line."""
+        return draw_line(surface, color, start_pos, end_pos, width)
+    
+    @staticmethod
+    def polygon(surface, color, points, width=0):
+        """Draw a polygon."""
+        return draw_polygon(surface, color, points, width)
+
+# Create module instances
+display = DisplayModule()
+event = EventModule()
+key = KeyModule()
+mouse = MouseModule()
+draw = DrawModule()

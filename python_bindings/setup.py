@@ -33,6 +33,9 @@ include_dirs = [
     os.path.join(project_root, "engine/foundation/math/include"),
     os.path.join(project_root, "engine/foundation/core/include"),
     os.path.join(project_root, "engine/foundation/memory/include"),
+    
+    # GLFW includes from build directory
+    os.path.join(project_root, "build/_deps/glfw-src/include"),
 ]
 
 # Filter to existing directories only
