@@ -15,6 +15,10 @@ Controls:
 Performance metrics are displayed in the window title and console.
 """
 
+import os, sys
+# Ensure local package import works when run by double-click from the examples folder
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+
 import pynovage
 import random
 import math

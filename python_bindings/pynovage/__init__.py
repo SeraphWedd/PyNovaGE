@@ -20,6 +20,7 @@ physics = pynovage_core.physics
 scene = pynovage_core.scene
 asset = pynovage_core.asset
 audio = pynovage_core.audio
+particles = pynovage_core.particles
 
 # Version info
 __version__ = "0.1.0"

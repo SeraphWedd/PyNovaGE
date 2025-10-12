@@ -30,12 +30,16 @@ include_dirs = [
     os.path.join(project_root, "engine/core/scene/include"),
     os.path.join(project_root, "engine/systems/asset/include"),
     os.path.join(project_root, "engine/systems/audio/include"),
+    os.path.join(project_root, "engine/graphics/particles/include"),
     os.path.join(project_root, "engine/foundation/math/include"),
     os.path.join(project_root, "engine/foundation/core/include"),
     os.path.join(project_root, "engine/foundation/memory/include"),
     
     # GLFW includes from build directory
     os.path.join(project_root, "build/_deps/glfw-src/include"),
+    
+    # OpenAL includes from third_party
+    os.path.join(project_root, "third_party/openal/include"),
 ]
 
 # Filter to existing directories only
@@ -55,11 +59,20 @@ if platform.system() == "Windows":
         os.path.join(build_dir, "engine/core/physics/Release"),
         os.path.join(build_dir, "engine/core/scene/Release"),
         os.path.join(build_dir, "engine/systems/asset/Release"),
+        os.path.join(build_dir, "engine/systems/audio/Release"),
+        os.path.join(build_dir, "engine/graphics/particles/Release"),
         os.path.join(build_dir, "engine/foundation/memory/Release"),
         os.path.join(build_dir, "_deps/glfw-build/src/Release"),
     ])
+    # Add OpenAL library directory
+    openal_lib_dir = os.path.join(project_root, "third_party/openal/libs/Win64")
+    if os.path.exists(openal_lib_dir):
+        library_dirs.append(openal_lib_dir)
+    
     libraries.extend([
-        "window", "renderer", "physics", "scene", "asset", "stb_libs", "memory", "glfw3", "opengl32",
+        "window", "renderer", "physics", "scene", "asset", "audio", "particle_system", "stb_libs", "memory", "glfw3", "opengl32",
+        # OpenAL library
+        "OpenAL32",
         # Windows system libraries required by GLFW
         "user32", "gdi32", "shell32", "ole32", "oleaut32", "imm32", "winmm", "version"
     ])
@@ -79,6 +92,7 @@ source_files = [
     "src/bind_scene.cpp",
     "src/bind_asset.cpp",
     "src/bind_audio.cpp",
+    "src/bind_particles.cpp",
 ]
 
 # Define the extension module

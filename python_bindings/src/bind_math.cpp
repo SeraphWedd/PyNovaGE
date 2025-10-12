@@ -5,6 +5,7 @@
 
 #include <vectors/vectors.hpp>
 #include <matrices/matrices.hpp>
+#include <quaternions/quaternions.hpp>
 #include <scene/transform2d.hpp>
 
 namespace py = pybind11;
@@ -221,4 +222,77 @@ void bind_math(py::module& m) {
     math_module.attr("Transform2D").attr("position") = py::cpp_function([](PyNovaGE::Scene::Transform2D& t) -> PyNovaGE::Vector2f& {
         return const_cast<PyNovaGE::Vector2f&>(t.GetPosition());
     }, py::return_value_policy::reference_internal);
+    
+    // Quaternion binding
+    py::class_<PyNovaGE::Quaternion<float>>(math_module, "Quaternionf")
+        .def(py::init<>())
+        .def(py::init<float, float, float, float>())
+        .def(py::init<const PyNovaGE::Vector3f&, float>())
+        .def(py::init<float, float, float>())  // Euler angles constructor
+        .def("x", py::overload_cast<>(&PyNovaGE::Quaternion<float>::x))
+        .def("y", py::overload_cast<>(&PyNovaGE::Quaternion<float>::y))
+        .def("z", py::overload_cast<>(&PyNovaGE::Quaternion<float>::z))
+        .def("w", py::overload_cast<>(&PyNovaGE::Quaternion<float>::w))
+        .def("x", py::overload_cast<>(&PyNovaGE::Quaternion<float>::x, py::const_))
+        .def("y", py::overload_cast<>(&PyNovaGE::Quaternion<float>::y, py::const_))
+        .def("z", py::overload_cast<>(&PyNovaGE::Quaternion<float>::z, py::const_))
+        .def("w", py::overload_cast<>(&PyNovaGE::Quaternion<float>::w, py::const_))
+        .def(py::self + py::self)
+        .def(py::self - py::self)
+        .def(py::self * py::self)
+        .def(py::self * float())
+        .def(py::self * PyNovaGE::Vector3f())
+        .def("length_squared", &PyNovaGE::Quaternion<float>::lengthSquared)
+        .def("length", &PyNovaGE::Quaternion<float>::length)
+        .def("normalized", &PyNovaGE::Quaternion<float>::normalized)
+        .def("normalize", &PyNovaGE::Quaternion<float>::normalize)
+        .def("conjugate", &PyNovaGE::Quaternion<float>::conjugate)
+        .def("inverse", &PyNovaGE::Quaternion<float>::inverse)
+        .def("__getitem__", [](const PyNovaGE::Quaternion<float>& q, size_t i) {
+            if (i >= 4) throw py::index_error();
+            return q[i];
+        })
+        .def("__setitem__", [](PyNovaGE::Quaternion<float>& q, size_t i, float value) {
+            if (i >= 4) throw py::index_error();
+            q[i] = value;
+        })
+        .def("__len__", [](const PyNovaGE::Quaternion<float>&) { return 4; })
+        .def("__str__", [](const PyNovaGE::Quaternion<float>& q) {
+            return "Quaternionf(" + std::to_string(q.x()) + ", " + std::to_string(q.y()) + ", " + std::to_string(q.z()) + ", " + std::to_string(q.w()) + ")";
+        });
+    
+    math_module.attr("Quaternion") = math_module.attr("Quaternionf");
+    
+    // Matrix4 binding
+    py::class_<PyNovaGE::Matrix4<float>>(math_module, "Matrix4f")
+        .def(py::init<>())
+        .def(py::init<const PyNovaGE::Vector4f&, const PyNovaGE::Vector4f&, const PyNovaGE::Vector4f&, const PyNovaGE::Vector4f&>())
+        .def(py::init<float, float, float, float,
+                      float, float, float, float,
+                      float, float, float, float,
+                      float, float, float, float>())
+        .def("at", py::overload_cast<size_t, size_t>(&PyNovaGE::Matrix4<float>::at))
+        .def("at", py::overload_cast<size_t, size_t>(&PyNovaGE::Matrix4<float>::at, py::const_))
+        .def(py::self + py::self)
+        .def(py::self - py::self)
+        .def(py::self * py::self)
+        .def(py::self * float())
+        .def(py::self * PyNovaGE::Vector4f())
+        .def("determinant", &PyNovaGE::Matrix4<float>::determinant)
+        .def("inverse", &PyNovaGE::Matrix4<float>::inverse)
+        .def("transpose", &PyNovaGE::Matrix4<float>::transpose)
+        .def("__getitem__", [](const PyNovaGE::Matrix4<float>& m, size_t i) {
+            if (i >= 4) throw py::index_error();
+            return m[i];
+        })
+        .def("__str__", [](const PyNovaGE::Matrix4<float>& m) {
+            return "Matrix4f([" + 
+                std::to_string(m.at(0,0)) + ", " + std::to_string(m.at(0,1)) + ", " + std::to_string(m.at(0,2)) + ", " + std::to_string(m.at(0,3)) + "], [" +
+                std::to_string(m.at(1,0)) + ", " + std::to_string(m.at(1,1)) + ", " + std::to_string(m.at(1,2)) + ", " + std::to_string(m.at(1,3)) + "], [" +
+                std::to_string(m.at(2,0)) + ", " + std::to_string(m.at(2,1)) + ", " + std::to_string(m.at(2,2)) + ", " + std::to_string(m.at(2,3)) + "], [" +
+                std::to_string(m.at(3,0)) + ", " + std::to_string(m.at(3,1)) + ", " + std::to_string(m.at(3,2)) + ", " + std::to_string(m.at(3,3)) + "])";
+        })
+        .def_static("Identity", &PyNovaGE::Matrix4<float>::Identity);
+    
+    math_module.attr("Matrix4") = math_module.attr("Matrix4f");
 }

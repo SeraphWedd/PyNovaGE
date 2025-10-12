@@ -11,6 +11,7 @@ void bind_physics(pybind11::module&);
 void bind_scene(pybind11::module&);
 void bind_asset(pybind11::module&);
 void bind_audio(pybind11::module&);
+void bind_particles(pybind11::module&);
 
 namespace py = pybind11;
 
@@ -26,6 +27,7 @@ PYBIND11_MODULE(pynovage_core, m) {
     bind_scene(m);       // Scene graph and entities
     bind_asset(m);       // Asset management
     bind_audio(m);       // Audio system
+    bind_particles(m);   // Particle system
     
     // Module version info
     m.attr("__version__") = "0.1.0";

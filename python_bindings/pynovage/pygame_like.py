@@ -17,6 +17,8 @@ _renderer_guard = None
 _input_manager = None
 _clock_last_time = 0
 _screen_surface = None
+_screen_size = (0, 0)
+_batch_started = False
 
 # Constants similar to pygame
 QUIT = "QUIT"
@@ -105,7 +107,7 @@ def display_set_mode(size, flags=0, depth=32, display=0):
     Returns:
         Surface representing the display
     """
-    global _window, _renderer_guard, _input_manager, _screen_surface
+    global _window, _renderer_guard, _input_manager, _screen_surface, _screen_size, _batch_started
     
     if not _window_system_guard or not _window_system_guard.is_initialized():
         raise RuntimeError("PyNovaGE not initialized. Call init() first.")
@@ -129,6 +131,7 @@ def display_set_mode(size, flags=0, depth=32, display=0):
     
     # Set viewport to match window
     window_size = _window.get_framebuffer_size()
+    _screen_size = (int(window_size.x), int(window_size.y))
     pynovage_core.renderer.set_viewport(0, 0, window_size.x, window_size.y)
     
     # Initialize input manager
@@ -137,22 +140,34 @@ def display_set_mode(size, flags=0, depth=32, display=0):
     # Create screen surface
     _screen_surface = Surface(size)
     
-    # Begin first frame
+    # Begin first frame and start a batch
     pynovage_core.renderer.begin_frame()
+    br = pynovage_core.renderer.get_batch_renderer()
+    if br:
+        br.begin_batch()
+        _batch_started = True
     
     return _screen_surface
 
 def display_flip():
     """Update the display - swap front and back buffers."""
     if _window:
-        # End the frame and flush all batched drawing commands
-        pynovage_core.renderer.end_frame()
+        # End the current batch before finishing the frame
+        global _batch_started
+        br = pynovage_core.renderer.get_batch_renderer()
+        if br and _batch_started:
+            br.end_batch()
+            _batch_started = False
         
-        # Swap buffers to display the rendered frame
+        # End the frame and swap buffers
+        pynovage_core.renderer.end_frame()
         _window.swap_buffers()
         
-        # Begin new frame for next render cycle
+        # Begin new frame for next render cycle and start a fresh batch
         pynovage_core.renderer.begin_frame()
+        if br:
+            br.begin_batch()
+            _batch_started = True
 
 def display_update():
     """Update portions of the display - currently same as flip()."""
@@ -236,13 +251,29 @@ def draw_rect(surface, color, rect, width=0):
     if not isinstance(rect, Rect):
         rect = Rect(rect)
     
-    # Create a small colored surface and blit it
-    # This is a software-rendering approach but should work
+    # If drawing to the screen, use the batch renderer primitives
     if surface == _screen_surface:
-        # For screen surface, we need to create a temporary texture
-        # For now, just skip drawing to avoid crashes
-        # TODO: Implement proper drawing once texture creation is working
-        pass
+        br = pynovage_core.renderer.get_batch_renderer()
+        if not br:
+            return
+        screen_w, screen_h = _screen_size
+        # Convert from pygame-like top-left origin to bottom-left origin
+        x = rect.x
+        y = screen_h - rect.y - rect.height
+        if width <= 0:
+            br.add_rect_screen(float(x), float(y), float(rect.width), float(rect.height), int(screen_w), int(screen_h), color.to_vector4f())
+        else:
+            # Draw rectangle border using 4 thick lines
+            t = float(width)
+            c = color.to_vector4f()
+            # Top
+            br.add_line_screen(float(x), float(y + rect.height), float(x + rect.width), float(y + rect.height), t, int(screen_w), int(screen_h), c)
+            # Bottom
+            br.add_line_screen(float(x), float(y), float(x + rect.width), float(y), t, int(screen_w), int(screen_h), c)
+            # Left
+            br.add_line_screen(float(x), float(y), float(x), float(y + rect.height), t, int(screen_w), int(screen_h), c)
+            # Right
+            br.add_line_screen(float(x + rect.width), float(y), float(x + rect.width), float(y + rect.height), t, int(screen_w), int(screen_h), c)
     else:
         # For other surfaces, use the fill method if available
         if hasattr(surface, 'fill_rect'):
@@ -263,8 +294,20 @@ def draw_line(surface, color, start_pos, end_pos, width=1):
     if not isinstance(color, Color):
         color = Color(color)
     
-    # Placeholder implementation
-    pass
+    if surface == _screen_surface:
+        br = pynovage_core.renderer.get_batch_renderer()
+        if not br:
+            return
+        screen_w, screen_h = _screen_size
+        x0, y0 = float(start_pos[0]), float(start_pos[1])
+        x1, y1 = float(end_pos[0]), float(end_pos[1])
+        # Convert Y from top-left to bottom-left origin
+        y0 = float(screen_h) - y0
+        y1 = float(screen_h) - y1
+        br.add_line_screen(x0, y0, x1, y1, float(max(1, width)), int(screen_w), int(screen_h), color.to_vector4f())
+    else:
+        # No-op for offscreen surfaces for now
+        return
 
 def draw_polygon(surface, color, points, width=0):
     """
@@ -279,8 +322,26 @@ def draw_polygon(surface, color, points, width=0):
     if not isinstance(color, Color):
         color = Color(color)
     
-    # Placeholder implementation
-    pass
+    if surface == _screen_surface and points:
+        br = pynovage_core.renderer.get_batch_renderer()
+        if not br:
+            return
+        screen_w, screen_h = _screen_size
+        c = color.to_vector4f()
+        # Draw as outline by default using lines between successive points
+        pts = list(points)
+        if width <= 0:
+            w = 1.0
+        else:
+            w = float(width)
+        for i in range(len(pts)):
+            x0, y0 = float(pts[i][0]), float(pts[i][1])
+            x1, y1 = float(pts[(i + 1) % len(pts)][0]), float(pts[(i + 1) % len(pts)][1])
+            y0 = float(screen_h) - y0
+            y1 = float(screen_h) - y1
+            br.add_line_screen(x0, y0, x1, y1, w, int(screen_w), int(screen_h), c)
+    else:
+        return
 
 def draw_circle(surface, color, center, radius, width=0):
     """
@@ -296,11 +357,35 @@ def draw_circle(surface, color, center, radius, width=0):
     if not isinstance(color, Color):
         color = Color(color)
     
-    # For now, just draw a square as a placeholder for circles
-    # TODO: Implement proper circle drawing
-    size = int(radius * 2)
-    rect = Rect(center[0] - radius, center[1] - radius, size, size)
-    draw_rect(surface, color, rect)
+    if surface == _screen_surface:
+        br = pynovage_core.renderer.get_batch_renderer()
+        if not br:
+            return
+        screen_w, screen_h = _screen_size
+        x = float(center[0])
+        y = float(screen_h) - float(center[1])  # convert to bottom-left origin
+        if width <= 0:
+            br.add_circle_screen(x, y, float(radius), int(screen_w), int(screen_h), color.to_vector4f(), 32)
+        else:
+            # Approximate an outline circle by connecting segments with lines
+            import math
+            segments = 32
+            angle_step = 2.0 * math.pi / segments
+            pts = []
+            for i in range(segments + 1):
+                angle = i * angle_step
+                vx = x + math.cos(angle) * radius
+                vy = y + math.sin(angle) * radius
+                pts.append((vx, vy))
+            c = color.to_vector4f()
+            t = float(max(1, width))
+            for i in range(segments):
+                x0, y0 = pts[i]
+                x1, y1 = pts[i + 1]
+                br.add_line_screen(float(x0), float(y0), float(x1), float(y1), t, int(screen_w), int(screen_h), c)
+    else:
+        # Offscreen surfaces: no-op for now
+        return
     
 def set_window_title(title):
     """Set the window title."""
@@ -326,13 +411,19 @@ def blit_surface(dest, source, dest_pos, source_area=None):
         dest_pos: Position to blit to
         source_area: Optional source rectangle
     """
-    if dest == _screen_surface and source._texture:
+    if dest == _screen_surface and getattr(source, "_texture", None):
         # Direct rendering to screen using sprite renderer
         sprite_renderer = pynovage_core.renderer.get_sprite_renderer()
         if sprite_renderer:
-            pos = pynovage_core.math.Vector2f(dest_pos[0], dest_pos[1])
-            size = pynovage_core.math.Vector2f(source.width, source.height)
-            sprite_renderer.draw_textured_sprite(pos, size, source._texture)
+            # Build a Sprite and render it
+            pos = pynovage_core.math.Vector2f(float(dest_pos[0]), float(dest_pos[1]))
+            # Convert to bottom-left origin in SpriteRenderer space (matches current simple NDC mapping);
+            # here we keep top-left and accept mismatch until matrices are implemented.
+            sprite = pynovage_core.renderer.Sprite()
+            sprite.position = pos
+            sprite.size = pynovage_core.math.Vector2f(float(source.width), float(source.height))
+            sprite.texture = source._texture
+            sprite_renderer.render_sprite(sprite)
     else:
         # Use Surface.blit method
         dest.blit(source, dest_pos, source_area)

@@ -16,6 +16,10 @@ Controls:
 The background color changes based on collision activity.
 """
 
+import os, sys
+# Ensure local package import works when run by double-click from the examples folder
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+
 import pynovage
 import random
 import math

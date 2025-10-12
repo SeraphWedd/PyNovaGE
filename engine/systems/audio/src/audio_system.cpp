@@ -73,6 +73,8 @@ void AudioSystem::Shutdown() {
 }
 
 void AudioSystem::Update(float delta_time) {
+    (void)delta_time; // Mark as used to avoid warning
+    
     if (!initialized_) {
         return;
     }

@@ -4,9 +4,45 @@ cmake_minimum_required(VERSION 3.20)
 # Configure Audio System
 message(STATUS "Configuring Audio System...")
 
-# Find OpenAL
+# Find OpenAL - first try system, then third_party
+set(OPENAL_FOUND FALSE)
+set(OPENAL_INCLUDE_DIRS "")
+set(OPENAL_LIBRARIES "")
+
 find_package(OpenAL)
-if(NOT OpenAL_FOUND)
+if(OpenAL_FOUND)
+    set(OPENAL_FOUND TRUE)
+    set(OPENAL_INCLUDE_DIRS ${OpenAL_INCLUDE_DIRS})
+    set(OPENAL_LIBRARIES ${OpenAL_LIBRARIES})
+    message(STATUS "Found system OpenAL: ${OPENAL_LIBRARIES}")
+else()
+    # Try third_party OpenAL
+    set(OPENAL_ROOT "${CMAKE_SOURCE_DIR}/third_party/openal")
+    if(EXISTS "${OPENAL_ROOT}/include/AL/al.h")
+        set(OPENAL_FOUND TRUE)
+        set(OPENAL_INCLUDE_DIRS "${OPENAL_ROOT}/include")
+        
+        # Determine architecture and select appropriate library
+        if(CMAKE_SIZEOF_VOID_P EQUAL 8)
+            # 64-bit
+            set(OPENAL_LIB_DIR "${OPENAL_ROOT}/libs/Win64")
+            set(OPENAL_DLL_DIR "${OPENAL_ROOT}/bin/Win64")
+        else()
+            # 32-bit
+            set(OPENAL_LIB_DIR "${OPENAL_ROOT}/libs/Win32")
+            set(OPENAL_DLL_DIR "${OPENAL_ROOT}/bin/Win32")
+        endif()
+        
+        if(EXISTS "${OPENAL_LIB_DIR}/OpenAL32.lib")
+            set(OPENAL_LIBRARIES "${OPENAL_LIB_DIR}/OpenAL32.lib")
+            message(STATUS "Found third_party OpenAL: ${OPENAL_LIBRARIES}")
+        else()
+            set(OPENAL_FOUND FALSE)
+        endif()
+    endif()
+endif()
+
+if(NOT OPENAL_FOUND)
     message(WARNING "OpenAL not found! Audio system will be skipped. Install OpenAL development libraries to enable audio.")
     return()
 endif()
@@ -38,13 +74,13 @@ target_include_directories(audio
         ${CMAKE_CURRENT_SOURCE_DIR}/include
     PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/src
-        ${OpenAL_INCLUDE_DIRS}
+        ${OPENAL_INCLUDE_DIRS}
 )
 
 # Link libraries
 target_link_libraries(audio
     PUBLIC
-        ${OpenAL_LIBRARIES}
+        ${OPENAL_LIBRARIES}
         math  # For 3D position calculations
     PRIVATE
         asset  # For AudioClip integration

@@ -83,9 +83,9 @@ void bind_renderer(py::module& m) {
                        py::arg("operation") = "");
     // Renderer instances
     renderer_module.def("get_sprite_renderer", &PyNovaGE::Renderer::Renderer::GetSpriteRenderer,
-                       py::return_value_policy::reference_internal);
+                       py::return_value_policy::reference);
     renderer_module.def("get_batch_renderer", &PyNovaGE::Renderer::Renderer::GetBatchRenderer,
-                       py::return_value_policy::reference_internal);
+                       py::return_value_policy::reference);
     // Texture class (basic bindings - simplified for now)
     py::class_<PyNovaGE::Renderer::Texture>(renderer_module, "Texture")
         .def(py::init<>())
