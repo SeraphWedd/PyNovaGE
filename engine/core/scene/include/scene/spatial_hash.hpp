@@ -5,7 +5,7 @@
 #include <unordered_set>
 #include <functional>
 #include "vectors/vector3.hpp"
-#include "foundation/threading/thread_pool.hpp"
+#include "threading/thread_pool.hpp"
 
 namespace PyNovaGE {
 namespace Scene {
@@ -138,7 +138,27 @@ public:
      * @param func Function to execute for each object
      */
     template<typename Func>
-    void ForEachInRange(const PyNovaGE::Vector3f& center, float radius, Func func) const;
+    void ForEachInRange(const PyNovaGE::Vector3f& center, float radius, Func func) const {
+        std::vector<CellKey> cells;
+        GetCellsInRange(center, radius, cells);
+        
+        float radius_squared = radius * radius;
+        
+        for (const auto& cell_key : cells) {
+            auto cell_it = cells_.find(cell_key);
+            if (cell_it == cells_.end()) continue;
+            
+            for (SpatialHandle handle : cell_it->second) {
+                auto obj_it = objects_.find(handle);
+                if (obj_it == objects_.end()) continue;
+                
+                const Entry& entry = obj_it->second;
+                if (DistanceSquared(center, entry.position) <= radius_squared) {
+                    func(entry);
+                }
+            }
+        }
+    }
 
     /**
      * @brief Get statistics
@@ -239,5 +259,4 @@ private:
 } // namespace Scene
 } // namespace PyNovaGE
 
-// Template implementations
-#include "scene/spatial_hash_impl.hpp"
+// Template implementations are inline in this header

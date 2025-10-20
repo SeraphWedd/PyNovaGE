@@ -17,19 +17,25 @@
  */
 
 #include <iostream>
+#include <iomanip>
 #include <memory>
 #include <chrono>
 #include <random>
 #include <array>
+#include <cmath>
+
+#ifndef M_PI
+#define M_PI 3.14159265358979323846
+#endif
 
 // Engine includes
 #include <window/window.hpp>
 #include <renderer/renderer.hpp>
 #include <renderer/instanced_renderer.hpp>
 #include <scene/spatial_hash.hpp>
-#include <foundation/threading/thread_pool.hpp>
+#include <threading/thread_pool.hpp>
 #include <vectors/vector3.hpp>
-#include <math/matrix4.hpp>
+#include <matrices/matrix4.hpp>
 
 // GLFW for input
 #include <GLFW/glfw3.h>
@@ -253,7 +259,7 @@ public:
         spatial_handles_.reserve(count);
         
         for (size_t i = 0; i < count; ++i) {
-            auto character = std::make_unique<MMOCharacter>(i);
+            auto character = std::make_unique<MMOCharacter>(static_cast<uint32_t>(i));
             
             // Add to spatial hash
             Scene::SpatialHandle handle = spatial_hash_->Insert(character->position, character.get());
@@ -266,49 +272,9 @@ public:
     }
     
     void SetupInputCallbacks() {
-        // Mouse movement for camera rotation
-        window_->SetCursorPosCallback([this](double xpos, double ypos) {
-            // Simple camera rotation around center
-            static double last_x = xpos;
-            double dx = xpos - last_x;
-            last_x = xpos;
-            
-            camera_angle_ += dx * 0.01f;
-            
-            // Update camera position in circle around target
-            float radius = 50.0f;
-            camera_pos_.x = camera_target_.x + radius * cos(camera_angle_);
-            camera_pos_.z = camera_target_.z + radius * sin(camera_angle_);
-        });
-        
-        // Key callbacks
-        window_->SetKeyCallback([this](int key, int /*scancode*/, int action, int /*mods*/) {
-            if (action == GLFW_PRESS) {
-                switch (key) {
-                    case GLFW_KEY_ESCAPE:
-                        window_->SetShouldClose(true);
-                        break;
-                    case GLFW_KEY_1:
-                        CreateTestCharacters(500);
-                        break;
-                    case GLFW_KEY_2:
-                        CreateTestCharacters(1000);
-                        break;
-                    case GLFW_KEY_3:
-                        CreateTestCharacters(2000);
-                        break;
-                    case GLFW_KEY_4:
-                        CreateTestCharacters(5000);
-                        break;
-                    case GLFW_KEY_SPACE:
-                        // Toggle character movement
-                        static bool paused = false;
-                        paused = !paused;
-                        std::cout << "Character movement: " << (paused ? "PAUSED" : "ACTIVE") << std::endl;
-                        break;
-                }
-            }
-        });
+        // Note: Callback system would need to be implemented
+        // For now, camera controls are disabled
+        std::cout << "⚠️  Input callbacks not available - camera controls disabled" << std::endl;
     }
     
     void Update(float delta_time) {
@@ -330,18 +296,16 @@ public:
         AddInstancesToRenderer();
         
         // Update instanced renderer
-        Matrix4f view = CreateViewMatrix();
-        Matrix4f projection = CreateProjectionMatrix();
+        Matrix4<float> view = CreateViewMatrix();
+        Matrix4<float> projection = CreateProjectionMatrix();
         instanced_renderer_->Update(view, projection, camera_pos_);
     }
     
     void UpdateCharacterAI(float delta_time) {
-        // Use thread pool for parallel AI updates
-        Threading::parallel_batch(characters_, 50, [delta_time](const std::vector<std::unique_ptr<MMOCharacter>>& batch) {
-            for (const auto& character : batch) {
-                UpdateSingleCharacter(*character, delta_time);
-            }
-        }, thread_pool_.get());
+        // Simple serial AI updates (parallel batching not yet implemented)
+        for (const auto& character : characters_) {
+            UpdateSingleCharacter(*character, delta_time);
+        }
     }
     
     static void UpdateSingleCharacter(MMOCharacter& character, float delta_time) {
@@ -367,10 +331,10 @@ public:
         
         // Move towards target
         Vector3f direction = character.target_position - character.position;
-        float distance = direction.Length();
+        float distance = direction.length();
         
         if (distance > 0.1f) {
-            direction = direction.Normalized();
+            direction = direction.normalized();
             character.velocity = direction * character.move_speed;
             character.position = character.position + character.velocity * delta_time;
         } else {
@@ -399,11 +363,11 @@ public:
         
         // Add all characters as instances
         for (const auto& character : characters_) {
-            Matrix4f transform = Matrix4f::Translation(character->position);
+            Matrix4<float> transform = Matrix4<float>::Translation(character->position.x, character->position.y, character->position.z);
             
             // Scale based on character type
             if (character->is_player) {
-                transform = transform * Matrix4f::Scale(Vector3f(1.2f)); // Players slightly larger
+                transform = transform * Matrix4<float>::Scale(1.2f, 1.2f, 1.2f); // Players slightly larger
             }
             
             instanced_renderer_->AddInstance("character", transform, character->color);
@@ -421,8 +385,8 @@ public:
         Renderer::Renderer::Clear(clear_color);
         
         // Render all instances
-        Matrix4f view = CreateViewMatrix();
-        Matrix4f projection = CreateProjectionMatrix();
+        Matrix4<float> view = CreateViewMatrix();
+        Matrix4<float> projection = CreateProjectionMatrix();
         
         instanced_renderer_->Render(view, projection);
         
@@ -438,14 +402,14 @@ public:
         perf_stats_.draw_calls = stats.draw_calls;
     }
     
-    Matrix4f CreateViewMatrix() {
-        return Matrix4f::LookAt(camera_pos_, camera_target_, Vector3f(0.0f, 1.0f, 0.0f));
+    Matrix4<float> CreateViewMatrix() {
+        return Matrix4<float>::LookAt(camera_pos_, camera_target_, Vector3f(0.0f, 1.0f, 0.0f));
     }
     
-    Matrix4f CreateProjectionMatrix() {
+    Matrix4<float> CreateProjectionMatrix() {
         auto window_size = window_->GetFramebufferSize();
         float aspect = static_cast<float>(window_size.x) / static_cast<float>(window_size.y);
-        return Matrix4f::Perspective(60.0f, aspect, 0.1f, 1000.0f);
+        return Matrix4<float>::Perspective(static_cast<float>(60.0f * M_PI / 180.0f), aspect, 0.1f, 1000.0f);
     }
     
     void UpdatePerformanceStats(float delta_time) {
