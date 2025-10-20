@@ -16,6 +16,7 @@ if(BUILD_EXAMPLES)
     add_subdirectory(voxel_demo)
     add_subdirectory(platformer)
     add_subdirectory(framebuffer_example)
+    add_subdirectory(mmo_performance_demo)
     
     message(STATUS "Examples configured successfully")
 else()
