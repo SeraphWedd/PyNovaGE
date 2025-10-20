@@ -277,14 +277,14 @@ public:
     }
 
     static Matrix4 LookAt(const Vector3<T>& eye, const Vector3<T>& target, const Vector3<T>& up) noexcept {
-        Vector3<T> z = (eye - target).normalized();
-        Vector3<T> x = up.cross(z).normalized();
-        Vector3<T> y = z.cross(x);
+        Vector3<T> z = (target - eye).normalized();  // Forward vector (eye->target)
+        Vector3<T> x = z.cross(up).normalized();     // Right vector
+        Vector3<T> y = x.cross(z);                   // Up vector
 
         return Matrix4{
             x[0], x[1], x[2], -x.dot(eye),
             y[0], y[1], y[2], -y.dot(eye),
-            z[0], z[1], z[2], -z.dot(eye),
+           -z[0],-z[1],-z[2],  z.dot(eye),  // Negate z for right-handed system
             0, 0, 0, 1
         };
     }

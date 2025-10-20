@@ -30,6 +30,7 @@
 
 // Engine includes
 #include <window/window.hpp>
+#include <window/input.hpp>
 #include <renderer/renderer.hpp>
 #include <renderer/instanced_renderer.hpp>
 #include <scene/spatial_hash.hpp>
@@ -101,6 +102,7 @@ private:
     std::unique_ptr<Window::WindowSystemGuard> window_system_;
     std::unique_ptr<Window::Window> window_;
     std::unique_ptr<Renderer::RendererGuard> renderer_guard_;
+    std::unique_ptr<Window::InputManager> input_manager_;
     
     // Optimized systems
     std::unique_ptr<Renderer::InstancedRenderer> instanced_renderer_;
@@ -111,10 +113,15 @@ private:
     std::vector<std::unique_ptr<MMOCharacter>> characters_;
     std::vector<Scene::SpatialHandle> spatial_handles_;
     
-    // Camera
+    // Camera (hemisphere orbit around pivot)
     Vector3f camera_pos_ = Vector3f(0.0f, 30.0f, 50.0f);
-    Vector3f camera_target_ = Vector3f(0.0f, 0.0f, 0.0f);
-    float camera_angle_ = 0.0f;
+    Vector3f camera_target_ = Vector3f(0.0f, 0.0f, 0.0f); // Pivot point
+    float camera_yaw_ = 0.0f;       // Horizontal rotation (azimuth)
+    float camera_pitch_ = 0.5f;     // Vertical angle (elevation) - 0 = horizon, PI/2 = top
+    float camera_distance_ = 50.0f; // Radius of hemisphere
+    
+    // Scroll state tracking
+    Vector2f last_scroll_delta_ = Vector2f(0.0f, 0.0f);
     
     // Performance tracking
     struct PerformanceStats {
@@ -156,6 +163,9 @@ public:
         
         window_ = std::make_unique<Window::Window>(window_config);
         window_->MakeContextCurrent();
+        
+        // Initialize input manager
+        input_manager_ = std::make_unique<Window::InputManager>(window_->GetNativeWindow());
         
         // Initialize renderer
         Renderer::RendererConfig renderer_config;
@@ -275,9 +285,15 @@ public:
     }
     
     void SetupInputCallbacks() {
-        // Note: Callback system would need to be implemented
-        // For now, camera controls are disabled
-        std::cout << "⚠️  Input callbacks not available - camera controls disabled" << std::endl;
+        std::cout << "🎮 Setting up input callbacks..." << std::endl;
+        
+        // Set up input callback to capture scroll events directly
+        input_manager_->SetInputCallback([this](const Window::InputEvent& event) {
+            if (event.type == Window::InputEventType::MouseScroll) {
+                last_scroll_delta_ = event.scroll_offset;
+                std::cout << "🔍 Scroll event captured: " << event.scroll_offset.y << std::endl;
+            }
+        });
     }
     
     void Update(float delta_time) {
@@ -373,7 +389,7 @@ public:
                 transform = transform * Matrix4<float>::Scale(1.2f, 1.2f, 1.2f); // Players slightly larger
             }
             
-            instanced_renderer_->AddInstance("character", transform, character->color);
+            instanced_renderer_->AddInstance("character", transform, character->color, Vector4f(0.0f, 0.0f, 0.0f, 0.0f));
         }
     }
     
@@ -456,7 +472,8 @@ public:
     
     void PrintControls() {
         std::cout << "\\n🎮 MMO Performance Demo Controls:" << std::endl;
-        std::cout << "  Mouse     - Rotate camera" << std::endl;
+        std::cout << "  Right Mouse - Rotate camera" << std::endl;
+        std::cout << "  Scroll Wheel - Zoom in/out" << std::endl;
         std::cout << "  1         - 500 characters" << std::endl;
         std::cout << "  2         - 1000 characters" << std::endl;
         std::cout << "  3         - 2000 characters" << std::endl;
@@ -464,6 +481,71 @@ public:
         std::cout << "  Space     - Toggle movement" << std::endl;
         std::cout << "  Escape    - Exit demo" << std::endl;
         std::cout << std::endl;
+    }
+    
+    void HandleInput(float delta_time) {
+        (void)delta_time; // Suppress unused parameter warning
+        // Handle escape key
+        if (input_manager_->IsKeyJustPressed(Window::Key::Escape)) {
+            // Signal the window to close
+            glfwSetWindowShouldClose(window_->GetNativeWindow(), GLFW_TRUE);
+            return;
+        }
+        
+        // Handle character count changes
+        if (input_manager_->IsKeyJustPressed(Window::Key::Num1)) {
+            CreateTestCharacters(500);
+            std::cout << "📊 Changed to 500 characters" << std::endl;
+        }
+        else if (input_manager_->IsKeyJustPressed(Window::Key::Num2)) {
+            CreateTestCharacters(1000);
+            std::cout << "📊 Changed to 1000 characters" << std::endl;
+        }
+        else if (input_manager_->IsKeyJustPressed(Window::Key::Num3)) {
+            CreateTestCharacters(2000);
+            std::cout << "📊 Changed to 2000 characters" << std::endl;
+        }
+        else if (input_manager_->IsKeyJustPressed(Window::Key::Num4)) {
+            CreateTestCharacters(5000);
+            std::cout << "📊 Changed to 5000 characters" << std::endl;
+        }
+        
+        // Handle camera rotation with mouse (hemisphere orbit)
+        if (input_manager_->IsMouseButtonPressed(Window::MouseButton::Right)) {
+            auto mouse_delta = input_manager_->GetMouseDelta();
+            
+            // Horizontal rotation (yaw)
+            camera_yaw_ += mouse_delta.x * 0.01f;
+            
+            // Vertical rotation (pitch) - clamp to hemisphere (0 to PI/2)
+            camera_pitch_ -= mouse_delta.y * 0.01f;
+            camera_pitch_ = std::clamp(camera_pitch_, 0.1f, static_cast<float>(M_PI/2 - 0.1f));
+        }
+        
+        // Handle camera zoom with scroll wheel (using captured scroll data)
+        if (last_scroll_delta_.y != 0.0f) {
+            std::cout << "🔍 Processing scroll: " << last_scroll_delta_.y << ", distance: " << camera_distance_ << std::endl;
+            camera_distance_ -= last_scroll_delta_.y * 5.0f; // Zoom sensitivity
+            camera_distance_ = std::clamp(camera_distance_, 10.0f, 200.0f); // Min/max zoom
+            std::cout << "🔍 New distance: " << camera_distance_ << std::endl;
+            
+            // Clear the scroll delta after processing
+            last_scroll_delta_ = Vector2f(0.0f, 0.0f);
+        }
+        
+        // Update camera position using spherical coordinates (hemisphere)
+        // Convert spherical to cartesian: 
+        // x = radius * sin(pitch) * cos(yaw)
+        // z = radius * sin(pitch) * sin(yaw) 
+        // y = radius * cos(pitch)
+        camera_pos_.x = camera_distance_ * sin(camera_pitch_) * cos(camera_yaw_);
+        camera_pos_.z = camera_distance_ * sin(camera_pitch_) * sin(camera_yaw_);
+        camera_pos_.y = camera_distance_ * cos(camera_pitch_);
+        
+        // Toggle movement with space (placeholder - characters are always moving in this demo)
+        if (input_manager_->IsKeyJustPressed(Window::Key::Space)) {
+            std::cout << "🏃 Movement toggle (characters always move in this demo)" << std::endl;
+        }
     }
     
     void Run() {
@@ -478,6 +560,10 @@ public:
             delta_time = std::min(delta_time, 0.033f); // Max 30 FPS minimum
             
             window_->PollEvents();
+            input_manager_->Update();
+            
+            // Handle input
+            HandleInput(delta_time);
             
             Update(delta_time);
             Render();

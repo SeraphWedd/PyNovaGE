@@ -56,6 +56,17 @@ void InstancedRenderer::RegisterMeshType(const std::string& batch_id,
                                        const std::vector<uint32_t>& indices,
                                        std::shared_ptr<Texture> texture,
                                        std::shared_ptr<Shader> shader) {
+    // Safety check
+    if (vertices.empty() || indices.empty()) {
+        std::cerr << "ERROR: Empty vertices or indices!" << std::endl;
+        return;
+    }
+    
+    if (vertices.size() % 8 != 0) {
+        std::cerr << "ERROR: Vertex count not divisible by 8 (expected pos3+norm3+uv2)" << std::endl;
+        return;
+    }
+    
     auto batch = std::make_unique<InstanceBatch>();
     
     batch->vertex_count = vertices.size() / 8; // Assuming 8 floats per vertex (pos3 + normal3 + uv2)
@@ -118,10 +129,14 @@ void InstancedRenderer::RegisterMeshType(const std::string& batch_id,
     
     glBindVertexArray(0);
     
+    // Save values before move
+    size_t vertex_count = batch->vertex_count;
+    size_t index_count = batch->index_count;
+    
     batches_[batch_id] = std::move(batch);
     
-    std::cout << "Registered mesh type '" << batch_id << "' with " << batch->vertex_count 
-              << " vertices, " << batch->index_count << " indices" << std::endl;
+    std::cout << "Registered mesh type '" << batch_id << "' with " << vertex_count 
+              << " vertices, " << index_count << " indices" << std::endl;
 }
 
 void InstancedRenderer::AddInstance(const std::string& batch_id,
@@ -140,7 +155,7 @@ void InstancedRenderer::AddInstance(const std::string& batch_id,
     }
     
     InstanceData instance;
-    instance.transform = transform;
+    instance.transform = transform.transpose(); // Transpose from row-major to column-major for OpenGL
     instance.color = color;
     instance.custom_data = custom_data;
     
@@ -184,13 +199,13 @@ void InstancedRenderer::Update(const PyNovaGE::Matrix4<float>& view_matrix,
         visible_instances.reserve(batch->instances.size());
         
         for (const auto& instance : batch->instances) {
-            // Extract position from transform matrix
-            PyNovaGE::Vector3f position(instance.transform.data[3], 
-                                      instance.transform.data[7], 
-                                      instance.transform.data[11]);
+            // Extract position from transform matrix (column-major after transpose: translation is in indices 12,13,14)
+            PyNovaGE::Vector3f position(instance.transform.data[12], 
+                                      instance.transform.data[13], 
+                                      instance.transform.data[14]);
             
             // Frustum culling
-            if (config_.enable_frustum_culling && !IsInstanceVisible(instance)) {
+            if (config_.enable_frustum_culling && !IsInstanceVisible(instance, 2.0f)) {
                 stats_.culled_instances++;
                 continue;
             }
@@ -223,8 +238,8 @@ void InstancedRenderer::Update(const PyNovaGE::Matrix4<float>& view_matrix,
     stats_.update_time_ms = std::chrono::duration<float, std::milli>(end_time - start_time).count();
 }
 
-void InstancedRenderer::Render(const PyNovaGE::Matrix4<float>& /*view_matrix*/,
-                             const PyNovaGE::Matrix4<float>& /*projection_matrix*/) {
+void InstancedRenderer::Render(const PyNovaGE::Matrix4<float>& view_matrix,
+                             const PyNovaGE::Matrix4<float>& projection_matrix) {
     auto start_time = std::chrono::high_resolution_clock::now();
     
     stats_.draw_calls = 0;
@@ -243,9 +258,9 @@ void InstancedRenderer::Render(const PyNovaGE::Matrix4<float>& /*view_matrix*/,
         if (batch->shader) {
             batch->shader->Bind();
             
-            // Set uniforms (assuming shader has these uniforms)
-            // batch->shader->SetMatrix4f("u_view", view_matrix);
-            // batch->shader->SetMatrix4f("u_projection", projection_matrix);
+            // Set uniforms
+            batch->shader->SetMatrix4f("u_view", view_matrix);
+            batch->shader->SetMatrix4f("u_projection", projection_matrix);
         }
         
         // Bind texture if available
@@ -275,7 +290,10 @@ void InstancedRenderer::Render(const PyNovaGE::Matrix4<float>& /*view_matrix*/,
 
 void InstancedRenderer::ExtractFrustumPlanes(const PyNovaGE::Matrix4<float>& view_proj_matrix) {
     // Extract frustum planes from combined view-projection matrix
-    const float* m = view_proj_matrix.data.data();
+    // Our matrices are row-major, so we need to extract from the transposed matrix
+    // for the standard frustum extraction algorithm to work correctly
+    auto transposed = view_proj_matrix.transpose();
+    const float* m = transposed.data.data();
     
     // Left plane
     frustum_.planes[0] = PyNovaGE::Vector4f(m[3] + m[0], m[7] + m[4], m[11] + m[8], m[15] + m[12]);
@@ -305,10 +323,10 @@ void InstancedRenderer::ExtractFrustumPlanes(const PyNovaGE::Matrix4<float>& vie
 }
 
 bool InstancedRenderer::IsInstanceVisible(const InstanceData& instance, float radius) const {
-    // Extract position from transform matrix
-    PyNovaGE::Vector3f position(instance.transform.data[3], 
-                              instance.transform.data[7], 
-                              instance.transform.data[11]);
+    // Extract position from transform matrix (column-major after transpose: translation is in indices 12,13,14)
+    PyNovaGE::Vector3f position(instance.transform.data[12], 
+                              instance.transform.data[13], 
+                              instance.transform.data[14]);
     
     // Test against all frustum planes
     for (int i = 0; i < 6; i++) {
@@ -398,8 +416,8 @@ void InstancedRenderer::SortInstancesByDistance(std::vector<InstanceData>& insta
                                               const PyNovaGE::Vector3f& camera_pos) {
     std::sort(instances.begin(), instances.end(), 
         [&camera_pos, this](const InstanceData& a, const InstanceData& b) {
-            PyNovaGE::Vector3f pos_a(a.transform.data[3], a.transform.data[7], a.transform.data[11]);
-            PyNovaGE::Vector3f pos_b(b.transform.data[3], b.transform.data[7], b.transform.data[11]);
+            PyNovaGE::Vector3f pos_a(a.transform.data[12], a.transform.data[13], a.transform.data[14]);
+            PyNovaGE::Vector3f pos_b(b.transform.data[12], b.transform.data[13], b.transform.data[14]);
             
             float dist_a = CalculateDistance(pos_a, camera_pos);
             float dist_b = CalculateDistance(pos_b, camera_pos);

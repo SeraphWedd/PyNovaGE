@@ -3,9 +3,7 @@
 #include <vectors/vector2.hpp>
 #include <vectors/vector3.hpp>
 #include <vectors/vector4.hpp>
-// Matrix headers temporarily commented out - will add when matrices are implemented
-// #include <matrix/matrix3.hpp>
-// #include <matrix/matrix4.hpp>
+#include <matrices/matrix4.hpp>
 #include <string>
 #include <unordered_map>
 #include <memory>
@@ -148,9 +146,9 @@ public:
     // void SetMatrix3f(const std::string& name, const Matrix3f& value);
     
     /**
-     * @brief Set Matrix4f uniform (temporarily disabled)
+     * @brief Set Matrix4f uniform
      */
-    // void SetMatrix4f(const std::string& name, const Matrix4f& value);
+    void SetMatrix4f(const std::string& name, const PyNovaGE::Matrix4<float>& value);
     
     /**
      * @brief Set int array uniform

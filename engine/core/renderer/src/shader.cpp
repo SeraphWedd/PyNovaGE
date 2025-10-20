@@ -171,16 +171,14 @@ void Shader::SetVector4f(const std::string& name, const Vector4f& value) {
     }
 }
 
-// Matrix methods temporarily disabled until matrix classes are implemented
-// void Shader::SetMatrix3f(const std::string& name, const Matrix3f& value) {
-//     (void)name;
-//     (void)value;
-// }
-// 
-// void Shader::SetMatrix4f(const std::string& name, const Matrix4f& value) {
-//     (void)name;
-//     (void)value;
-// }
+void Shader::SetMatrix4f(const std::string& name, const PyNovaGE::Matrix4<float>& value) {
+    int location = GetUniformLocation(name);
+    if (location >= 0) {
+        // Transpose from row-major (our format) to column-major (OpenGL format)
+        auto transposed = value.transpose();
+        glUniformMatrix4fv(location, 1, GL_FALSE, transposed.data.data());
+    }
+}
 
 void Shader::SetIntArray(const std::string& name, const int* values, int count) {
     int location = GetUniformLocation(name);
