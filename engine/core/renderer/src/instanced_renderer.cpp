@@ -303,10 +303,10 @@ void InstancedRenderer::ExtractFrustumPlanes(const PyNovaGE::Matrix4<float>& vie
     frustum_.planes[2] = PyNovaGE::Vector4f(m[3] + m[1], m[7] + m[5], m[11] + m[9], m[15] + m[13]);
     // Top plane
     frustum_.planes[3] = PyNovaGE::Vector4f(m[3] - m[1], m[7] - m[5], m[11] - m[9], m[15] - m[13]);
-    // Near plane
-    frustum_.planes[4] = PyNovaGE::Vector4f(m[3] + m[2], m[7] + m[6], m[11] + m[10], m[15] + m[14]);
-    // Far plane
-    frustum_.planes[5] = PyNovaGE::Vector4f(m[3] - m[2], m[7] - m[6], m[11] - m[10], m[15] - m[14]);
+    // Near plane (swapped with far)
+    frustum_.planes[4] = PyNovaGE::Vector4f(m[3] - m[2], m[7] - m[6], m[11] - m[10], m[15] - m[14]);
+    // Far plane (swapped with near)
+    frustum_.planes[5] = PyNovaGE::Vector4f(m[3] + m[2], m[7] + m[6], m[11] + m[10], m[15] + m[14]);
     
     // Normalize planes
     for (int i = 0; i < 6; i++) {
