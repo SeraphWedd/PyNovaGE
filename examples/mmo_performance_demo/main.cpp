@@ -89,6 +89,9 @@ struct MMOCharacter {
     }
 };
 
+// Explicit template instantiation for SpatialHash with MMOCharacter*
+template class PyNovaGE::Scene::SpatialHash<MMOCharacter*>;
+
 /**
  * @brief MMO Performance Demo Application
  */
