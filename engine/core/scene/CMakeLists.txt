@@ -44,6 +44,7 @@ target_link_libraries(scene
     PUBLIC
         math    # For Vector2f, Matrix3f, etc.
     PRIVATE
+        threading  # For ThreadPool in SpatialHash
         # Additional private dependencies can be added here
 )
 

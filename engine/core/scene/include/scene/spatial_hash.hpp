@@ -4,6 +4,8 @@
 #include <unordered_map>
 #include <unordered_set>
 #include <functional>
+#include <algorithm>
+#include <cmath>
 #include "vectors/vector3.hpp"
 #include "threading/thread_pool.hpp"
 
@@ -259,4 +261,5 @@ private:
 } // namespace Scene
 } // namespace PyNovaGE
 
-// Template implementations are inline in this header
+// Template implementations must be provided by explicit instantiation
+// or inline definitions within the class
