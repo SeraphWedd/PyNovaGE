@@ -3,10 +3,10 @@
 #include <vector>
 #include <unordered_map>
 #include <memory>
-#include <GL/glew.h>
+#include <glad/gl.h>
 #include "vectors/vector3.hpp"
 #include "vectors/vector4.hpp"
-#include "math/matrix4.hpp"
+#include "matrices/matrix4.hpp"
 #include "renderer/shader.hpp"
 #include "renderer/texture.hpp"
 
@@ -17,7 +17,7 @@ namespace Renderer {
  * @brief Instance data for a single object
  */
 struct InstanceData {
-    PyNovaGE::Matrix4f transform;      // 4x4 transform matrix (64 bytes)
+    PyNovaGE::Matrix4<float> transform;      // 4x4 transform matrix (64 bytes)
     PyNovaGE::Vector4f color;          // Color/tint (16 bytes)
     PyNovaGE::Vector4f custom_data;    // Custom per-instance data (16 bytes)
     
@@ -113,7 +113,7 @@ public:
      * @param custom_data Custom per-instance data
      */
     void AddInstance(const std::string& batch_id,
-                    const PyNovaGE::Matrix4f& transform,
+                    const PyNovaGE::Matrix4<float>& transform,
                     const PyNovaGE::Vector4f& color = PyNovaGE::Vector4f(1.0f),
                     const PyNovaGE::Vector4f& custom_data = PyNovaGE::Vector4f(0.0f));
 
@@ -128,8 +128,8 @@ public:
      * @param projection_matrix Projection matrix for frustum culling
      * @param camera_pos Camera position for LOD calculations
      */
-    void Update(const PyNovaGE::Matrix4f& view_matrix,
-               const PyNovaGE::Matrix4f& projection_matrix,
+    void Update(const PyNovaGE::Matrix4<float>& view_matrix,
+               const PyNovaGE::Matrix4<float>& projection_matrix,
                const PyNovaGE::Vector3f& camera_pos);
 
     /**
@@ -137,8 +137,8 @@ public:
      * @param view_matrix View matrix
      * @param projection_matrix Projection matrix
      */
-    void Render(const PyNovaGE::Matrix4f& view_matrix,
-               const PyNovaGE::Matrix4f& projection_matrix);
+    void Render(const PyNovaGE::Matrix4<float>& view_matrix,
+               const PyNovaGE::Matrix4<float>& projection_matrix);
 
     /**
      * @brief Get rendering statistics
@@ -178,7 +178,7 @@ private:
     Stats stats_;
     
     // Private methods
-    void ExtractFrustumPlanes(const PyNovaGE::Matrix4f& view_proj_matrix);
+    void ExtractFrustumPlanes(const PyNovaGE::Matrix4<float>& view_proj_matrix);
     bool IsInstanceVisible(const InstanceData& instance, float radius = 1.0f) const;
     float CalculateDistance(const PyNovaGE::Vector3f& position, const PyNovaGE::Vector3f& camera_pos) const;
     void UploadInstanceData(InstanceBatch& batch);
